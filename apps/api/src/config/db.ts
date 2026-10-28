@@ -7,7 +7,7 @@ export async function connectDB(uri?: string): Promise<typeof mongoose> {
   try {
     const conn = await mongoose.connect(mongoUri, {
       autoIndex: true,
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 15000,
     });
     logger.info({ uri: mongoUri.replace(/\/\/.*@/, "//***@") }, "MongoDB connected successfully");
     return conn;

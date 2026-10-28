@@ -1,8 +1,25 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import { z } from "zod";
 import { APP_NAME } from "./constants.js";
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Look for .env in current working dir, apps/api dir, or repo root
+const candidateEnvPaths = [
+  path.resolve(process.cwd(), ".env"),
+  path.resolve(__dirname, "../../.env"),
+  path.resolve(__dirname, "../../../.env"),
+];
+
+for (const envPath of candidateEnvPaths) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath, override: false });
+  }
+}
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),

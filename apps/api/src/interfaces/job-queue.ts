@@ -5,3 +5,4 @@ export interface IJobQueue<T> {
   enqueue(data: T): Promise<void>;
   subscribe(handler: JobHandler<T>): void;
 }
+

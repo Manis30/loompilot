@@ -38,3 +38,4 @@ export interface IAgentsClient {
   requestDraft(req: GenerateDraftRequest): Promise<{ status: "queued" | "completed" | "failed"; error?: string }>;
   recalculate(req: RecalculateQuotationRequest): Promise<QuotationCalculationResult>;
 }
+
