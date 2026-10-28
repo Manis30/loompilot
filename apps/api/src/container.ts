@@ -75,6 +75,12 @@ import { PaymentService } from "./services/payment.service.js";
 import { PaymentController } from "./controllers/payment.controller.js";
 import { createPaymentRoutes } from "./routes/payment.routes.js";
 
+// Reports
+import { MongoReportRepository } from "./repositories/report.repository.js";
+import { ReportService } from "./services/report.service.js";
+import { ReportController } from "./controllers/report.controller.js";
+import { createReportRoutes } from "./routes/report.routes.js";
+
 // Core Infrastructure
 export const unitOfWork = new MongoUnitOfWork();
 export const auditLogRepository = new MongoAuditLogRepository();
@@ -161,3 +167,9 @@ export const paymentRepository = new MongoPaymentRepository();
 export const paymentService = new PaymentService(paymentRepository, unitOfWork, auditLogRepository);
 export const paymentController = new PaymentController(paymentService);
 export const paymentRoutes = createPaymentRoutes(paymentController);
+
+// Reports Composition
+export const reportRepository = new MongoReportRepository();
+export const reportService = new ReportService(reportRepository);
+export const reportController = new ReportController(reportService);
+export const reportRoutes = createReportRoutes(reportController);

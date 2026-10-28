@@ -6,10 +6,23 @@ import { requestIdMiddleware } from "./middleware/requestId.js";
 import { auditMiddleware } from "./middleware/audit.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
-import { authRoutes, enquiryRoutes, customerRoutes, materialRoutes, supplierRoutes, processRoutes, workforceRoutes, orderRoutes, quotationRoutes, alertRoutes, deliveryRoutes, paymentRoutes } from "./container.js";
+import {
+  authRoutes,
+  enquiryRoutes,
+  customerRoutes,
+  materialRoutes,
+  supplierRoutes,
+  processRoutes,
+  workforceRoutes,
+  orderRoutes,
+  quotationRoutes,
+  alertRoutes,
+  deliveryRoutes,
+  paymentRoutes,
+  reportRoutes,
+} from "./container.js";
 
 // Routes
-import { reportsRouter } from "./modules/reports/routes.js";
 import { internalGatewayRouter } from "./internal/gateway.js";
 
 export const app = express();
@@ -52,7 +65,7 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/alerts", alertRoutes);
 app.use("/api/deliveries", deliveryRoutes);
 app.use("/api/payments", paymentRoutes);
-app.use("/api/reports", reportsRouter);
+app.use("/api/reports", reportRoutes);
 
 // Central error handler
 app.use(errorHandler);

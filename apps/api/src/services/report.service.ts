@@ -1,21 +1,26 @@
-import { QuotationModel } from "../../models/quotation.model.js";
-import { DeliveryModel } from "../../models/delivery.model.js";
-import { PaymentModel } from "../../models/payment.model.js";
-import { QuotationStatus } from "@loompilot/shared";
+import {
+  IReportRepository,
+  MarginReport,
+  OnTimeRateReport,
+  CollectionsReport,
+} from "../interfaces/report.repository.js";
+import { Actor } from "../utils/actor.js";
 
-export class ReportsService {
-  static async getMarginReport(tenantId: string): Promise<any> {
-    const quotations = await QuotationModel.find({
-      tenantId,
-      status: QuotationStatus.CONFIRMED,
-    });
+export class ReportService {
+  constructor(private readonly repo: IReportRepository) {}
+
+  async getMarginReport(actor: Actor): Promise<MarginReport> {
+    const quotations = await this.repo.getConfirmedQuotations(actor.tenantId);
 
     let totalRevenuePaise = 0;
     let totalCostPaise = 0;
 
     const orderBreakdown = quotations.map((q) => {
       const revenue = q.finalPricePaise;
-      const cost = (q.subtotalCostPaise || 0) + (q.wastageCostPaise || 0) + (q.riskBufferCostPaise || 0);
+      const cost =
+        (q.subtotalCostPaise || 0) +
+        (q.wastageCostPaise || 0) +
+        (q.riskBufferCostPaise || 0);
       const margin = revenue - cost;
       const marginPct = revenue > 0 ? (margin / revenue) * 100 : 0;
 
@@ -23,7 +28,7 @@ export class ReportsService {
       totalCostPaise += cost;
 
       return {
-        quotationId: q._id,
+        quotationId: q.id,
         quotationNumber: q.quotationNumber,
         revenuePaise: revenue,
         costPaise: cost,
@@ -33,10 +38,11 @@ export class ReportsService {
     });
 
     const grossMarginPaise = totalRevenuePaise - totalCostPaise;
-    const grossMarginPct = totalRevenuePaise > 0 ? (grossMarginPaise / totalRevenuePaise) * 100 : 0;
+    const grossMarginPct =
+      totalRevenuePaise > 0 ? (grossMarginPaise / totalRevenuePaise) * 100 : 0;
 
     return {
-      tenantId,
+      tenantId: actor.tenantId,
       totalRevenuePaise,
       totalCostPaise,
       grossMarginPaise,
@@ -45,16 +51,17 @@ export class ReportsService {
     };
   }
 
-  static async getOnTimeReport(tenantId: string): Promise<any> {
-    const deliveries = await DeliveryModel.find({ tenantId });
+  async getOnTimeReport(actor: Actor): Promise<OnTimeRateReport> {
+    const deliveries = await this.repo.getDeliveries(actor.tenantId);
 
     const totalDeliveries = deliveries.length;
     const onTimeDeliveries = deliveries.filter((d) => d.isOnTime).length;
     const lateDeliveries = totalDeliveries - onTimeDeliveries;
-    const onTimeRatePct = totalDeliveries > 0 ? (onTimeDeliveries / totalDeliveries) * 100 : 100;
+    const onTimeRatePct =
+      totalDeliveries > 0 ? (onTimeDeliveries / totalDeliveries) * 100 : 100;
 
     return {
-      tenantId,
+      tenantId: actor.tenantId,
       totalDeliveries,
       onTimeDeliveries,
       lateDeliveries,
@@ -63,8 +70,8 @@ export class ReportsService {
     };
   }
 
-  static async getCollectionsReport(tenantId: string): Promise<any> {
-    const payments = await PaymentModel.find({ tenantId });
+  async getCollectionsReport(actor: Actor): Promise<CollectionsReport> {
+    const payments = await this.repo.getPayments(actor.tenantId);
 
     let totalInvoicedPaise = 0;
     let totalCollectedPaise = 0;
@@ -84,7 +91,7 @@ export class ReportsService {
     }
 
     return {
-      tenantId,
+      tenantId: actor.tenantId,
       totalInvoicedPaise,
       totalCollectedPaise,
       totalOutstandingPaise,
