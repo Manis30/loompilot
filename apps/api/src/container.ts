@@ -44,6 +44,12 @@ import { WorkforceService } from "./services/workforce.service.js";
 import { WorkforceController } from "./controllers/workforce.controller.js";
 import { createWorkforceRoutes } from "./routes/workforce.routes.js";
 
+// Orders
+import { MongoOrderRepository } from "./repositories/order.repository.js";
+import { OrderService } from "./services/order.service.js";
+import { OrderController } from "./controllers/order.controller.js";
+import { createOrderRoutes } from "./routes/order.routes.js";
+
 // Core Infrastructure
 export const unitOfWork = new MongoUnitOfWork();
 export const auditLogRepository = new MongoAuditLogRepository();
@@ -90,3 +96,9 @@ export const workforceRepository = new MongoWorkforceRepository();
 export const workforceService = new WorkforceService(workforceRepository, unitOfWork, auditLogRepository);
 export const workforceController = new WorkforceController(workforceService);
 export const workforceRoutes = createWorkforceRoutes(workforceController);
+
+// Orders Composition
+export const orderRepository = new MongoOrderRepository();
+export const orderService = new OrderService(orderRepository, workforceRepository, unitOfWork, auditLogRepository);
+export const orderController = new OrderController(orderService);
+export const orderRoutes = createOrderRoutes(orderController);

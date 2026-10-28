@@ -5,7 +5,7 @@ import { QuotationModel } from "../src/modules/quotations/model.js";
 import { MaterialModel, ReservationModel, StockMovementModel } from "../src/models/material.model.js";
 import { ProcessModel } from "../src/models/process.model.js";
 import { CustomerModel } from "../src/models/customer.model.js";
-import { ProductionOrderModel } from "../src/modules/orders/model.js";
+import { ProductionOrderModel } from "../src/models/order.model.js";
 import { QuotationStatus, OrderStatus, ProcessName, MaterialType, StockMovementType } from "@loompilot/shared";
 import mongoose from "mongoose";
 

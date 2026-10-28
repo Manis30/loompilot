@@ -1,5 +1,5 @@
 import { DeliveryModel, IDelivery } from "./model.js";
-import { ProductionOrderModel } from "../orders/model.js";
+import { ProductionOrderModel } from "../../models/order.model.js";
 import { OrderStatus } from "@loompilot/shared";
 
 type DeliveryTrigger = (tenantId: string, delivery: IDelivery) => Promise<void>;
