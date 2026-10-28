@@ -6,12 +6,10 @@ import { requestIdMiddleware } from "./middleware/requestId.js";
 import { auditMiddleware } from "./middleware/audit.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
-import { authRoutes, enquiryRoutes, customerRoutes, materialRoutes } from "./container.js";
+import { authRoutes, enquiryRoutes, customerRoutes, materialRoutes, supplierRoutes } from "./container.js";
 
 // Routes
 import { quotationsRouter } from "./modules/quotations/routes.js";
-
-import { suppliersRouter } from "./modules/suppliers/routes.js";
 import { processesRouter } from "./modules/processes/routes.js";
 import { workforceRouter } from "./modules/workforce/routes.js";
 import { ordersRouter } from "./modules/orders/routes.js";
@@ -54,7 +52,7 @@ app.use("/api/customers", customerRoutes);
 app.use("/api/enquiries", enquiryRoutes);
 app.use("/api/quotations", quotationsRouter);
 app.use("/api/materials", materialRoutes);
-app.use("/api/suppliers", suppliersRouter);
+app.use("/api/suppliers", supplierRoutes);
 app.use("/api/processes", processesRouter);
 app.use("/api/workforce", workforceRouter);
 app.use("/api/orders", ordersRouter);

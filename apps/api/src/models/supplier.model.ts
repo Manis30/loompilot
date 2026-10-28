@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from "mongoose";
 
-export interface ISupplier extends Document {
+export interface ISupplierDocument extends Document {
   tenantId: string;
   name: string;
   contactPerson: string;
@@ -13,7 +13,7 @@ export interface ISupplier extends Document {
   updatedAt: Date;
 }
 
-const SupplierSchema = new Schema<ISupplier>(
+const SupplierSchema = new Schema<ISupplierDocument>(
   {
     tenantId: { type: String, required: true, index: true },
     name: { type: String, required: true },
@@ -29,5 +29,4 @@ const SupplierSchema = new Schema<ISupplier>(
 
 SupplierSchema.index({ tenantId: 1, name: 1 });
 
-export const SupplierModel = mongoose.model<ISupplier>("Supplier", SupplierSchema);
-
+export const SupplierModel = mongoose.model<ISupplierDocument>("Supplier", SupplierSchema);

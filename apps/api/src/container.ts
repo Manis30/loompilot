@@ -26,6 +26,12 @@ import { MaterialService } from "./services/material.service.js";
 import { MaterialController } from "./controllers/material.controller.js";
 import { createMaterialRoutes } from "./routes/material.routes.js";
 
+// Suppliers
+import { MongoSupplierRepository } from "./repositories/supplier.repository.js";
+import { SupplierService } from "./services/supplier.service.js";
+import { SupplierController } from "./controllers/supplier.controller.js";
+import { createSupplierRoutes } from "./routes/supplier.routes.js";
+
 // Core Infrastructure
 export const unitOfWork = new MongoUnitOfWork();
 export const auditLogRepository = new MongoAuditLogRepository();
@@ -54,3 +60,9 @@ export const materialRepository = new MongoMaterialRepository();
 export const materialService = new MaterialService(materialRepository, unitOfWork, auditLogRepository);
 export const materialController = new MaterialController(materialService);
 export const materialRoutes = createMaterialRoutes(materialController);
+
+// Suppliers Composition
+export const supplierRepository = new MongoSupplierRepository();
+export const supplierService = new SupplierService(supplierRepository, auditLogRepository);
+export const supplierController = new SupplierController(supplierService);
+export const supplierRoutes = createSupplierRoutes(supplierController);
