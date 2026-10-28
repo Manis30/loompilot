@@ -14,3 +14,4 @@ export function createAuthRoutes(controller: AuthController): Router {
 
   return router;
 }
+

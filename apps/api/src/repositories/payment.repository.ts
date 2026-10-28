@@ -143,3 +143,4 @@ export class MongoPaymentRepository implements IPaymentRepository {
     return PaymentModel.countDocuments({ tenantId }).session(tx?.session || null);
   }
 }
+

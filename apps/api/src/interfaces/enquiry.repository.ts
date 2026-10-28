@@ -40,3 +40,4 @@ export interface IEnquiryRepository {
   count(tenantId: string): Promise<number>;
   updateStatus(tenantId: string, id: string, status: Enquiry["status"], tx?: TxContext): Promise<Enquiry | null>;
 }
+

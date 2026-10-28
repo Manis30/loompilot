@@ -14,3 +14,4 @@ export function toProcessResponse(processItem: Process) {
     updatedAt: processItem.updatedAt,
   };
 }
+

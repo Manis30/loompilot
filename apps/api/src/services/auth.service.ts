@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { IUserRepository, User } from "../interfaces/user.repository.js";
@@ -74,7 +73,7 @@ export class AuthService {
     );
 
     const refreshToken = jwt.sign(
-      { userId: user.id, tenantId: user.tenantId, jti: crypto.randomUUID() },
+      { userId: user.id, tenantId: user.tenantId },
       env.JWT_REFRESH_SECRET,
       { expiresIn: env.JWT_REFRESH_EXPIRES_IN as any }
     );
@@ -119,7 +118,7 @@ export class AuthService {
       );
 
       const newRefreshToken = jwt.sign(
-        { userId: user.id, tenantId: user.tenantId, jti: crypto.randomUUID() },
+        { userId: user.id, tenantId: user.tenantId },
         env.JWT_REFRESH_SECRET,
         { expiresIn: env.JWT_REFRESH_EXPIRES_IN as any }
       );
@@ -149,3 +148,4 @@ export class AuthService {
     return user;
   }
 }
+

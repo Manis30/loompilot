@@ -16,3 +16,4 @@ export function toSupplierResponse(supplier: Supplier) {
     updatedAt: supplier.updatedAt,
   };
 }
+

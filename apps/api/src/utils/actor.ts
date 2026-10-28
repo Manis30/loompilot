@@ -32,3 +32,4 @@ export function actorFrom(req: Request): Actor {
 
   throw new UnauthorizedError("User context is required");
 }
+

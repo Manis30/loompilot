@@ -23,3 +23,4 @@ export function createSupplierRoutes(controller: SupplierController): Router {
 
   return router;
 }
+

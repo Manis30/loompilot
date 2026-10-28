@@ -48,3 +48,4 @@ export function toQuotationResponse(quote: Quotation, role?: UserRole) {
     updatedAt: quote.updatedAt,
   };
 }
+

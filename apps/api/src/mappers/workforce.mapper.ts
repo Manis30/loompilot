@@ -51,3 +51,4 @@ export function toDailyOutputResponse(output: DailyOutput) {
     updatedAt: output.updatedAt,
   };
 }
+

@@ -11,3 +11,4 @@ export const CreateSupplierSchema = z.object({
 });
 
 export type CreateSupplierInput = z.infer<typeof CreateSupplierSchema>;
+

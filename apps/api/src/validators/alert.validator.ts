@@ -44,3 +44,4 @@ export const DecideRecommendationSchema = z.object({
 export type CreateAlertInput = z.infer<typeof CreateAlertSchema>;
 export type CreateRecommendationInput = z.infer<typeof CreateRecommendationSchema>;
 export type DecideRecommendationInput = z.infer<typeof DecideRecommendationSchema>;
+

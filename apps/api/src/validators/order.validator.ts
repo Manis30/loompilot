@@ -7,3 +7,4 @@ export const UpdateOrderStatusSchema = z.object({
 });
 
 export type UpdateOrderStatusInput = z.infer<typeof UpdateOrderStatusSchema>;
+

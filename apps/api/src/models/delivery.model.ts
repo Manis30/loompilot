@@ -45,3 +45,4 @@ DeliverySchema.index({ tenantId: 1, deliveryNumber: 1 }, { unique: true });
 DeliverySchema.index({ tenantId: 1, invoiceNumber: 1 }, { unique: true });
 
 export const DeliveryModel = mongoose.model<IDeliveryDocument>("Delivery", DeliverySchema);
+

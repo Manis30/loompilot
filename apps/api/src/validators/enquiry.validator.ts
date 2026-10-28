@@ -16,3 +16,4 @@ export const CreateEnquirySchema = z.object({
 });
 
 export type CreateEnquiryInput = z.infer<typeof CreateEnquirySchema>;
+

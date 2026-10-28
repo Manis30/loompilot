@@ -14,3 +14,4 @@ export interface NotificationResult {
 export interface INotifier {
   send(message: NotificationMessage): Promise<NotificationResult>;
 }
+

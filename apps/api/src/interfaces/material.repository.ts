@@ -108,3 +108,4 @@ export interface IMaterialRepository {
   recordPrice(data: NewPriceHistory, tx?: TxContext): Promise<PriceHistory>;
   getPriceHistory(tenantId: string, materialId: string, limitDays?: number): Promise<PriceHistory[]>;
 }
+

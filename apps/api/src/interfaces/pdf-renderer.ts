@@ -25,3 +25,4 @@ export interface QuotationPdfData {
 export interface IPdfRenderer {
   renderQuotation(data: QuotationPdfData): Promise<Buffer>;
 }
+

@@ -13,3 +13,4 @@ export function toEnquiryResponse(enquiry: Enquiry) {
     updatedAt: enquiry.updatedAt,
   };
 }
+

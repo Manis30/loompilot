@@ -30,3 +30,4 @@ const SupplierSchema = new Schema<ISupplierDocument>(
 SupplierSchema.index({ tenantId: 1, name: 1 });
 
 export const SupplierModel = mongoose.model<ISupplierDocument>("Supplier", SupplierSchema);
+

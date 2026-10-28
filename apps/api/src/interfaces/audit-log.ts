@@ -21,3 +21,4 @@ export interface IAuditLogRepository {
   record(entry: AuditLogEntry, tx?: TxContext): Promise<void>;
   list(tenantId: string, limit?: number): Promise<AuditLogEntry[]>;
 }
+

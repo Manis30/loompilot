@@ -157,3 +157,4 @@ describe("Unit: AuthService", () => {
     await expect(service.refresh(initial.refreshToken)).rejects.toThrow(UnauthorizedError);
   });
 });
+

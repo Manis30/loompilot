@@ -22,3 +22,4 @@ export function createCustomerRoutes(controller: CustomerController): Router {
 
   return router;
 }
+

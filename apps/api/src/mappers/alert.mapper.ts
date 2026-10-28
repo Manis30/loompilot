@@ -38,3 +38,4 @@ export function toRecommendationResponse(rec: Recommendation) {
     updatedAt: rec.updatedAt,
   };
 }
+

@@ -68,3 +68,4 @@ export class MongoUserRepository implements IUserRepository {
     return docs.map((d) => this.toEntity(d));
   }
 }
+

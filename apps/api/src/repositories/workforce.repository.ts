@@ -175,3 +175,4 @@ export class MongoWorkforceRepository implements IWorkforceRepository {
     return docs.map((d) => this.toDailyOutput(d));
   }
 }
+

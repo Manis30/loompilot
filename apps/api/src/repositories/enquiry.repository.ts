@@ -73,3 +73,4 @@ export class MongoEnquiryRepository implements IEnquiryRepository {
     return doc ? this.toEntity(doc) : null;
   }
 }
+

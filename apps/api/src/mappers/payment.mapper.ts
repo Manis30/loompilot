@@ -38,3 +38,4 @@ export function toPaymentResponse(payment: Payment) {
     updatedAt: payment.updatedAt,
   };
 }
+

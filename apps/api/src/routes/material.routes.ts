@@ -32,3 +32,4 @@ export function createMaterialRoutes(controller: MaterialController): Router {
 
   return router;
 }
+

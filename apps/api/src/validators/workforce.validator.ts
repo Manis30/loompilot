@@ -33,3 +33,4 @@ export const RecordDailyOutputSchema = z.object({
 export type CreateWorkerInput = z.infer<typeof CreateWorkerSchema>;
 export type RecordAttendanceInput = z.infer<typeof RecordAttendanceSchema>;
 export type RecordDailyOutputInput = z.infer<typeof RecordDailyOutputSchema>;
+

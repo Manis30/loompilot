@@ -26,3 +26,4 @@ const AuditLogSchema = new Schema<IAuditLogDocument>(
 AuditLogSchema.index({ tenantId: 1, createdAt: -1 });
 
 export const AuditLogModel = mongoose.model<IAuditLogDocument>("AuditLog", AuditLogSchema);
+

@@ -33,3 +33,4 @@ export interface ICustomerRepository {
   list(tenantId: string, query?: ListQuery): Promise<Page<Customer>>;
   count(tenantId: string): Promise<number>;
 }
+

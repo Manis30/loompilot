@@ -28,3 +28,4 @@ export function createAlertRoutes(controller: AlertController): Router {
 
   return router;
 }
+

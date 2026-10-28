@@ -23,3 +23,4 @@ export function toPage<T>(items: T[], total: number, page: number = 1, limit: nu
     totalPages: Math.ceil(total / limit) || 1,
   };
 }
+

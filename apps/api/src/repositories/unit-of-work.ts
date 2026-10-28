@@ -5,11 +5,13 @@ export class MongoUnitOfWork implements IUnitOfWork {
   async run<T>(fn: (tx: TxContext) => Promise<T>): Promise<T> {
     const session = await mongoose.startSession();
     try {
-      let result: T;
-      await session.withTransaction(async () => {
-        result = await fn({ session });
-      });
-      return result!;
+      session.startTransaction();
+      const result = await fn({ session });
+      await session.commitTransaction();
+      return result;
+    } catch (err) {
+      await session.abortTransaction();
+      throw err;
     } finally {
       await session.endSession();
     }
@@ -21,3 +23,4 @@ export class FakeUnitOfWork implements IUnitOfWork {
     return fn({ session: null });
   }
 }
+

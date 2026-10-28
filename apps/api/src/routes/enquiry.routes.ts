@@ -22,3 +22,4 @@ export function createEnquiryRoutes(controller: EnquiryController): Router {
 
   return router;
 }
+

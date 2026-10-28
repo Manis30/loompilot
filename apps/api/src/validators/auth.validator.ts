@@ -17,3 +17,4 @@ export const RegisterUserSchema = z.object({
 
 export type LoginInput = z.infer<typeof LoginSchema>;
 export type RegisterUserInput = z.infer<typeof RegisterUserSchema>;
+

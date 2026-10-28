@@ -76,3 +76,4 @@ export class AgentGatewayController {
     res.status(201).json({ data: toPaymentResponse(payment), requestId: req.requestId });
   });
 }
+

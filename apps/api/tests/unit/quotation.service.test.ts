@@ -379,3 +379,4 @@ describe("Unit: QuotationService", () => {
     await expect(service.confirmOrder(actor, draft.id)).rejects.toThrow(BadRequestError);
   });
 });
+

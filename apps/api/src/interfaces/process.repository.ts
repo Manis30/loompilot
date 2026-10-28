@@ -30,3 +30,4 @@ export interface IProcessRepository {
   list(tenantId: string, query?: ListQuery): Promise<Page<Process>>;
   listAllOrdered(tenantId: string, tx?: TxContext): Promise<Process[]>;
 }
+

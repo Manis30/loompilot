@@ -10,3 +10,4 @@ export const CreateProcessSchema = z.object({
 });
 
 export type CreateProcessInput = z.infer<typeof CreateProcessSchema>;
+

@@ -80,3 +80,4 @@ export interface IWorkforceRepository {
   upsertDailyOutput(data: NewDailyOutput, tx?: TxContext): Promise<DailyOutput>;
   getOutputsForOrder(tenantId: string, orderId: string, tx?: TxContext): Promise<DailyOutput[]>;
 }
+

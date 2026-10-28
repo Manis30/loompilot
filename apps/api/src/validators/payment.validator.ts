@@ -34,3 +34,4 @@ export type CreatePaymentFollowupInput = z.infer<typeof CreatePaymentFollowupSch
 export type AddReminderDraftInput = z.infer<typeof AddReminderDraftSchema>;
 export type ApproveReminderInput = z.infer<typeof ApproveReminderSchema>;
 export type RecordReceiptInput = z.infer<typeof RecordReceiptSchema>;
+

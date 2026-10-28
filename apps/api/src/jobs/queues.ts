@@ -38,3 +38,4 @@ export interface PaymentFollowupPayload {
 
 export const monitoringQueue = new InMemoryQueue<MonitoringJobPayload>("monitoring-queue");
 export const paymentFollowupQueue = new InMemoryQueue<PaymentFollowupPayload>("payment-followup-queue");
+

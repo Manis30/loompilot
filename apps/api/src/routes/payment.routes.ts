@@ -41,3 +41,4 @@ export function createPaymentRoutes(controller: PaymentController): Router {
 
   return router;
 }
+

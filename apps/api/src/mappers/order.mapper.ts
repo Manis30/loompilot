@@ -33,3 +33,4 @@ export function toVarianceResponse(report: OrderVarianceReport) {
     varianceData: report.varianceData,
   };
 }
+

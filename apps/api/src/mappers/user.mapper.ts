@@ -12,3 +12,4 @@ export function toUserResponse(user: User) {
     updatedAt: user.updatedAt,
   };
 }
+

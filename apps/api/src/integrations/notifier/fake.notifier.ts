@@ -13,3 +13,4 @@ export class FakeNotifier implements INotifier {
     };
   }
 }
+

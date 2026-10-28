@@ -11,3 +11,4 @@ export const CreateCustomerSchema = z.object({
 });
 
 export type CreateCustomerInput = z.infer<typeof CreateCustomerSchema>;
+

@@ -90,3 +90,4 @@ describe("Unit: CustomerService", () => {
     await expect(service.getById(actor, "unknown-id")).rejects.toThrow(/not found/i);
   });
 });
+

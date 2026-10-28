@@ -32,3 +32,4 @@ export function createReportRoutes(controller: ReportController): Router {
 
   return router;
 }
+

@@ -1,12 +1,12 @@
 import { describe, it, beforeAll, afterAll, beforeEach, expect } from "vitest";
 import { setupTestDB, teardownTestDB, clearTestDB } from "./setup.js";
-import { quotationService } from "../src/container.js";
-import { QuotationModel } from "../src/models/quotation.model.js";
-import { MaterialModel, ReservationModel, StockMovementModel } from "../src/models/material.model.js";
-import { ProcessModel } from "../src/models/process.model.js";
+import { QuotationService } from "../src/modules/quotations/service.js";
+import { QuotationModel } from "../src/modules/quotations/model.js";
+import { MaterialModel, ReservationModel, StockMovementModel } from "../src/modules/materials/model.js";
+import { ProcessModel } from "../src/modules/processes/model.js";
 import { CustomerModel } from "../src/models/customer.model.js";
-import { ProductionOrderModel } from "../src/models/order.model.js";
-import { QuotationStatus, OrderStatus, ProcessName, MaterialType, StockMovementType, UserRole } from "@loompilot/shared";
+import { ProductionOrderModel } from "../src/modules/orders/model.js";
+import { QuotationStatus, OrderStatus, ProcessName, MaterialType, StockMovementType } from "@loompilot/shared";
 import mongoose from "mongoose";
 
 describe("Stage 2: Order Confirmation Transaction Tests (MongoMemoryReplSet)", () => {
@@ -22,9 +22,6 @@ describe("Stage 2: Order Confirmation Transaction Tests (MongoMemoryReplSet)", (
 
   beforeEach(async () => {
     await clearTestDB();
-    await ProductionOrderModel.init();
-    await ReservationModel.init();
-    await StockMovementModel.init();
   });
 
   it("atomically confirms quotation, reserves stock, records ledger movement, and generates production plan", async () => {
@@ -113,10 +110,7 @@ describe("Stage 2: Order Confirmation Transaction Tests (MongoMemoryReplSet)", (
     });
 
     // 5. Execute Transactional Order Confirmation
-    const order = await quotationService.confirmOrder(
-      { tenantId, userId: "usr_tx", role: UserRole.OWNER, email: "owner@test.com" },
-      quotation._id.toString()
-    );
+    const order = await QuotationService.confirmOrder(tenantId, quotation._id.toString());
 
     // --- Assertions ---
     // A. Production order created

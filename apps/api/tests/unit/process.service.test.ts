@@ -95,3 +95,4 @@ describe("Unit: ProcessService", () => {
     await expect(service.getById(actor, "unknown-id")).rejects.toThrow(NotFoundError);
   });
 });
+

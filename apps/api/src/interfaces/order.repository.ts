@@ -76,3 +76,4 @@ export interface IOrderRepository {
   list(tenantId: string, query?: ListQuery): Promise<Page<ProductionOrder>>;
   count(tenantId: string, tx?: TxContext): Promise<number>;
 }
+

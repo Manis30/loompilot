@@ -32,3 +32,4 @@ export interface IUserRepository {
   removeRefreshToken(tenantId: string, userId: string, token: string): Promise<void>;
   list(tenantId: string): Promise<User[]>;
 }
+

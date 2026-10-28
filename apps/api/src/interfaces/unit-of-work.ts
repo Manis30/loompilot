@@ -5,3 +5,4 @@ export interface TxContext {
 export interface IUnitOfWork {
   run<T>(fn: (tx: TxContext) => Promise<T>): Promise<T>;
 }
+

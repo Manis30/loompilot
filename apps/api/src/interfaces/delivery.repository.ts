@@ -42,3 +42,4 @@ export interface IDeliveryRepository {
   list(tenantId: string, query?: ListQuery): Promise<Page<Delivery>>;
   count(tenantId: string, tx?: TxContext): Promise<number>;
 }
+

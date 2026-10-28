@@ -31,3 +31,4 @@ export interface ISupplierRepository {
   findById(tenantId: string, id: string, tx?: TxContext): Promise<Supplier | null>;
   list(tenantId: string, query?: ListQuery): Promise<Page<Supplier>>;
 }
+

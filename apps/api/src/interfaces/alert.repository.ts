@@ -95,3 +95,4 @@ export interface IAlertRepository {
     tx?: TxContext
   ): Promise<Recommendation | null>;
 }
+

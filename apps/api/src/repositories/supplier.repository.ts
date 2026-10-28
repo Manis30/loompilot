@@ -54,3 +54,4 @@ export class MongoSupplierRepository implements ISupplierRepository {
     );
   }
 }
+

@@ -14,3 +14,4 @@ export function toCustomerResponse(customer: Customer) {
     updatedAt: customer.updatedAt,
   };
 }
+

@@ -206,3 +206,4 @@ describe("Unit: AlertService", () => {
     expect(accepted.decidedBy).toBe(actor.userId);
   });
 });
+

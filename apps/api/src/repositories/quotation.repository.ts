@@ -129,3 +129,4 @@ export class MongoQuotationRepository implements IQuotationRepository {
     return QuotationModel.countDocuments({ tenantId }).session(tx?.session || null);
   }
 }
+

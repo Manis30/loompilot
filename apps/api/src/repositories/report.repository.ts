@@ -45,3 +45,4 @@ export class MongoReportRepository implements IReportRepository {
     }));
   }
 }
+

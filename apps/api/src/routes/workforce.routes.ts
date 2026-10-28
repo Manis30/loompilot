@@ -42,3 +42,4 @@ export function createWorkforceRoutes(controller: WorkforceController): Router {
 
   return router;
 }
+

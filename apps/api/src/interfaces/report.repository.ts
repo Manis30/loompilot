@@ -64,3 +64,4 @@ export interface IReportRepository {
   getDeliveries(tenantId: string): Promise<DeliverySummary[]>;
   getPayments(tenantId: string): Promise<PaymentSummary[]>;
 }
+

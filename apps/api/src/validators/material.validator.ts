@@ -23,3 +23,4 @@ export const RecordMovementSchema = z.object({
 
 export type CreateMaterialInput = z.infer<typeof CreateMaterialSchema>;
 export type RecordMovementInput = z.infer<typeof RecordMovementSchema>;
+

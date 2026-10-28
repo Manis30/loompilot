@@ -51,3 +51,4 @@ export function toPriceHistoryResponse(history: PriceHistory) {
     createdAt: history.createdAt,
   };
 }
+

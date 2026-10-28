@@ -192,3 +192,4 @@ export class MongoMaterialRepository implements IMaterialRepository {
     return docs.map((d) => this.toPriceHistory(d));
   }
 }
+

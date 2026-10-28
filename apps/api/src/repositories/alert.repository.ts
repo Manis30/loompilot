@@ -177,3 +177,4 @@ export class MongoAlertRepository implements IAlertRepository {
     return doc ? this.toRecommendation(doc) : null;
   }
 }
+

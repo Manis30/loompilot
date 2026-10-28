@@ -81,3 +81,4 @@ export interface IPaymentRepository {
   list(tenantId: string, query?: ListQuery): Promise<Page<Payment>>;
   count(tenantId: string, tx?: TxContext): Promise<number>;
 }
+

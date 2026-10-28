@@ -11,3 +11,4 @@ export function addDays(dateStr: string, days: number): string {
 export function isPast(dateStr: string): boolean {
   return dateStr < todayISO();
 }
+

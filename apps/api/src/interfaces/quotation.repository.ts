@@ -81,3 +81,4 @@ export interface IQuotationRepository {
   list(tenantId: string, query?: ListQuery): Promise<Page<Quotation>>;
   count(tenantId: string, tx?: TxContext): Promise<number>;
 }
+

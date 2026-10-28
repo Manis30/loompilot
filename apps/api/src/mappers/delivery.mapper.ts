@@ -20,3 +20,4 @@ export function toDeliveryResponse(delivery: Delivery) {
     updatedAt: delivery.updatedAt,
   };
 }
+

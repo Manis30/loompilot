@@ -60,3 +60,4 @@ export class MongoCustomerRepository implements ICustomerRepository {
     return CustomerModel.countDocuments({ tenantId });
   }
 }
+

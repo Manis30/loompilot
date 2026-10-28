@@ -44,3 +44,4 @@ Architectural boundaries are strictly enforced during CI via `dependency-cruiser
 - **Positive**: Complete decoupling allows 100% pure unit testing of all 14 domain services in milliseconds using in-memory fake repositories.
 - **Positive**: Zero coupling to Express or Mongoose inside business logic, making future transport migrations (e.g. gRPC) trivial.
 - **Positive**: Strict tenant isolation and role-based field security are enforced at the mapper and service boundary.
+

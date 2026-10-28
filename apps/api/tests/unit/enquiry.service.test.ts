@@ -99,3 +99,4 @@ describe("Unit: EnquiryService", () => {
     await expect(service.getById(actor, "nonexistent")).rejects.toThrow(/not found/i);
   });
 });
+
