@@ -20,10 +20,8 @@ import {
   deliveryRoutes,
   paymentRoutes,
   reportRoutes,
+  agentGatewayRoutes,
 } from "./container.js";
-
-// Routes
-import { internalGatewayRouter } from "./internal/gateway.js";
 
 export const app = express();
 
@@ -50,7 +48,7 @@ app.get("/health", (_req, res) => {
 });
 
 // Internal Agent Gateway (service token authenticated)
-app.use("/internal", internalGatewayRouter);
+app.use("/internal", agentGatewayRoutes);
 
 // Public / Authenticated Application API routes
 app.use("/api/auth", authRoutes);

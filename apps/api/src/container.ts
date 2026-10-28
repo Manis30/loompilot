@@ -81,6 +81,11 @@ import { ReportService } from "./services/report.service.js";
 import { ReportController } from "./controllers/report.controller.js";
 import { createReportRoutes } from "./routes/report.routes.js";
 
+// Agent Gateway
+import { AgentGatewayService } from "./services/agent-gateway.service.js";
+import { AgentGatewayController } from "./controllers/agent-gateway.controller.js";
+import { createAgentGatewayRoutes } from "./routes/agent-gateway.routes.js";
+
 // Core Infrastructure
 export const unitOfWork = new MongoUnitOfWork();
 export const auditLogRepository = new MongoAuditLogRepository();
@@ -173,3 +178,12 @@ export const reportRepository = new MongoReportRepository();
 export const reportService = new ReportService(reportRepository);
 export const reportController = new ReportController(reportService);
 export const reportRoutes = createReportRoutes(reportController);
+
+// Agent Gateway Composition
+export const agentGatewayService = new AgentGatewayService(
+  quotationService,
+  alertService,
+  paymentService
+);
+export const agentGatewayController = new AgentGatewayController(agentGatewayService);
+export const agentGatewayRoutes = createAgentGatewayRoutes(agentGatewayController);
