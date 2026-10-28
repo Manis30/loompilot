@@ -1,9 +1,9 @@
 import { Router, Request, Response } from "express";
 import { serviceAuthMiddleware } from "../middleware/serviceAuth.js";
 import { QuotationModel } from "../models/quotation.model.js";
-import { AlertService } from "../modules/alerts/service.js";
+import { alertService } from "../container.js";
 import { PaymentService } from "../modules/payments/service.js";
-import { QuotationStatus, ReminderStatus } from "@loompilot/shared";
+import { QuotationStatus, ReminderStatus, UserRole } from "@loompilot/shared";
 import { logger } from "../config/logger.js";
 
 export const internalGatewayRouter = Router();
@@ -42,9 +42,15 @@ internalGatewayRouter.post("/quotations/drafts", async (req: Request, res: Respo
  */
 internalGatewayRouter.post("/alerts", async (req: Request, res: Response) => {
   try {
-    const alert = await AlertService.createAlert(req.body);
+    const actor = {
+      tenantId: req.body.tenantId,
+      userId: "agent_gateway",
+      role: UserRole.OWNER,
+      email: "agent@loompilot.internal",
+    };
+    const alert = await alertService.createAlert(actor, req.body);
     logger.info(
-      { alertId: alert._id, orderId: req.body.orderId, requestId: req.requestId },
+      { alertId: alert.id, orderId: req.body.orderId, requestId: req.requestId },
       "Ingested production alert from agent gateway"
     );
     res.status(201).json({ data: alert, requestId: req.requestId });
@@ -58,9 +64,15 @@ internalGatewayRouter.post("/alerts", async (req: Request, res: Response) => {
  */
 internalGatewayRouter.post("/recommendations", async (req: Request, res: Response) => {
   try {
-    const rec = await AlertService.createRecommendation(req.body);
+    const actor = {
+      tenantId: req.body.tenantId,
+      userId: "agent_gateway",
+      role: UserRole.OWNER,
+      email: "agent@loompilot.internal",
+    };
+    const rec = await alertService.createRecommendation(actor, req.body);
     logger.info(
-      { recId: rec._id, alertId: req.body.alertId, requestId: req.requestId },
+      { recId: rec.id, alertId: req.body.alertId, requestId: req.requestId },
       "Ingested recommendation from agent gateway"
     );
     res.status(201).json({ data: rec, requestId: req.requestId });

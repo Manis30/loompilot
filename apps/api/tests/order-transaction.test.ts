@@ -22,6 +22,9 @@ describe("Stage 2: Order Confirmation Transaction Tests (MongoMemoryReplSet)", (
 
   beforeEach(async () => {
     await clearTestDB();
+    await ProductionOrderModel.init();
+    await ReservationModel.init();
+    await StockMovementModel.init();
   });
 
   it("atomically confirms quotation, reserves stock, records ledger movement, and generates production plan", async () => {

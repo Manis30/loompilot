@@ -2,7 +2,7 @@ import mongoose, { Schema, Document } from "mongoose";
 import { AlertSeverity, AlertType, RecommendationStatus } from "@loompilot/shared";
 
 // 1. Alert Model (Deduplicated per order + process + date + type)
-export interface IAlert extends Document {
+export interface IAlertDocument extends Document {
   tenantId: string;
   orderId: mongoose.Types.ObjectId;
   processId: mongoose.Types.ObjectId;
@@ -22,7 +22,7 @@ export interface IAlert extends Document {
   updatedAt: Date;
 }
 
-const AlertSchema = new Schema<IAlert>(
+const AlertSchema = new Schema<IAlertDocument>(
   {
     tenantId: { type: String, required: true, index: true },
     orderId: { type: Schema.Types.ObjectId, ref: "ProductionOrder", required: true, index: true },
@@ -46,7 +46,7 @@ const AlertSchema = new Schema<IAlert>(
 AlertSchema.index({ tenantId: 1, orderId: 1, processId: 1, date: 1, type: 1 }, { unique: true });
 AlertSchema.index({ tenantId: 1, createdAt: -1 });
 
-export const AlertModel = mongoose.model<IAlert>("Alert", AlertSchema);
+export const AlertModel = mongoose.model<IAlertDocument>("Alert", AlertSchema);
 
 // 2. Recommendation Model
 export interface IRecoveryOption {
@@ -59,7 +59,7 @@ export interface IRecoveryOption {
   additionalCostPaise: number;
 }
 
-export interface IRecommendation extends Document {
+export interface IRecommendationDocument extends Document {
   tenantId: string;
   alertId: mongoose.Types.ObjectId;
   orderId: mongoose.Types.ObjectId;
@@ -88,7 +88,7 @@ const RecoveryOptionSchema = new Schema<IRecoveryOption>(
   { _id: false }
 );
 
-const RecommendationSchema = new Schema<IRecommendation>(
+const RecommendationSchema = new Schema<IRecommendationDocument>(
   {
     tenantId: { type: String, required: true, index: true },
     alertId: { type: Schema.Types.ObjectId, ref: "Alert", required: true, index: true },
@@ -111,8 +111,7 @@ const RecommendationSchema = new Schema<IRecommendation>(
   { timestamps: true }
 );
 
-export const RecommendationModel = mongoose.model<IRecommendation>(
+export const RecommendationModel = mongoose.model<IRecommendationDocument>(
   "Recommendation",
   RecommendationSchema
 );
-

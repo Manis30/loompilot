@@ -57,6 +57,12 @@ import { QuotationController } from "./controllers/quotation.controller.js";
 import { createQuotationRoutes } from "./routes/quotation.routes.js";
 import { PdfMakeRenderer } from "./integrations/pdf/pdfmake.renderer.js";
 
+// Alerts & Recommendations
+import { MongoAlertRepository } from "./repositories/alert.repository.js";
+import { AlertService } from "./services/alert.service.js";
+import { AlertController } from "./controllers/alert.controller.js";
+import { createAlertRoutes } from "./routes/alert.routes.js";
+
 // Core Infrastructure
 export const unitOfWork = new MongoUnitOfWork();
 export const auditLogRepository = new MongoAuditLogRepository();
@@ -125,3 +131,9 @@ export const quotationService = new QuotationService(
 );
 export const quotationController = new QuotationController(quotationService);
 export const quotationRoutes = createQuotationRoutes(quotationController);
+
+// Alerts & Recommendations Composition
+export const alertRepository = new MongoAlertRepository();
+export const alertService = new AlertService(alertRepository, unitOfWork, auditLogRepository);
+export const alertController = new AlertController(alertService);
+export const alertRoutes = createAlertRoutes(alertController);
