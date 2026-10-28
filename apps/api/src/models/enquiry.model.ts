@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from "mongoose";
 
-export interface IEnquiry extends Document {
+export interface IEnquiryDocument extends Document {
   tenantId: string;
   enquiryNumber: string;
   customerId: string;
@@ -18,7 +18,7 @@ export interface IEnquiry extends Document {
   updatedAt: Date;
 }
 
-const EnquirySchema = new Schema<IEnquiry>(
+const EnquirySchema = new Schema<IEnquiryDocument>(
   {
     tenantId: { type: String, required: true, index: true },
     enquiryNumber: { type: String, required: true },
@@ -43,4 +43,4 @@ const EnquirySchema = new Schema<IEnquiry>(
 
 EnquirySchema.index({ tenantId: 1, enquiryNumber: 1 }, { unique: true });
 
-export const EnquiryModel = mongoose.model<IEnquiry>("Enquiry", EnquirySchema);
+export const EnquiryModel = mongoose.model<IEnquiryDocument>("Enquiry", EnquirySchema);

@@ -13,3 +13,4 @@ export class SupplierService {
     return SupplierModel.create(data);
   }
 }
+

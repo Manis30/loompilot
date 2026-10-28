@@ -22,3 +22,4 @@ We adopt a **modular monolith** architecture for the primary backend (`apps/api`
 
 ### Negative
 - Requires strict coding discipline to prevent cross-module direct database imports (modules should interact via services).
+

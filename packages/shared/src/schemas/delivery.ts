@@ -19,3 +19,4 @@ export const DeliveryRecordSchema = z.object({
 });
 
 export type DeliveryRecordDto = z.infer<typeof DeliveryRecordSchema>;
+

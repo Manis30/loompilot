@@ -21,3 +21,4 @@ alertsRouter.post(
   requireRole(UserRole.OWNER, UserRole.MANAGER),
   AlertController.decideRecommendation
 );
+

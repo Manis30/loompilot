@@ -10,3 +10,4 @@ authRouter.post("/login", validate(LoginRequestSchema), AuthController.login);
 authRouter.post("/refresh", AuthController.refresh);
 authRouter.post("/logout", authMiddleware, AuthController.logout);
 authRouter.get("/me", authMiddleware, AuthController.me);
+

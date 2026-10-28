@@ -61,3 +61,4 @@ export type QuotationLineItem = z.infer<typeof QuotationLineItemSchema>;
 export type QuotationProposal = z.infer<typeof QuotationProposalSchema>;
 export type QuotationRecalculateRequest = z.infer<typeof QuotationRecalculateRequestSchema>;
 export type QuotationDto = z.infer<typeof QuotationSchema>;
+

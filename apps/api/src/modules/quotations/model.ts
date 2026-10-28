@@ -102,3 +102,4 @@ const QuotationSchema = new Schema<IQuotation>(
 QuotationSchema.index({ tenantId: 1, quotationNumber: 1 }, { unique: true });
 
 export const QuotationModel = mongoose.model<IQuotation>("Quotation", QuotationSchema);
+

@@ -33,3 +33,4 @@ paymentsRouter.post(
   requireRole(UserRole.OWNER, UserRole.ACCOUNTS),
   PaymentController.recordReceipt
 );
+

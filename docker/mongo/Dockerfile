@@ -7,3 +7,4 @@ COPY init-rs.sh /docker-entrypoint-initdb.d/init-rs.sh
 RUN chmod +x /docker-entrypoint-initdb.d/init-rs.sh
 
 CMD ["--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongo-keyfile"]
+

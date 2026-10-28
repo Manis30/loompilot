@@ -42,3 +42,4 @@ export const ApproveReminderRequestSchema = z.object({
 export type PaymentReminderDraft = z.infer<typeof PaymentReminderDraftSchema>;
 export type PaymentFollowupDto = z.infer<typeof PaymentFollowupSchema>;
 export type ApproveReminderRequest = z.infer<typeof ApproveReminderRequestSchema>;
+

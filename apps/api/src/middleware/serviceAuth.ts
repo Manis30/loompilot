@@ -33,3 +33,4 @@ export function serviceAuthMiddleware(req: Request, res: Response, next: NextFun
 
   next();
 }
+

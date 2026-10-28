@@ -28,3 +28,4 @@ reportsRouter.get(
   requireRole(UserRole.OWNER, UserRole.ACCOUNTS),
   ReportsController.getCollectionsReport
 );
+

@@ -15,3 +15,4 @@ deliveriesRouter.post(
   requireRole(UserRole.OWNER, UserRole.MANAGER, UserRole.STORE),
   DeliveryController.recordDelivery
 );
+

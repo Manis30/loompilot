@@ -28,3 +28,4 @@ ProcessSchema.index({ tenantId: 1, name: 1 }, { unique: true });
 ProcessSchema.index({ tenantId: 1, sequence: 1 });
 
 export const ProcessModel = mongoose.model<IProcess>("Process", ProcessSchema);
+

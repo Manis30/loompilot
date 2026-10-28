@@ -50,3 +50,4 @@ export const RecommendationSchema = z.object({
 export type AlertDto = z.infer<typeof AlertSchema>;
 export type RecoveryOption = z.infer<typeof RecoveryOptionSchema>;
 export type RecommendationDto = z.infer<typeof RecommendationSchema>;
+

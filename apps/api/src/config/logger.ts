@@ -26,3 +26,4 @@ export function getRequestLogger(requestId?: string, tenantId?: string) {
     ...(tenantId ? { tenantId } : {}),
   });
 }
+

@@ -41,3 +41,4 @@ To guarantee business safety:
 - **Integer Paise Representation**: All monetary figures are stored as integer paise across database schemas and REST payloads, eliminating floating-point errors.
 - **Event-Driven Asynchrony**: Daily output entries trigger debounced monitoring sweeps via BullMQ; delivery confirmations trigger immediate payment follow-up creation.
 - **Distributed Tracing**: `X-Request-Id` is generated or accepted at the API boundary, forwarded to the Python agents service, and correlated across all structured log statements (Pino and Structlog).
+

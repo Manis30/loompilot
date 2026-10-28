@@ -95,3 +95,4 @@ export class WorkforceService {
     return DailyOutputModel.find({ tenantId, orderId }).sort({ date: 1 });
   }
 }
+

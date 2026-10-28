@@ -126,3 +126,4 @@ const PriceHistorySchema = new Schema<IPriceHistory>(
 PriceHistorySchema.index({ tenantId: 1, materialId: 1, date: -1 });
 
 export const PriceHistoryModel = mongoose.model<IPriceHistory>("PriceHistory", PriceHistorySchema);
+

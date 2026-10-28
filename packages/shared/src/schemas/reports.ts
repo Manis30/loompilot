@@ -46,3 +46,4 @@ export const CollectionsReportSchema = z.object({
 export type MarginReportDto = z.infer<typeof MarginReportSchema>;
 export type OnTimeDeliveryReportDto = z.infer<typeof OnTimeDeliveryReportSchema>;
 export type CollectionsReportDto = z.infer<typeof CollectionsReportSchema>;
+

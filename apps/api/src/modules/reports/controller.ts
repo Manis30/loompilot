@@ -17,3 +17,4 @@ export class ReportsController {
     res.json({ data: report, requestId: req.requestId });
   }
 }
+

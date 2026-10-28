@@ -25,3 +25,4 @@ materialsRouter.post(
   requireRole(UserRole.OWNER, UserRole.MANAGER, UserRole.STORE),
   MaterialController.recordMovement
 );
+

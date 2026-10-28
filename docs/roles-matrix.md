@@ -54,3 +54,4 @@ LoomPilot defines five distinct operational roles across textile manufacturing o
 1. **Rule 1 (Store Cost Masking)**: Whenever a user with the `store` role queries materials, quotations, or orders, all cost fields (`unitCostPaise`, `totalCostPaise`, `marginPct`, `riskBufferPct`, `profitPaise`) must be stripped or blocked with a 403 Forbidden.
 2. **Rule 2 (Accounts Exclusive Approval)**: Only users possessing the `accounts` role can call `POST /api/payments/:id/reminders/:reminderId/approve`. Attempting to call this endpoint as `owner`, `manager`, `sales`, or `store` results in a 403 Forbidden.
 3. **Rule 3 (Service Token Bypass Immunity)**: The `/internal/*` routes accept exclusively valid `x-service-token` headers matching `INTERNAL_SERVICE_TOKEN`. User JWTs are rejected.
+

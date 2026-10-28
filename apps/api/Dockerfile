@@ -14,3 +14,4 @@ RUN pnpm --filter @loompilot/api build
 
 EXPOSE 4000
 CMD ["node", "apps/api/dist/server.js"]
+

@@ -30,3 +30,4 @@ quotationsRouter.post(
   requireRole(UserRole.OWNER, UserRole.MANAGER),
   QuotationController.confirm
 );
+

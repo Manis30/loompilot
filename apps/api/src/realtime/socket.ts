@@ -35,3 +35,4 @@ export function broadcastAlert(tenantId: string, alertData: any): void {
     logger.info({ tenantId, alertId: alertData._id || alertData.id }, "Pushed alert to dashboard via Socket.IO");
   }
 }
+

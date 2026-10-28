@@ -151,3 +151,4 @@ describe("Stage 2: Order Confirmation Transaction Tests (MongoMemoryReplSet)", (
     expect(movement!.referenceType).toBe("reservation");
   });
 });
+

@@ -15,3 +15,4 @@ suppliersRouter.post(
   requireRole(UserRole.OWNER, UserRole.MANAGER, UserRole.STORE),
   SupplierController.create
 );
+

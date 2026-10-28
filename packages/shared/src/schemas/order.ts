@@ -46,3 +46,4 @@ export const DailyOutputEntrySchema = z.object({
 export type ProcessPlanStep = z.infer<typeof ProcessPlanStepSchema>;
 export type ProductionOrderDto = z.infer<typeof ProductionOrderSchema>;
 export type DailyOutputEntryDto = z.infer<typeof DailyOutputEntrySchema>;
+

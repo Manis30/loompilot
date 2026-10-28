@@ -24,3 +24,4 @@ export class CustomerController {
     res.status(201).json({ data: customer, requestId: req.requestId });
   }
 }
+

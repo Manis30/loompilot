@@ -82,3 +82,4 @@ const PaymentSchema = new Schema<IPayment>(
 PaymentSchema.index({ tenantId: 1, invoiceNumber: 1 }, { unique: true });
 
 export const PaymentModel = mongoose.model<IPayment>("Payment", PaymentSchema);
+

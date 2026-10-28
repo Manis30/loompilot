@@ -42,3 +42,4 @@ export class WorkforceController {
     res.json({ data: outputs, requestId: req.requestId });
   }
 }
+

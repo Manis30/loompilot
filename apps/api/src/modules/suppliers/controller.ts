@@ -24,3 +24,4 @@ export class SupplierController {
     res.status(201).json({ data: supplier, requestId: req.requestId });
   }
 }
+

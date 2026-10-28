@@ -95,3 +95,4 @@ DailyOutputSchema.index({ tenantId: 1, orderId: 1, processId: 1, date: 1 }, { un
 DailyOutputSchema.index({ tenantId: 1, idempotencyKey: 1 }, { unique: true });
 
 export const DailyOutputModel = mongoose.model<IDailyOutput>("DailyOutput", DailyOutputSchema);
+

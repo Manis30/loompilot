@@ -30,3 +30,4 @@ const CustomerSchema = new Schema<ICustomer>(
 CustomerSchema.index({ tenantId: 1, code: 1 }, { unique: true });
 
 export const CustomerModel = mongoose.model<ICustomer>("Customer", CustomerSchema);
+

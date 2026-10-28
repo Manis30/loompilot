@@ -58,3 +58,4 @@ if (!appDb.getUser("agent_ro")) {
 '
 
 echo "MongoDB Replica Set initialization complete."
+

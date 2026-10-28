@@ -124,3 +124,4 @@ export function generateQuotationPdf(data: QuotationPdfData): Promise<Buffer> {
     pdfDoc.end();
   });
 }
+

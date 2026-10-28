@@ -115,3 +115,4 @@ export const RecommendationModel = mongoose.model<IRecommendation>(
   "Recommendation",
   RecommendationSchema
 );
+

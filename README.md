@@ -125,3 +125,4 @@ To switch to Anthropic:
 | **Sales** | Customer enquiries, quotation review, customer dispatch | Cannot view internal raw material purchase costs |
 | **Store** | Inventory, receipts, stock movements | **Blocked from cost & margin numbers** |
 | **Accounts**| Invoicing, collections, payment follow-up | **Exclusive permission to approve payment reminders** |
+

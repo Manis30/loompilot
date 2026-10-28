@@ -34,3 +34,4 @@ export function addPaise(...amounts: number[]): number {
 export function applyPercentage(paise: number, percentage: number): number {
   return Math.round((paise * percentage) / 100);
 }
+
