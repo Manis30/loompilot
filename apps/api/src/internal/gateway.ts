@@ -1,9 +1,8 @@
 import { Router, Request, Response } from "express";
 import { serviceAuthMiddleware } from "../middleware/serviceAuth.js";
 import { QuotationModel } from "../models/quotation.model.js";
-import { alertService } from "../container.js";
-import { PaymentService } from "../modules/payments/service.js";
-import { QuotationStatus, ReminderStatus, UserRole } from "@loompilot/shared";
+import { alertService, paymentService } from "../container.js";
+import { QuotationStatus, UserRole } from "@loompilot/shared";
 import { logger } from "../config/logger.js";
 
 export const internalGatewayRouter = Router();
@@ -96,9 +95,15 @@ internalGatewayRouter.post("/monitoring-snapshots", async (req: Request, res: Re
  */
 internalGatewayRouter.post("/payment-followups", async (req: Request, res: Response) => {
   try {
-    const followup = await PaymentService.createFollowup(req.body);
+    const actor = {
+      tenantId: req.body.tenantId,
+      userId: "agent_gateway",
+      role: UserRole.OWNER,
+      email: "agent@loompilot.internal",
+    };
+    const followup = await paymentService.createFollowup(actor, req.body);
     logger.info(
-      { paymentId: followup._id, deliveryId: req.body.deliveryId, requestId: req.requestId },
+      { paymentId: followup.id, deliveryId: req.body.deliveryId, requestId: req.requestId },
       "Ingested payment follow-up from agent gateway"
     );
     res.status(201).json({ data: followup, requestId: req.requestId });
@@ -112,11 +117,14 @@ internalGatewayRouter.post("/payment-followups", async (req: Request, res: Respo
  */
 internalGatewayRouter.post("/payment-reminder-drafts", async (req: Request, res: Response) => {
   try {
+    const actor = {
+      tenantId: req.body.tenantId,
+      userId: "agent_gateway",
+      role: UserRole.OWNER,
+      email: "agent@loompilot.internal",
+    };
     const { tenantId, paymentId, ...draft } = req.body;
-    const payment = await PaymentService.addReminderDraft(tenantId, paymentId, {
-      ...draft,
-      status: ReminderStatus.DRAFT,
-    });
+    const payment = await paymentService.addReminderDraft(actor, paymentId, draft);
     logger.info(
       { paymentId, reminderNumber: draft.reminderNumber, requestId: req.requestId },
       "Ingested payment reminder draft from agent gateway"

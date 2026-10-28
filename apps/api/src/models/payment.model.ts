@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document } from "mongoose";
 import { NotificationChannel, PaymentStatus, ReminderStatus } from "@loompilot/shared";
 
-export interface IPaymentReminderDraft {
+export interface IPaymentReminderDraftDocument {
   _id?: mongoose.Types.ObjectId;
   reminderNumber: number;
   channel: NotificationChannel;
@@ -16,7 +16,7 @@ export interface IPaymentReminderDraft {
   failureReason?: string;
 }
 
-export interface IPayment extends Document {
+export interface IPaymentDocument extends Document {
   tenantId: string;
   deliveryId: mongoose.Types.ObjectId;
   orderId: mongoose.Types.ObjectId;
@@ -28,12 +28,12 @@ export interface IPayment extends Document {
   dueDate: string;
   status: PaymentStatus;
   paymentTerms: string;
-  reminders: IPaymentReminderDraft[];
+  reminders: IPaymentReminderDraftDocument[];
   createdAt: Date;
   updatedAt: Date;
 }
 
-const PaymentReminderDraftSchema = new Schema<IPaymentReminderDraft>(
+const PaymentReminderDraftSchema = new Schema<IPaymentReminderDraftDocument>(
   {
     reminderNumber: { type: Number, required: true },
     channel: { type: String, enum: Object.values(NotificationChannel), required: true },
@@ -55,7 +55,7 @@ const PaymentReminderDraftSchema = new Schema<IPaymentReminderDraft>(
   { timestamps: true }
 );
 
-const PaymentSchema = new Schema<IPayment>(
+const PaymentSchema = new Schema<IPaymentDocument>(
   {
     tenantId: { type: String, required: true, index: true },
     deliveryId: { type: Schema.Types.ObjectId, ref: "Delivery", required: true, index: true },
@@ -81,5 +81,4 @@ const PaymentSchema = new Schema<IPayment>(
 
 PaymentSchema.index({ tenantId: 1, invoiceNumber: 1 }, { unique: true });
 
-export const PaymentModel = mongoose.model<IPayment>("Payment", PaymentSchema);
-
+export const PaymentModel = mongoose.model<IPaymentDocument>("Payment", PaymentSchema);

@@ -5,7 +5,7 @@ import { setupTestDB, teardownTestDB, clearTestDB } from "./setup.js";
 import { authService } from "../src/container.js";
 import { MaterialModel } from "../src/models/material.model.js";
 import { QuotationModel } from "../src/models/quotation.model.js";
-import { PaymentModel } from "../src/modules/payments/model.js";
+import { PaymentModel } from "../src/models/payment.model.js";
 import { UserRole, QuotationStatus, NotificationChannel, ReminderStatus, PaymentStatus } from "@loompilot/shared";
 import mongoose from "mongoose";
 
