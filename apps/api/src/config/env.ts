@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import { z } from "zod";
+import { APP_NAME } from "./constants.js";
 
 dotenv.config();
 
@@ -7,7 +8,7 @@ const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_PORT: z.coerce.number().default(4000),
   API_HOST: z.string().default("0.0.0.0"),
-  APP_NAME: z.string().default("LoomPilot"),
+  APP_NAME: z.string().default(APP_NAME),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
 
   // JWT Security
