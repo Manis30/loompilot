@@ -72,7 +72,8 @@ const StockMovementSchema = new Schema<IStockMovement>(
 
 StockMovementSchema.index({ tenantId: 1, materialId: 1, createdAt: -1 });
 
-export const StockMovementModel = mongoose.model<IStockMovement>("StockMovement", StockMovementSchema);
+export const StockMovementModel =
+  mongoose.model<IStockMovement>("StockMovement", StockMovementSchema);
 
 // 3. Reservation Model
 export interface IReservation extends Document {
@@ -100,7 +101,8 @@ const ReservationSchema = new Schema<IReservation>(
   { timestamps: true }
 );
 
-export const ReservationModel = mongoose.model<IReservation>("Reservation", ReservationSchema);
+export const ReservationModel =
+  mongoose.model<IReservation>("Reservation", ReservationSchema);
 
 // 4. PriceHistory Model
 export interface IPriceHistory extends Document {
@@ -125,5 +127,5 @@ const PriceHistorySchema = new Schema<IPriceHistory>(
 
 PriceHistorySchema.index({ tenantId: 1, materialId: 1, date: -1 });
 
-export const PriceHistoryModel = mongoose.model<IPriceHistory>("PriceHistory", PriceHistorySchema);
-
+export const PriceHistoryModel =
+  mongoose.model<IPriceHistory>("PriceHistory", PriceHistorySchema);

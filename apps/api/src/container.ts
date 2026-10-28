@@ -20,6 +20,12 @@ import { CustomerService } from "./services/customer.service.js";
 import { CustomerController } from "./controllers/customer.controller.js";
 import { createCustomerRoutes } from "./routes/customer.routes.js";
 
+// Materials
+import { MongoMaterialRepository } from "./repositories/material.repository.js";
+import { MaterialService } from "./services/material.service.js";
+import { MaterialController } from "./controllers/material.controller.js";
+import { createMaterialRoutes } from "./routes/material.routes.js";
+
 // Core Infrastructure
 export const unitOfWork = new MongoUnitOfWork();
 export const auditLogRepository = new MongoAuditLogRepository();
@@ -42,3 +48,9 @@ export const customerRepository = new MongoCustomerRepository();
 export const customerService = new CustomerService(customerRepository, auditLogRepository);
 export const customerController = new CustomerController(customerService);
 export const customerRoutes = createCustomerRoutes(customerController);
+
+// Materials Composition
+export const materialRepository = new MongoMaterialRepository();
+export const materialService = new MaterialService(materialRepository, unitOfWork, auditLogRepository);
+export const materialController = new MaterialController(materialService);
+export const materialRoutes = createMaterialRoutes(materialController);

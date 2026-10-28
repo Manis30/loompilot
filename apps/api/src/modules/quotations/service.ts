@@ -2,8 +2,7 @@ import mongoose from "mongoose";
 import { QuotationModel, IQuotation } from "./model.js";
 import { ProductionOrderModel, IProductionOrder } from "../orders/model.js";
 import { ProcessModel } from "../processes/model.js";
-import { ReservationModel } from "../materials/model.js";
-import { MaterialService } from "../materials/service.js";
+import { ReservationModel, MaterialModel, StockMovementModel } from "../../models/material.model.js";
 import { CustomerModel } from "../../models/customer.model.js";
 import { QuotationStatus, OrderStatus, StockMovementType } from "@loompilot/shared";
 import { generateQuotationPdf } from "../../lib/pdf.js";
@@ -141,16 +140,27 @@ export class QuotationService {
             { session }
           );
 
-          await MaterialService.recordMovement(
-            tenantId,
-            item.materialId.toString(),
-            StockMovementType.RESERVATION,
-            reserveQty,
-            "reservation",
-            quote._id.toString(),
-            `Stock reserved for quotation ${quote.quotationNumber}`,
-            session
-          );
+          const mat = await MaterialModel.findOne({ _id: item.materialId, tenantId }).session(session);
+          if (mat) {
+            mat.reservedQuantity = mat.reservedQuantity + reserveQty;
+            await mat.save({ session });
+            await StockMovementModel.create(
+              [
+                {
+                  tenantId,
+                  materialId: item.materialId,
+                  type: StockMovementType.RESERVATION,
+                  quantity: reserveQty,
+                  previousBalance: mat.onHandQuantity,
+                  newBalance: mat.onHandQuantity,
+                  referenceType: "reservation",
+                  referenceId: quote._id.toString(),
+                  notes: `Stock reserved for quotation ${quote.quotationNumber}`,
+                },
+              ],
+              { session }
+            );
+          }
         }
       }
 

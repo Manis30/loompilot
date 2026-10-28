@@ -3,7 +3,7 @@ import request from "supertest";
 import { app } from "../src/app.js";
 import { setupTestDB, teardownTestDB, clearTestDB } from "./setup.js";
 import { authService } from "../src/container.js";
-import { MaterialModel } from "../src/modules/materials/model.js";
+import { MaterialModel } from "../src/models/material.model.js";
 import { QuotationModel } from "../src/modules/quotations/model.js";
 import { PaymentModel } from "../src/modules/payments/model.js";
 import { UserRole, QuotationStatus, NotificationChannel, ReminderStatus, PaymentStatus } from "@loompilot/shared";

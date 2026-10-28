@@ -2,7 +2,7 @@ import { describe, it, beforeAll, afterAll, beforeEach, expect } from "vitest";
 import { setupTestDB, teardownTestDB, clearTestDB } from "./setup.js";
 import { QuotationService } from "../src/modules/quotations/service.js";
 import { QuotationModel } from "../src/modules/quotations/model.js";
-import { MaterialModel, ReservationModel, StockMovementModel } from "../src/modules/materials/model.js";
+import { MaterialModel, ReservationModel, StockMovementModel } from "../src/models/material.model.js";
 import { ProcessModel } from "../src/modules/processes/model.js";
 import { CustomerModel } from "../src/models/customer.model.js";
 import { ProductionOrderModel } from "../src/modules/orders/model.js";
