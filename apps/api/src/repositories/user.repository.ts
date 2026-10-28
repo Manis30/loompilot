@@ -67,5 +67,8 @@ export class MongoUserRepository implements IUserRepository {
     const docs = await UserModel.find({ tenantId, isActive: true }).sort({ name: 1 }).lean();
     return docs.map((d) => this.toEntity(d));
   }
-}
 
+  async count(tenantId: string): Promise<number> {
+    return UserModel.countDocuments({ tenantId });
+  }
+}

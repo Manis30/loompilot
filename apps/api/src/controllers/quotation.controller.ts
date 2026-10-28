@@ -68,5 +68,23 @@ export class QuotationController {
       requestId: req.requestId,
     });
   });
+
+  requestDraft = asyncHandler(async (req: Request, res: Response) => {
+    const actor = actorFrom(req);
+    const quote = await this.service.requestDraft(actor, req.body.enquiryId);
+    res.status(201).json({
+      data: toQuotationResponse(quote, actor.role),
+      requestId: req.requestId,
+    });
+  });
+
+  recalculate = asyncHandler(async (req: Request, res: Response) => {
+    const actor = actorFrom(req);
+    const quote = await this.service.recalculate(actor, req.params.id!, req.body);
+    res.json({
+      data: toQuotationResponse(quote, actor.role),
+      requestId: req.requestId,
+    });
+  });
 }
 

@@ -14,7 +14,7 @@ import {
   DailyOutput,
   NewDailyOutput,
 } from "../../src/interfaces/workforce.repository.js";
-import { FakeUnitOfWork } from "../../src/repositories/unit-of-work.js";
+import { FakeUnitOfWork } from "../fakes/fake-unit-of-work.js";
 import { ListQuery, Page, toPage } from "../../src/utils/pagination.js";
 import { Actor } from "../../src/utils/actor.js";
 import { OrderStatus, ProcessName, UserRole } from "@loompilot/shared";

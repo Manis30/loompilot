@@ -7,6 +7,15 @@ export default defineConfig({
     environment: "node",
     testTimeout: 60000,
     hookTimeout: 60000,
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "text-summary", "json-summary"],
+      include: [
+        "src/services/**",
+        "src/repositories/**",
+        "src/mappers/**",
+      ],
+    },
   },
   resolve: {
     alias: {
@@ -14,4 +23,3 @@ export default defineConfig({
     },
   },
 });
-

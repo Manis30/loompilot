@@ -70,5 +70,22 @@ export class AuthController {
       requestId: req.requestId,
     });
   });
+
+  register = asyncHandler(async (req: Request, res: Response) => {
+    const actor = req.user
+      ? {
+          tenantId: req.user.tenantId,
+          userId: req.user.userId,
+          role: req.user.role,
+          email: req.user.email,
+        }
+      : undefined;
+
+    const user = await this.service.register(req.body, actor);
+    res.status(201).json({
+      data: toUserResponse(user),
+      requestId: req.requestId,
+    });
+  });
 }
 

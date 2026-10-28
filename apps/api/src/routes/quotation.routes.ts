@@ -14,6 +14,18 @@ export function createQuotationRoutes(controller: QuotationController): Router {
   router.get("/:id/pdf", controller.downloadPdf);
 
   router.post(
+    "/draft",
+    requireRole(UserRole.OWNER, UserRole.MANAGER, UserRole.SALES),
+    controller.requestDraft
+  );
+
+  router.post(
+    "/:id/recalculate",
+    requireRole(UserRole.OWNER, UserRole.MANAGER, UserRole.SALES),
+    controller.recalculate
+  );
+
+  router.post(
     "/:id/approve",
     requireRole(UserRole.OWNER, UserRole.MANAGER),
     controller.approve

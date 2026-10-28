@@ -11,7 +11,7 @@ import {
   PriceHistory,
   NewPriceHistory,
 } from "../../src/interfaces/material.repository.js";
-import { FakeUnitOfWork } from "../../src/repositories/unit-of-work.js";
+import { FakeUnitOfWork } from "../fakes/fake-unit-of-work.js";
 import { ListQuery, Page, toPage } from "../../src/utils/pagination.js";
 import { Actor } from "../../src/utils/actor.js";
 import { MaterialType, StockMovementType, UserRole } from "@loompilot/shared";

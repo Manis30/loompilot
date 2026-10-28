@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { AuthService } from "../../src/services/auth.service.js";
 import { IUserRepository, User, NewUser } from "../../src/interfaces/user.repository.js";
 import { UserRole } from "@loompilot/shared";
-import { ConflictError, UnauthorizedError } from "../../src/errors/index.js";
+import { ConflictError, UnauthorizedError, ForbiddenError } from "../../src/errors/index.js";
 
 class FakeUserRepository implements IUserRepository {
   private users: User[] = [];
@@ -62,6 +62,10 @@ class FakeUserRepository implements IUserRepository {
   async list(tenantId: string): Promise<User[]> {
     return this.users.filter((u) => u.tenantId === tenantId);
   }
+
+  async count(tenantId: string): Promise<number> {
+    return this.users.filter((u) => u.tenantId === tenantId).length;
+  }
 }
 
 describe("Unit: AuthService", () => {
@@ -80,21 +84,119 @@ describe("Unit: AuthService", () => {
       email: "test@loompilot.test",
       password: "securepassword",
       name: "Test User",
-      role: UserRole.SALES,
+      role: UserRole.OWNER,
     });
 
     expect(user.id).toBeDefined();
     expect(user.passwordHash).not.toBe("securepassword");
 
+    const ownerActor = {
+      tenantId,
+      userId: user.id,
+      role: UserRole.OWNER,
+      email: user.email,
+    };
+
+    await expect(
+      service.register(
+        {
+          tenantId,
+          email: "test@loompilot.test",
+          password: "anotherpassword",
+          name: "Duplicate User",
+          role: UserRole.SALES,
+        },
+        ownerActor
+      )
+    ).rejects.toThrow(ConflictError);
+  });
+
+  it("strictly enforces that first user of a new tenant must be OWNER", async () => {
+    const freshTenant = "tenant_fresh_bootstrap";
+
+    // Non-owner first user rejected
+    await expect(
+      service.register({
+        tenantId: freshTenant,
+        email: "sales@bootstrap.test",
+        password: "password123",
+        name: "First Sales",
+        role: UserRole.SALES,
+      })
+    ).rejects.toThrow(ForbiddenError);
+
+    // Owner first user allowed
+    const owner = await service.register({
+      tenantId: freshTenant,
+      email: "owner@bootstrap.test",
+      password: "password123",
+      name: "First Owner",
+      role: UserRole.OWNER,
+    });
+    expect(owner.role).toBe(UserRole.OWNER);
+  });
+
+  it("restricts creating additional users in an existing tenant exclusively to OWNER actor", async () => {
+    // 1. First owner
+    const owner = await service.register({
+      tenantId,
+      email: "first_owner@loompilot.test",
+      password: "password123",
+      name: "First Owner",
+      role: UserRole.OWNER,
+    });
+
+    const ownerActor = {
+      tenantId,
+      userId: owner.id,
+      role: UserRole.OWNER,
+      email: owner.email,
+    };
+
+    // 2. Unauthenticated registration in existing tenant rejected
     await expect(
       service.register({
         tenantId,
-        email: "test@loompilot.test",
-        password: "anotherpassword",
-        name: "Duplicate User",
+        email: "public_guest@loompilot.test",
+        password: "password123",
+        name: "Public Guest",
         role: UserRole.SALES,
       })
-    ).rejects.toThrow(ConflictError);
+    ).rejects.toThrow(ForbiddenError);
+
+    // 3. Store role actor cannot create users
+    const storeActor = {
+      tenantId,
+      userId: "usr_store",
+      role: UserRole.STORE,
+      email: "store@loompilot.test",
+    };
+    await expect(
+      service.register(
+        {
+          tenantId,
+          email: "another_sales@loompilot.test",
+          password: "password123",
+          name: "Sales Rep",
+          role: UserRole.SALES,
+        },
+        storeActor
+      )
+    ).rejects.toThrow(ForbiddenError);
+
+    // 4. Owner actor can successfully create additional user
+    const newUser = await service.register(
+      {
+        tenantId,
+        email: "new_manager@loompilot.test",
+        password: "password123",
+        name: "Manager Rep",
+        role: UserRole.MANAGER,
+      },
+      ownerActor
+    );
+    expect(newUser.id).toBeDefined();
+    expect(newUser.role).toBe(UserRole.MANAGER);
   });
 
   it("authenticates valid credentials and rejects invalid credentials", async () => {
@@ -139,7 +241,7 @@ describe("Unit: AuthService", () => {
       email: "refresh@loompilot.test",
       password: "mypassword123",
       name: "Refresh User",
-      role: UserRole.ACCOUNTS,
+      role: UserRole.OWNER,
     });
 
     const initial = await service.login({

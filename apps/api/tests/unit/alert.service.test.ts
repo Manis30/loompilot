@@ -7,7 +7,7 @@ import {
   Recommendation,
   NewRecommendation,
 } from "../../src/interfaces/alert.repository.js";
-import { FakeUnitOfWork } from "../../src/repositories/unit-of-work.js";
+import { FakeUnitOfWork } from "../fakes/fake-unit-of-work.js";
 import { ListQuery, Page, toPage } from "../../src/utils/pagination.js";
 import { Actor } from "../../src/utils/actor.js";
 import { AlertSeverity, AlertType, RecommendationStatus, UserRole } from "@loompilot/shared";

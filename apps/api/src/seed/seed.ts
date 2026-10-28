@@ -10,6 +10,11 @@ import { WorkerModel } from "../models/workforce.model.js";
 import { UserRole } from "@loompilot/shared";
 
 export async function runSeed(tenantId: string = "tenant_default"): Promise<void> {
+  if (process.env.NODE_ENV === "production" || env.NODE_ENV === "production") {
+    logger.error("Attempted to run seed script in production environment. Aborting.");
+    throw new Error("Refusing to seed database when NODE_ENV is production.");
+  }
+
   logger.info({ tenantId }, "Starting database seed...");
 
   const passwordHash = await bcrypt.hash("password123", 10);

@@ -1,9 +1,12 @@
+import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { IUserRepository, User } from "../interfaces/user.repository.js";
 import { IAuditLogRepository } from "../interfaces/audit-log.js";
 import { LoginInput, RegisterUserInput } from "../validators/auth.validator.js";
-import { UnauthorizedError, ConflictError, NotFoundError } from "../errors/index.js";
+import { UnauthorizedError, ConflictError, NotFoundError, ForbiddenError } from "../errors/index.js";
+import { UserRole } from "@loompilot/shared";
+import { Actor } from "../utils/actor.js";
 import { env } from "../config/env.js";
 
 export interface AuthResult {
@@ -18,7 +21,21 @@ export class AuthService {
     private readonly audit?: IAuditLogRepository
   ) {}
 
-  async register(input: RegisterUserInput): Promise<User> {
+  async register(input: RegisterUserInput, actor?: Actor): Promise<User> {
+    const totalTenantUsers = await this.users.count(input.tenantId);
+
+    // Bootstrap rule: If tenant has zero users, allow creating the first user ONLY if role is OWNER
+    if (totalTenantUsers === 0) {
+      if (input.role !== UserRole.OWNER) {
+        throw new ForbiddenError("The first user created for a new tenant must have the OWNER role");
+      }
+    } else {
+      // Subsequent user creation requires an authenticated OWNER actor
+      if (!actor || actor.role !== UserRole.OWNER || actor.tenantId !== input.tenantId) {
+        throw new ForbiddenError("User creation in an existing tenant is restricted to tenant owners");
+      }
+    }
+
     const existing = await this.users.findByEmail(input.tenantId, input.email);
     if (existing) {
       throw new ConflictError(`User with email ${input.email} already exists`);
@@ -39,11 +56,12 @@ export class AuthService {
     if (this.audit) {
       await this.audit.record({
         tenantId: input.tenantId,
-        userId: user.id,
-        userRole: user.role,
+        userId: actor ? actor.userId : user.id,
+        userRole: actor ? actor.role : user.role,
         action: "USER_REGISTERED",
         entity: "user",
         entityId: user.id,
+        changes: { email: user.email, role: user.role },
       });
     }
 
@@ -73,7 +91,7 @@ export class AuthService {
     );
 
     const refreshToken = jwt.sign(
-      { userId: user.id, tenantId: user.tenantId },
+      { userId: user.id, tenantId: user.tenantId, jti: crypto.randomUUID() },
       env.JWT_REFRESH_SECRET,
       { expiresIn: env.JWT_REFRESH_EXPIRES_IN as any }
     );
@@ -118,7 +136,7 @@ export class AuthService {
       );
 
       const newRefreshToken = jwt.sign(
-        { userId: user.id, tenantId: user.tenantId },
+        { userId: user.id, tenantId: user.tenantId, jti: crypto.randomUUID() },
         env.JWT_REFRESH_SECRET,
         { expiresIn: env.JWT_REFRESH_EXPIRES_IN as any }
       );

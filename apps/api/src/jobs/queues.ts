@@ -1,8 +1,7 @@
 import { logger } from "../config/logger.js";
+import { IJobQueue, JobHandler } from "../interfaces/job-queue.js";
 
-export type JobHandler<T> = (data: T) => Promise<void>;
-
-export class InMemoryQueue<T> {
+export class InMemoryJobQueue<T> implements IJobQueue<T> {
   private handlers: Array<JobHandler<T>> = [];
 
   constructor(public readonly name: string) {}
@@ -12,8 +11,8 @@ export class InMemoryQueue<T> {
   }
 
   async enqueue(data: T): Promise<void> {
-    logger.debug({ queue: this.name }, "Job enqueued");
-    // Fire asynchronously to avoid blocking the caller
+    logger.debug({ queue: this.name }, "Job enqueued in memory queue");
+    // Asynchronous dispatch
     setImmediate(async () => {
       for (const handler of this.handlers) {
         try {
@@ -36,6 +35,8 @@ export interface PaymentFollowupPayload {
   deliveryId: string;
 }
 
-export const monitoringQueue = new InMemoryQueue<MonitoringJobPayload>("monitoring-queue");
-export const paymentFollowupQueue = new InMemoryQueue<PaymentFollowupPayload>("payment-followup-queue");
+export const monitoringQueue: IJobQueue<MonitoringJobPayload> =
+  new InMemoryJobQueue<MonitoringJobPayload>("monitoring-queue");
 
+export const paymentFollowupQueue: IJobQueue<PaymentFollowupPayload> =
+  new InMemoryJobQueue<PaymentFollowupPayload>("payment-followup-queue");

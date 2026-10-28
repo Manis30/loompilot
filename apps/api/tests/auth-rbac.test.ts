@@ -28,13 +28,14 @@ describe("Stage 2: Auth & Role-Permission Matrix Tests", () => {
     await clearTestDB();
 
     // Create users for each role
-    await authService.register({
+    const owner = await authService.register({
       tenantId,
       email: "owner@loompilot.test",
       password: "password123",
       name: "Owner User",
       role: UserRole.OWNER,
     });
+    const ownerActor = { tenantId, userId: owner.id, role: UserRole.OWNER, email: owner.email };
     const ownerAuth = await authService.login({ tenantId, email: "owner@loompilot.test", password: "password123" });
     ownerToken = ownerAuth.accessToken;
 
@@ -44,7 +45,7 @@ describe("Stage 2: Auth & Role-Permission Matrix Tests", () => {
       password: "password123",
       name: "Store Clerk",
       role: UserRole.STORE,
-    });
+    }, ownerActor);
     const storeAuth = await authService.login({ tenantId, email: "store@loompilot.test", password: "password123" });
     storeToken = storeAuth.accessToken;
 
@@ -54,7 +55,7 @@ describe("Stage 2: Auth & Role-Permission Matrix Tests", () => {
       password: "password123",
       name: "Accounts Officer",
       role: UserRole.ACCOUNTS,
-    });
+    }, ownerActor);
     const accountsAuth = await authService.login({ tenantId, email: "accounts@loompilot.test", password: "password123" });
     accountsToken = accountsAuth.accessToken;
 
@@ -64,7 +65,7 @@ describe("Stage 2: Auth & Role-Permission Matrix Tests", () => {
       password: "password123",
       name: "Sales Rep",
       role: UserRole.SALES,
-    });
+    }, ownerActor);
     const salesAuth = await authService.login({ tenantId, email: "sales@loompilot.test", password: "password123" });
     salesToken = salesAuth.accessToken;
   });

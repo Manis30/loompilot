@@ -7,6 +7,7 @@ import { IMaterialRepository } from "../interfaces/material.repository.js";
 import { IProcessRepository } from "../interfaces/process.repository.js";
 import { IOrderRepository, ProductionOrder, ProcessPlanStep } from "../interfaces/order.repository.js";
 import { IPdfRenderer, QuotationPdfData } from "../interfaces/pdf-renderer.js";
+import { IAgentsClient } from "../interfaces/agents-client.js";
 import { IUnitOfWork } from "../interfaces/unit-of-work.js";
 import { IAuditLogRepository } from "../interfaces/audit-log.js";
 import { Actor } from "../utils/actor.js";
@@ -24,8 +25,9 @@ export class QuotationService {
     private readonly orderRepo: IOrderRepository,
     private readonly pdfRenderer: IPdfRenderer,
     private readonly uow: IUnitOfWork,
-    private readonly audit?: IAuditLogRepository
-  ) {}
+    private readonly audit?: IAuditLogRepository,
+    private readonly agentsClient?: IAgentsClient
+  ) { }
 
   async list(actor: Actor, query?: ListQuery): Promise<Page<Quotation>> {
     return this.quoteRepo.list(actor.tenantId, query);
@@ -95,6 +97,120 @@ export class QuotationService {
       throw new NotFoundError(`Quotation with ID ${id} not found`);
     }
     return quote;
+  }
+
+  /**
+   * Request a new quotation draft from an enquiry.
+   * Node never computes pricing, wastage, or buffers.
+   * If agents client is not available or fails, quotation transitions
+   * immediately to generation_failed state for user retry.
+   */
+  async requestDraft(actor: Actor, enquiryId: string): Promise<Quotation> {
+    const count = await this.quoteRepo.count(actor.tenantId);
+    const quotationNumber = `QT-${String(count + 1).padStart(5, "0")}`;
+
+    const quote = await this.quoteRepo.create({
+      tenantId: actor.tenantId,
+      enquiryId,
+      customerId: "pending",
+      quotationNumber,
+      lineItems: [],
+      materialCostPaise: 0,
+      processingCostPaise: 0,
+      overheadCostPaise: 0,
+      wastagePct: 0,
+      wastageCostPaise: 0,
+      riskBufferPct: 0,
+      riskBufferCostPaise: 0,
+      subtotalCostPaise: 0,
+      marginPct: 0,
+      profitPaise: 0,
+      finalPricePaise: 0,
+      etaDate: new Date().toISOString().split("T")[0]!,
+      validUntil: new Date().toISOString().split("T")[0]!,
+      status: QuotationStatus.DRAFT,
+      explanation: "Draft quotation generation initiated.",
+    });
+
+    if (this.agentsClient) {
+      try {
+        const result = await this.agentsClient.requestDraft({
+          tenantId: actor.tenantId,
+          enquiryId,
+        });
+        if (result.status === "failed") {
+          return (await this.markFailed(actor, quote.id, result.error || "Generation failed"))!;
+        }
+      } catch (err: any) {
+        return (await this.markFailed(actor, quote.id, err.message || "Generation error"))!;
+      }
+    } else {
+      return (await this.markFailed(
+        actor,
+        quote.id,
+        "Agents client not connected. Ready for user retry in Stage 4."
+      ))!;
+    }
+
+    return quote;
+  }
+
+  /**
+   * Recalculate quotation upon user edits.
+   * Node makes zero calculations. Delegates entirely to Python agents /v1/quotations/recalculate.
+   */
+  async recalculate(actor: Actor, quotationId: string, input: any): Promise<Quotation> {
+    const existing = await this.quoteRepo.findById(actor.tenantId, quotationId);
+    if (!existing) {
+      throw new NotFoundError(`Quotation with ID ${quotationId} not found`);
+    }
+
+    if (!this.agentsClient) {
+      throw new BadRequestError(
+        "Agents client unavailable for recalculation. Node does not implement calculation formulas."
+      );
+    }
+
+    const calcResult = await this.agentsClient.recalculate({
+      tenantId: actor.tenantId,
+      quotationId,
+      lineItems: input.lineItems,
+      marginPct: input.marginPct,
+      assumptions: input.assumptions,
+    });
+
+    const updated = await this.quoteRepo.update(actor.tenantId, quotationId, {
+      lineItems: calcResult.lineItems,
+      materialCostPaise: calcResult.materialCostPaise,
+      processingCostPaise: calcResult.processingCostPaise,
+      overheadCostPaise: calcResult.overheadCostPaise,
+      wastagePct: calcResult.wastagePct,
+      wastageCostPaise: calcResult.wastageCostPaise,
+      riskBufferPct: calcResult.riskBufferPct,
+      riskBufferCostPaise: calcResult.riskBufferCostPaise,
+      subtotalCostPaise: calcResult.subtotalCostPaise,
+      marginPct: calcResult.marginPct,
+      profitPaise: calcResult.profitPaise,
+      finalPricePaise: calcResult.finalPricePaise,
+      etaDate: calcResult.etaDate,
+      validUntil: calcResult.validUntil,
+      explanation: calcResult.explanation,
+      assumptions: calcResult.assumptions,
+    });
+
+    if (this.audit) {
+      await this.audit.record({
+        tenantId: actor.tenantId,
+        userId: actor.userId,
+        userRole: actor.role,
+        action: "QUOTATION_RECALCULATED",
+        entity: "quotation",
+        entityId: quotationId,
+        changes: { finalPricePaise: calcResult.finalPricePaise, marginPct: calcResult.marginPct },
+      });
+    }
+
+    return updated!;
   }
 
   async approve(actor: Actor, id: string): Promise<Quotation> {

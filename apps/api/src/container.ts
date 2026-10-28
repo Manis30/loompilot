@@ -85,6 +85,7 @@ import { createReportRoutes } from "./routes/report.routes.js";
 import { AgentGatewayService } from "./services/agent-gateway.service.js";
 import { AgentGatewayController } from "./controllers/agent-gateway.controller.js";
 import { createAgentGatewayRoutes } from "./routes/agent-gateway.routes.js";
+import { UnavailableAgentsClient } from "./integrations/agents/unavailable.agents-client.js";
 
 // Core Infrastructure
 export const unitOfWork = new MongoUnitOfWork();
@@ -141,6 +142,7 @@ export const orderController = new OrderController(orderService);
 export const orderRoutes = createOrderRoutes(orderController);
 
 // Quotations Composition
+export const agentsClient = new UnavailableAgentsClient();
 export const quotationRepository = new MongoQuotationRepository();
 export const quotationService = new QuotationService(
   quotationRepository,
@@ -150,7 +152,8 @@ export const quotationService = new QuotationService(
   orderRepository,
   pdfRenderer,
   unitOfWork,
-  auditLogRepository
+  auditLogRepository,
+  agentsClient
 );
 export const quotationController = new QuotationController(quotationService);
 export const quotationRoutes = createQuotationRoutes(quotationController);
