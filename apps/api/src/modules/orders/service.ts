@@ -1,5 +1,5 @@
 import { ProductionOrderModel, IProductionOrder } from "./model.js";
-import { DailyOutputModel } from "../workforce/model.js";
+import { DailyOutputModel } from "../../models/workforce.model.js";
 
 export class OrderService {
   static async list(tenantId: string): Promise<IProductionOrder[]> {

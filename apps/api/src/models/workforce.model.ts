@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document } from "mongoose";
 
 // 1. Worker Model
-export interface IWorker extends Document {
+export interface IWorkerDocument extends Document {
   tenantId: string;
   workerCode: string;
   name: string;
@@ -13,7 +13,7 @@ export interface IWorker extends Document {
   updatedAt: Date;
 }
 
-const WorkerSchema = new Schema<IWorker>(
+const WorkerSchema = new Schema<IWorkerDocument>(
   {
     tenantId: { type: String, required: true, index: true },
     workerCode: { type: String, required: true },
@@ -32,10 +32,10 @@ const WorkerSchema = new Schema<IWorker>(
 
 WorkerSchema.index({ tenantId: 1, workerCode: 1 }, { unique: true });
 
-export const WorkerModel = mongoose.model<IWorker>("Worker", WorkerSchema);
+export const WorkerModel = mongoose.model<IWorkerDocument>("Worker", WorkerSchema);
 
 // 2. Attendance Model
-export interface IAttendance extends Document {
+export interface IAttendanceDocument extends Document {
   tenantId: string;
   workerId: mongoose.Types.ObjectId;
   date: string; // YYYY-MM-DD
@@ -44,7 +44,7 @@ export interface IAttendance extends Document {
   createdAt: Date;
 }
 
-const AttendanceSchema = new Schema<IAttendance>(
+const AttendanceSchema = new Schema<IAttendanceDocument>(
   {
     tenantId: { type: String, required: true, index: true },
     workerId: { type: Schema.Types.ObjectId, ref: "Worker", required: true, index: true },
@@ -58,10 +58,11 @@ const AttendanceSchema = new Schema<IAttendance>(
 AttendanceSchema.index({ tenantId: 1, workerId: 1, date: 1 }, { unique: true });
 AttendanceSchema.index({ tenantId: 1, date: 1 });
 
-export const AttendanceModel = mongoose.model<IAttendance>("Attendance", AttendanceSchema);
+export const AttendanceModel =
+  mongoose.model<IAttendanceDocument>("Attendance", AttendanceSchema);
 
 // 3. DailyOutput Model (Unique compound index on orderId + processId + date)
-export interface IDailyOutput extends Document {
+export interface IDailyOutputDocument extends Document {
   tenantId: string;
   orderId: mongoose.Types.ObjectId;
   processId: mongoose.Types.ObjectId;
@@ -75,7 +76,7 @@ export interface IDailyOutput extends Document {
   updatedAt: Date;
 }
 
-const DailyOutputSchema = new Schema<IDailyOutput>(
+const DailyOutputSchema = new Schema<IDailyOutputDocument>(
   {
     tenantId: { type: String, required: true, index: true },
     orderId: { type: Schema.Types.ObjectId, ref: "ProductionOrder", required: true, index: true },
@@ -94,5 +95,5 @@ const DailyOutputSchema = new Schema<IDailyOutput>(
 DailyOutputSchema.index({ tenantId: 1, orderId: 1, processId: 1, date: 1 }, { unique: true });
 DailyOutputSchema.index({ tenantId: 1, idempotencyKey: 1 }, { unique: true });
 
-export const DailyOutputModel = mongoose.model<IDailyOutput>("DailyOutput", DailyOutputSchema);
-
+export const DailyOutputModel =
+  mongoose.model<IDailyOutputDocument>("DailyOutput", DailyOutputSchema);

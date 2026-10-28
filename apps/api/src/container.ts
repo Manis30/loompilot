@@ -38,6 +38,12 @@ import { ProcessService } from "./services/process.service.js";
 import { ProcessController } from "./controllers/process.controller.js";
 import { createProcessRoutes } from "./routes/process.routes.js";
 
+// Workforce
+import { MongoWorkforceRepository } from "./repositories/workforce.repository.js";
+import { WorkforceService } from "./services/workforce.service.js";
+import { WorkforceController } from "./controllers/workforce.controller.js";
+import { createWorkforceRoutes } from "./routes/workforce.routes.js";
+
 // Core Infrastructure
 export const unitOfWork = new MongoUnitOfWork();
 export const auditLogRepository = new MongoAuditLogRepository();
@@ -78,3 +84,9 @@ export const processRepository = new MongoProcessRepository();
 export const processService = new ProcessService(processRepository, auditLogRepository);
 export const processController = new ProcessController(processService);
 export const processRoutes = createProcessRoutes(processController);
+
+// Workforce Composition
+export const workforceRepository = new MongoWorkforceRepository();
+export const workforceService = new WorkforceService(workforceRepository, unitOfWork, auditLogRepository);
+export const workforceController = new WorkforceController(workforceService);
+export const workforceRoutes = createWorkforceRoutes(workforceController);
