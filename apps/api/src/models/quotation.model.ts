@@ -14,7 +14,7 @@ export interface IQuotationLineItem {
   supplierLeadDays: number;
 }
 
-export interface IQuotation extends Document {
+export interface IQuotationDocument extends Document {
   tenantId: string;
   enquiryId: mongoose.Types.ObjectId;
   customerId: mongoose.Types.ObjectId;
@@ -61,7 +61,7 @@ const QuotationLineItemSchema = new Schema<IQuotationLineItem>(
   { _id: false }
 );
 
-const QuotationSchema = new Schema<IQuotation>(
+const QuotationSchema = new Schema<IQuotationDocument>(
   {
     tenantId: { type: String, required: true, index: true },
     enquiryId: { type: Schema.Types.ObjectId, ref: "Enquiry", required: true, index: true },
@@ -101,5 +101,4 @@ const QuotationSchema = new Schema<IQuotation>(
 
 QuotationSchema.index({ tenantId: 1, quotationNumber: 1 }, { unique: true });
 
-export const QuotationModel = mongoose.model<IQuotation>("Quotation", QuotationSchema);
-
+export const QuotationModel = mongoose.model<IQuotationDocument>("Quotation", QuotationSchema);

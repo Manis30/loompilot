@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { serviceAuthMiddleware } from "../middleware/serviceAuth.js";
-import { QuotationModel } from "../modules/quotations/model.js";
+import { QuotationModel } from "../models/quotation.model.js";
 import { AlertService } from "../modules/alerts/service.js";
 import { PaymentService } from "../modules/payments/service.js";
 import { QuotationStatus, ReminderStatus } from "@loompilot/shared";

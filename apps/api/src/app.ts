@@ -6,10 +6,9 @@ import { requestIdMiddleware } from "./middleware/requestId.js";
 import { auditMiddleware } from "./middleware/audit.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
-import { authRoutes, enquiryRoutes, customerRoutes, materialRoutes, supplierRoutes, processRoutes, workforceRoutes, orderRoutes } from "./container.js";
+import { authRoutes, enquiryRoutes, customerRoutes, materialRoutes, supplierRoutes, processRoutes, workforceRoutes, orderRoutes, quotationRoutes } from "./container.js";
 
 // Routes
-import { quotationsRouter } from "./modules/quotations/routes.js";
 import { alertsRouter } from "./modules/alerts/routes.js";
 import { deliveriesRouter } from "./modules/deliveries/routes.js";
 import { paymentsRouter } from "./modules/payments/routes.js";
@@ -47,7 +46,7 @@ app.use("/internal", internalGatewayRouter);
 app.use("/api/auth", authRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/enquiries", enquiryRoutes);
-app.use("/api/quotations", quotationsRouter);
+app.use("/api/quotations", quotationRoutes);
 app.use("/api/materials", materialRoutes);
 app.use("/api/suppliers", supplierRoutes);
 app.use("/api/processes", processRoutes);

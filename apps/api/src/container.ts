@@ -50,10 +50,18 @@ import { OrderService } from "./services/order.service.js";
 import { OrderController } from "./controllers/order.controller.js";
 import { createOrderRoutes } from "./routes/order.routes.js";
 
+// Quotations
+import { MongoQuotationRepository } from "./repositories/quotation.repository.js";
+import { QuotationService } from "./services/quotation.service.js";
+import { QuotationController } from "./controllers/quotation.controller.js";
+import { createQuotationRoutes } from "./routes/quotation.routes.js";
+import { PdfMakeRenderer } from "./integrations/pdf/pdfmake.renderer.js";
+
 // Core Infrastructure
 export const unitOfWork = new MongoUnitOfWork();
 export const auditLogRepository = new MongoAuditLogRepository();
 registerAuditRepository(auditLogRepository);
+export const pdfRenderer = new PdfMakeRenderer();
 
 // Users & Auth Composition
 export const userRepository = new MongoUserRepository();
@@ -102,3 +110,18 @@ export const orderRepository = new MongoOrderRepository();
 export const orderService = new OrderService(orderRepository, workforceRepository, unitOfWork, auditLogRepository);
 export const orderController = new OrderController(orderService);
 export const orderRoutes = createOrderRoutes(orderController);
+
+// Quotations Composition
+export const quotationRepository = new MongoQuotationRepository();
+export const quotationService = new QuotationService(
+  quotationRepository,
+  customerRepository,
+  materialRepository,
+  processRepository,
+  orderRepository,
+  pdfRenderer,
+  unitOfWork,
+  auditLogRepository
+);
+export const quotationController = new QuotationController(quotationService);
+export const quotationRoutes = createQuotationRoutes(quotationController);

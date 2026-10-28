@@ -42,7 +42,7 @@ export class MongoOrderRepository implements IOrderRepository {
   async create(data: NewProductionOrder, tx?: TxContext): Promise<ProductionOrder> {
     const orderNumber =
       data.orderNumber ||
-      `ORD-${String((await this.count(data.tenantId, tx)) + 1).padStart(5, "0")}`;
+      `PO-${String((await this.count(data.tenantId, tx)) + 1).padStart(5, "0")}`;
 
     const docs = await ProductionOrderModel.create(
       [

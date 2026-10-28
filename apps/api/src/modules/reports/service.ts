@@ -1,4 +1,4 @@
-import { QuotationModel } from "../quotations/model.js";
+import { QuotationModel } from "../../models/quotation.model.js";
 import { DeliveryModel } from "../deliveries/model.js";
 import { PaymentModel } from "../payments/model.js";
 import { QuotationStatus } from "@loompilot/shared";
