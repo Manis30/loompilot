@@ -4,7 +4,7 @@ import { ProductionOrderModel, IProductionOrder } from "../orders/model.js";
 import { ProcessModel } from "../processes/model.js";
 import { ReservationModel } from "../materials/model.js";
 import { MaterialService } from "../materials/service.js";
-import { CustomerModel } from "../customers/model.js";
+import { CustomerModel } from "../../models/customer.model.js";
 import { QuotationStatus, OrderStatus, StockMovementType } from "@loompilot/shared";
 import { generateQuotationPdf } from "../../lib/pdf.js";
 

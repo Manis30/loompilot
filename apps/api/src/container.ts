@@ -8,6 +8,12 @@ import { EnquiryService } from "./services/enquiry.service.js";
 import { EnquiryController } from "./controllers/enquiry.controller.js";
 import { createEnquiryRoutes } from "./routes/enquiry.routes.js";
 
+// Customers
+import { MongoCustomerRepository } from "./repositories/customer.repository.js";
+import { CustomerService } from "./services/customer.service.js";
+import { CustomerController } from "./controllers/customer.controller.js";
+import { createCustomerRoutes } from "./routes/customer.routes.js";
+
 // Core Infrastructure
 export const unitOfWork = new MongoUnitOfWork();
 export const auditLogRepository = new MongoAuditLogRepository();
@@ -18,3 +24,9 @@ export const enquiryRepository = new MongoEnquiryRepository();
 export const enquiryService = new EnquiryService(enquiryRepository, auditLogRepository);
 export const enquiryController = new EnquiryController(enquiryService);
 export const enquiryRoutes = createEnquiryRoutes(enquiryController);
+
+// Customers Composition
+export const customerRepository = new MongoCustomerRepository();
+export const customerService = new CustomerService(customerRepository, auditLogRepository);
+export const customerController = new CustomerController(customerService);
+export const customerRoutes = createCustomerRoutes(customerController);
