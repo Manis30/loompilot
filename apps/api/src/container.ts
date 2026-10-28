@@ -63,6 +63,12 @@ import { AlertService } from "./services/alert.service.js";
 import { AlertController } from "./controllers/alert.controller.js";
 import { createAlertRoutes } from "./routes/alert.routes.js";
 
+// Deliveries
+import { MongoDeliveryRepository } from "./repositories/delivery.repository.js";
+import { DeliveryService } from "./services/delivery.service.js";
+import { DeliveryController } from "./controllers/delivery.controller.js";
+import { createDeliveryRoutes } from "./routes/delivery.routes.js";
+
 // Core Infrastructure
 export const unitOfWork = new MongoUnitOfWork();
 export const auditLogRepository = new MongoAuditLogRepository();
@@ -137,3 +143,9 @@ export const alertRepository = new MongoAlertRepository();
 export const alertService = new AlertService(alertRepository, unitOfWork, auditLogRepository);
 export const alertController = new AlertController(alertService);
 export const alertRoutes = createAlertRoutes(alertController);
+
+// Deliveries Composition
+export const deliveryRepository = new MongoDeliveryRepository();
+export const deliveryService = new DeliveryService(deliveryRepository, orderRepository, unitOfWork, auditLogRepository);
+export const deliveryController = new DeliveryController(deliveryService);
+export const deliveryRoutes = createDeliveryRoutes(deliveryController);

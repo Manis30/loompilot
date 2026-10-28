@@ -1,5 +1,5 @@
 import { QuotationModel } from "../../models/quotation.model.js";
-import { DeliveryModel } from "../deliveries/model.js";
+import { DeliveryModel } from "../../models/delivery.model.js";
 import { PaymentModel } from "../payments/model.js";
 import { QuotationStatus } from "@loompilot/shared";
 

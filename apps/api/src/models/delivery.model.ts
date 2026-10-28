@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document } from "mongoose";
 import { DeliveryStatus } from "@loompilot/shared";
 
-export interface IDelivery extends Document {
+export interface IDeliveryDocument extends Document {
   tenantId: string;
   orderId: mongoose.Types.ObjectId;
   customerId: mongoose.Types.ObjectId;
@@ -18,7 +18,7 @@ export interface IDelivery extends Document {
   updatedAt: Date;
 }
 
-const DeliverySchema = new Schema<IDelivery>(
+const DeliverySchema = new Schema<IDeliveryDocument>(
   {
     tenantId: { type: String, required: true, index: true },
     orderId: { type: Schema.Types.ObjectId, ref: "ProductionOrder", required: true, index: true },
@@ -44,5 +44,4 @@ const DeliverySchema = new Schema<IDelivery>(
 DeliverySchema.index({ tenantId: 1, deliveryNumber: 1 }, { unique: true });
 DeliverySchema.index({ tenantId: 1, invoiceNumber: 1 }, { unique: true });
 
-export const DeliveryModel = mongoose.model<IDelivery>("Delivery", DeliverySchema);
-
+export const DeliveryModel = mongoose.model<IDeliveryDocument>("Delivery", DeliverySchema);
