@@ -1,0 +1,24 @@
+{
+  "name": "loompilot-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LoomPilot - AI Assistant for Textile Manufacturers",
+  "packageManager": "pnpm@12.15.0",
+  "scripts": {
+    "build": "pnpm -r --filter=!./agents build",
+    "lint": "pnpm -r --filter=!./agents lint",
+    "typecheck": "pnpm -r --filter=!./agents typecheck",
+    "test": "pnpm -r --filter=!./agents test",
+    "gen:agents-client": "pnpm --filter @loompilot/agents-client generate",
+    "seed": "pnpm --filter @loompilot/api seed",
+    "dev:api": "pnpm --filter @loompilot/api dev",
+    "dev:web": "pnpm --filter @loompilot/web dev",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "clean": "pnpm -r exec rm -rf dist build node_modules"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "prettier": "^3.5.0"
+  }
+}

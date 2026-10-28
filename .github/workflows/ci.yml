@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  node-ci:
+    name: Node.js (Lint, Typecheck, Test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm -r --filter=!./agents lint
+
+      - name: Typecheck
+        run: pnpm -r --filter=!./agents typecheck
+
+      - name: Test
+        run: pnpm -r --filter=!./agents test
+
+  python-ci:
+    name: Python Agents (Ruff, Mypy, Pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Setup Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        working-directory: ./agents
+        run: uv sync
+
+      - name: Lint with Ruff
+        working-directory: ./agents
+        run: uv run ruff check .
+
+      - name: Typecheck with Mypy
+        working-directory: ./agents
+        run: uv run mypy app
+
+      - name: Test with Pytest
+        working-directory: ./agents
+        run: uv run pytest
