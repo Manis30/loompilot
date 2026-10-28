@@ -32,6 +32,12 @@ import { SupplierService } from "./services/supplier.service.js";
 import { SupplierController } from "./controllers/supplier.controller.js";
 import { createSupplierRoutes } from "./routes/supplier.routes.js";
 
+// Processes
+import { MongoProcessRepository } from "./repositories/process.repository.js";
+import { ProcessService } from "./services/process.service.js";
+import { ProcessController } from "./controllers/process.controller.js";
+import { createProcessRoutes } from "./routes/process.routes.js";
+
 // Core Infrastructure
 export const unitOfWork = new MongoUnitOfWork();
 export const auditLogRepository = new MongoAuditLogRepository();
@@ -66,3 +72,9 @@ export const supplierRepository = new MongoSupplierRepository();
 export const supplierService = new SupplierService(supplierRepository, auditLogRepository);
 export const supplierController = new SupplierController(supplierService);
 export const supplierRoutes = createSupplierRoutes(supplierController);
+
+// Processes Composition
+export const processRepository = new MongoProcessRepository();
+export const processService = new ProcessService(processRepository, auditLogRepository);
+export const processController = new ProcessController(processService);
+export const processRoutes = createProcessRoutes(processController);

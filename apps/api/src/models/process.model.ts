@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document } from "mongoose";
 import { ProcessName } from "@loompilot/shared";
 
-export interface IProcess extends Document {
+export interface IProcessDocument extends Document {
   tenantId: string;
   name: ProcessName;
   sequence: number;
@@ -12,7 +12,7 @@ export interface IProcess extends Document {
   updatedAt: Date;
 }
 
-const ProcessSchema = new Schema<IProcess>(
+const ProcessSchema = new Schema<IProcessDocument>(
   {
     tenantId: { type: String, required: true, index: true },
     name: { type: String, enum: Object.values(ProcessName), required: true },
@@ -27,5 +27,4 @@ const ProcessSchema = new Schema<IProcess>(
 ProcessSchema.index({ tenantId: 1, name: 1 }, { unique: true });
 ProcessSchema.index({ tenantId: 1, sequence: 1 });
 
-export const ProcessModel = mongoose.model<IProcess>("Process", ProcessSchema);
-
+export const ProcessModel = mongoose.model<IProcessDocument>("Process", ProcessSchema);

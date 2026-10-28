@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { QuotationModel, IQuotation } from "./model.js";
 import { ProductionOrderModel, IProductionOrder } from "../orders/model.js";
-import { ProcessModel } from "../processes/model.js";
+import { ProcessModel } from "../../models/process.model.js";
 import { ReservationModel, MaterialModel, StockMovementModel } from "../../models/material.model.js";
 import { CustomerModel } from "../../models/customer.model.js";
 import { QuotationStatus, OrderStatus, StockMovementType } from "@loompilot/shared";
