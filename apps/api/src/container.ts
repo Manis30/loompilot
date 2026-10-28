@@ -2,6 +2,12 @@ import { MongoUnitOfWork } from "./repositories/unit-of-work.js";
 import { MongoAuditLogRepository } from "./repositories/audit.repository.js";
 import { registerAuditRepository } from "./middleware/audit.js";
 
+// Users & Auth
+import { MongoUserRepository } from "./repositories/user.repository.js";
+import { AuthService } from "./services/auth.service.js";
+import { AuthController } from "./controllers/auth.controller.js";
+import { createAuthRoutes } from "./routes/auth.routes.js";
+
 // Enquiries
 import { MongoEnquiryRepository } from "./repositories/enquiry.repository.js";
 import { EnquiryService } from "./services/enquiry.service.js";
@@ -18,6 +24,12 @@ import { createCustomerRoutes } from "./routes/customer.routes.js";
 export const unitOfWork = new MongoUnitOfWork();
 export const auditLogRepository = new MongoAuditLogRepository();
 registerAuditRepository(auditLogRepository);
+
+// Users & Auth Composition
+export const userRepository = new MongoUserRepository();
+export const authService = new AuthService(userRepository, auditLogRepository);
+export const authController = new AuthController(authService);
+export const authRoutes = createAuthRoutes(authController);
 
 // Enquiries Composition
 export const enquiryRepository = new MongoEnquiryRepository();

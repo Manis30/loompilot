@@ -6,10 +6,9 @@ import { requestIdMiddleware } from "./middleware/requestId.js";
 import { auditMiddleware } from "./middleware/audit.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
-import { enquiryRoutes, customerRoutes } from "./container.js";
+import { authRoutes, enquiryRoutes, customerRoutes } from "./container.js";
 
 // Routes
-import { authRouter } from "./modules/auth/routes.js";
 import { quotationsRouter } from "./modules/quotations/routes.js";
 import { materialsRouter } from "./modules/materials/routes.js";
 import { suppliersRouter } from "./modules/suppliers/routes.js";
@@ -50,7 +49,7 @@ app.get("/health", (_req, res) => {
 app.use("/internal", internalGatewayRouter);
 
 // Public / Authenticated Application API routes
-app.use("/api/auth", authRouter);
+app.use("/api/auth", authRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/enquiries", enquiryRoutes);
 app.use("/api/quotations", quotationsRouter);
@@ -66,4 +65,3 @@ app.use("/api/reports", reportsRouter);
 
 // Central error handler
 app.use(errorHandler);
-

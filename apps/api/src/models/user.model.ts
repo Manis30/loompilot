@@ -1,8 +1,7 @@
 import mongoose, { Schema, Document } from "mongoose";
-import bcrypt from "bcryptjs";
 import { UserRole } from "@loompilot/shared";
 
-export interface IUser extends Document {
+export interface IUserDocument extends Document {
   tenantId: string;
   email: string;
   passwordHash: string;
@@ -12,10 +11,9 @@ export interface IUser extends Document {
   refreshTokens: string[];
   createdAt: Date;
   updatedAt: Date;
-  comparePassword(candidate: string): Promise<boolean>;
 }
 
-const UserSchema = new Schema<IUser>(
+const UserSchema = new Schema<IUserDocument>(
   {
     tenantId: { type: String, required: true, index: true },
     email: { type: String, required: true, lowercase: true, trim: true },
@@ -35,9 +33,4 @@ const UserSchema = new Schema<IUser>(
 
 UserSchema.index({ tenantId: 1, email: 1 }, { unique: true });
 
-UserSchema.methods.comparePassword = async function (candidate: string): Promise<boolean> {
-  return bcrypt.compare(candidate, this.passwordHash);
-};
-
-export const UserModel = mongoose.model<IUser>("User", UserSchema);
-
+export const UserModel = mongoose.model<IUserDocument>("User", UserSchema);

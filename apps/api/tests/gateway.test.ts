@@ -3,7 +3,7 @@ import request from "supertest";
 import { app } from "../src/app.js";
 import { setupTestDB, teardownTestDB, clearTestDB } from "./setup.js";
 import { env } from "../src/config/env.js";
-import { AuthService } from "../src/modules/auth/service.js";
+import { authService } from "../src/container.js";
 import { UserRole, AlertType, AlertSeverity } from "@loompilot/shared";
 import mongoose from "mongoose";
 
@@ -43,14 +43,14 @@ describe("Stage 2: Internal Agent Gateway Tests", () => {
   });
 
   it("rejects user JWT tokens on /internal routes (only service tokens accepted)", async () => {
-    await AuthService.createUser({
+    await authService.register({
       tenantId,
       email: "owner@gateway.test",
       password: "password123",
       name: "Owner",
       role: UserRole.OWNER,
     });
-    const auth = await AuthService.authenticate(tenantId, "owner@gateway.test", "password123");
+    const auth = await authService.login({ tenantId, email: "owner@gateway.test", password: "password123" });
 
     // Pass user JWT instead of service token
     const res = await request(app)

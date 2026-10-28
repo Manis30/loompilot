@@ -2,7 +2,7 @@ import { describe, it, beforeAll, afterAll, beforeEach, expect } from "vitest";
 import request from "supertest";
 import { app } from "../src/app.js";
 import { setupTestDB, teardownTestDB, clearTestDB } from "./setup.js";
-import { AuthService } from "../src/modules/auth/service.js";
+import { authService } from "../src/container.js";
 import { MaterialModel } from "../src/modules/materials/model.js";
 import { QuotationModel } from "../src/modules/quotations/model.js";
 import { PaymentModel } from "../src/modules/payments/model.js";
@@ -28,45 +28,45 @@ describe("Stage 2: Auth & Role-Permission Matrix Tests", () => {
     await clearTestDB();
 
     // Create users for each role
-    await AuthService.createUser({
+    await authService.register({
       tenantId,
       email: "owner@loompilot.test",
       password: "password123",
       name: "Owner User",
       role: UserRole.OWNER,
     });
-    const ownerAuth = await AuthService.authenticate(tenantId, "owner@loompilot.test", "password123");
-    ownerToken = ownerAuth!.accessToken;
+    const ownerAuth = await authService.login({ tenantId, email: "owner@loompilot.test", password: "password123" });
+    ownerToken = ownerAuth.accessToken;
 
-    await AuthService.createUser({
+    await authService.register({
       tenantId,
       email: "store@loompilot.test",
       password: "password123",
       name: "Store Clerk",
       role: UserRole.STORE,
     });
-    const storeAuth = await AuthService.authenticate(tenantId, "store@loompilot.test", "password123");
-    storeToken = storeAuth!.accessToken;
+    const storeAuth = await authService.login({ tenantId, email: "store@loompilot.test", password: "password123" });
+    storeToken = storeAuth.accessToken;
 
-    await AuthService.createUser({
+    await authService.register({
       tenantId,
       email: "accounts@loompilot.test",
       password: "password123",
       name: "Accounts Officer",
       role: UserRole.ACCOUNTS,
     });
-    const accountsAuth = await AuthService.authenticate(tenantId, "accounts@loompilot.test", "password123");
-    accountsToken = accountsAuth!.accessToken;
+    const accountsAuth = await authService.login({ tenantId, email: "accounts@loompilot.test", password: "password123" });
+    accountsToken = accountsAuth.accessToken;
 
-    await AuthService.createUser({
+    await authService.register({
       tenantId,
       email: "sales@loompilot.test",
       password: "password123",
       name: "Sales Rep",
       role: UserRole.SALES,
     });
-    const salesAuth = await AuthService.authenticate(tenantId, "sales@loompilot.test", "password123");
-    salesToken = salesAuth!.accessToken;
+    const salesAuth = await authService.login({ tenantId, email: "sales@loompilot.test", password: "password123" });
+    salesToken = salesAuth.accessToken;
   });
 
   it("authenticates user and returns JWT + sets httpOnly refresh token cookie", async () => {
