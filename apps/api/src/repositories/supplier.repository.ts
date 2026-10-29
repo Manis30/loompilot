@@ -9,12 +9,17 @@ export class MongoSupplierRepository implements ISupplierRepository {
       id: doc._id.toString(),
       tenantId: doc.tenantId,
       name: doc.name,
+      code: doc.code,
       contactPerson: doc.contactPerson,
       email: doc.email,
       phone: doc.phone,
+      address: doc.address,
+      gstin: doc.gstin,
+      paymentTermsDays: doc.paymentTermsDays,
       leadTimeDays: doc.leadTimeDays,
       rating: doc.rating,
       suppliedMaterials: (doc.suppliedMaterials || []).map((m: any) => m.toString()),
+      active: doc.active ?? true,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
     };
@@ -29,6 +34,34 @@ export class MongoSupplierRepository implements ISupplierRepository {
     const doc = await SupplierModel.findOne({ _id: id, tenantId })
       .session(tx?.session || null)
       .lean();
+    return doc ? this.toEntity(doc) : null;
+  }
+
+  async findByCode(tenantId: string, code: string, tx?: TxContext): Promise<Supplier | null> {
+    const doc = await SupplierModel.findOne({ tenantId, code })
+      .session(tx?.session || null)
+      .lean();
+    return doc ? this.toEntity(doc) : null;
+  }
+
+  async findByName(tenantId: string, name: string, tx?: TxContext): Promise<Supplier | null> {
+    const doc = await SupplierModel.findOne({ tenantId, name })
+      .session(tx?.session || null)
+      .lean();
+    return doc ? this.toEntity(doc) : null;
+  }
+
+  async update(
+    tenantId: string,
+    id: string,
+    data: Partial<Supplier>,
+    tx?: TxContext
+  ): Promise<Supplier | null> {
+    const doc = await SupplierModel.findOneAndUpdate(
+      { _id: id, tenantId },
+      { $set: data },
+      { new: true, session: tx?.session || null }
+    ).lean();
     return doc ? this.toEntity(doc) : null;
   }
 

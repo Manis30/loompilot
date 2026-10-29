@@ -15,6 +15,10 @@ import { paymentPaths } from "./payment.paths.js";
 import { reportPaths } from "./report.paths.js";
 import { agentGatewayPaths } from "./agent-gateway.paths.js";
 import { healthPaths } from "./health.paths.js";
+import { settingsPaths } from "./settings.paths.js";
+import { productPaths } from "./product.paths.js";
+import { supplierOrderPaths } from "./supplier-order.paths.js";
+import { importPaths } from "./import.paths.js";
 
 export const openapiPaths = {
   ...healthPaths,
@@ -34,5 +38,9 @@ export const openapiPaths = {
   ...paymentPaths,
   ...reportPaths,
   ...agentGatewayPaths,
+  ...settingsPaths,
+  ...productPaths,
+  ...supplierOrderPaths,
+  ...importPaths,
 };
 

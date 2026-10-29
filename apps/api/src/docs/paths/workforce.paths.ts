@@ -71,6 +71,37 @@ export const workforcePaths = {
     },
   },
 
+  "/api/v1/workforce/workers/{id}": {
+    patch: {
+      tags: ["Workforce"],
+      summary: "Update worker profile",
+      description: "Updates worker details or soft deactivates. Owner or Manager.",
+      operationId: "updateWorker",
+      security: [{ bearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { type: "object" } } },
+      },
+      responses: {
+        200: {
+          description: "Worker updated",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: { $ref: "#/components/schemas/Worker" },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+
   "/api/v1/workforce/attendance": {
     get: {
       tags: ["Workforce"],
@@ -169,6 +200,36 @@ export const workforcePaths = {
         400: { description: "Validation error.", content: { "application/json": { schema: { $ref: "#/components/schemas/ValidationError" } } } },
         401: { description: "Unauthorized.", content: { "application/json": { schema: { $ref: "#/components/schemas/StandardError" } } } },
         403: { description: "Forbidden.", content: { "application/json": { schema: { $ref: "#/components/schemas/StandardError" } } } },
+      },
+    },
+  },
+
+  "/api/v1/workforce/daily-outputs/{id}": {
+    patch: {
+      tags: ["Workforce"],
+      summary: "Update recorded daily output with reason",
+      operationId: "updateDailyOutput",
+      security: [{ bearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { type: "object" } } },
+      },
+      responses: {
+        200: {
+          description: "Daily output updated",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: { $ref: "#/components/schemas/DailyOutput" },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
       },
     },
   },

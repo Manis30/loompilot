@@ -129,6 +129,49 @@ class FakeWorkforceRepository implements IWorkforceRepository {
   async getOutputsForOrder(tenantId: string, orderId: string): Promise<DailyOutput[]> {
     return this.outputs.filter((o) => o.tenantId === tenantId && o.orderId === orderId);
   }
+
+  async updateWorker(
+    tenantId: string,
+    id: string,
+    data: Partial<Worker>
+  ): Promise<Worker | null> {
+    const w = await this.findWorkerById(tenantId, id);
+    if (!w) return null;
+    Object.assign(w, data, { updatedAt: new Date() });
+    return w;
+  }
+
+  async findDailyOutputByOrderProcessDate(
+    tenantId: string,
+    orderId: string,
+    processId: string,
+    date: string
+  ): Promise<DailyOutput | null> {
+    return (
+      this.outputs.find(
+        (o) =>
+          o.tenantId === tenantId &&
+          o.orderId === orderId &&
+          o.processId === processId &&
+          o.date === date
+      ) || null
+    );
+  }
+
+  async findDailyOutputById(tenantId: string, id: string): Promise<DailyOutput | null> {
+    return this.outputs.find((o) => o.tenantId === tenantId && o.id === id) || null;
+  }
+
+  async updateDailyOutput(
+    tenantId: string,
+    id: string,
+    data: Partial<DailyOutput>
+  ): Promise<DailyOutput | null> {
+    const o = await this.findDailyOutputById(tenantId, id);
+    if (!o) return null;
+    Object.assign(o, data, { updatedAt: new Date() });
+    return o;
+  }
 }
 
 describe("Unit: WorkforceService", () => {

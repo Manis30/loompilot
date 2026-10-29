@@ -14,6 +14,8 @@ export interface Material {
   onHandQuantity: number;
   reservedQuantity: number;
   reorderLevel: number;
+  preferredSupplierId?: string;
+  active: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,6 +31,8 @@ export interface NewMaterial {
   onHandQuantity?: number;
   reservedQuantity?: number;
   reorderLevel?: number;
+  preferredSupplierId?: string;
+  active?: boolean;
 }
 
 export interface StockMovement {
@@ -107,5 +111,41 @@ export interface IMaterialRepository {
   updateReservationStatus(tenantId: string, id: string, status: "reserved" | "allocated" | "released", tx?: TxContext): Promise<void>;
   recordPrice(data: NewPriceHistory, tx?: TxContext): Promise<PriceHistory>;
   getPriceHistory(tenantId: string, materialId: string, limitDays?: number): Promise<PriceHistory[]>;
+  mutateStock(
+    tenantId: string,
+    id: string,
+    onHandChange: number,
+    reservedChange: number,
+    tx?: TxContext
+  ): Promise<Material>;
+  getStockSummary(
+    tenantId: string
+  ): Promise<
+    Array<{
+      id: string;
+      code: string;
+      name: string;
+      unit: string;
+      onHandQuantity: number;
+      reservedQuantity: number;
+      availableQuantity: number;
+      avgCostPaise: number;
+      totalValuePaise: number;
+    }>
+  >;
+  appendPriceHistory(
+    tenantId: string,
+    materialId: string,
+    effectiveDate: string,
+    ratePaise: number,
+    source: string,
+    referenceId?: string,
+    tx?: TxContext
+  ): Promise<PriceHistory>;
+  backfillPriceHistory(
+    tenantId: string,
+    materialId: string,
+    entries: Array<{ date: string; ratePaise: number; source?: string }>
+  ): Promise<number>;
 }
 

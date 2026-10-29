@@ -14,6 +14,8 @@ export class MongoProcessRepository implements IProcessRepository {
       standardWastagePct: doc.standardWastagePct,
       avgOutputPerWorkerHour: doc.avgOutputPerWorkerHour,
       unit: doc.unit,
+      costPerUnitPaise: doc.costPerUnitPaise || 0,
+      active: doc.active ?? true,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
     };
@@ -70,5 +72,19 @@ export class MongoProcessRepository implements IProcessRepository {
       .session(tx?.session || null)
       .lean();
     return docs.map((d) => this.toEntity(d));
+  }
+
+  async update(
+    tenantId: string,
+    id: string,
+    data: Partial<Process>,
+    tx?: TxContext
+  ): Promise<Process | null> {
+    const doc = await ProcessModel.findOneAndUpdate(
+      { _id: id, tenantId },
+      { $set: data },
+      { new: true, session: tx?.session || null }
+    ).lean();
+    return doc ? this.toEntity(doc) : null;
   }
 }

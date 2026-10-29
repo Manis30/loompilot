@@ -10,5 +10,17 @@ export const CreateSupplierSchema = z.object({
   suppliedMaterials: z.array(z.string()).optional(),
 });
 
+export const UpdateSupplierSchema = z.object({
+  name: z.string().min(1).optional(),
+  contactPerson: z.string().min(1).optional(),
+  email: z.string().email().optional(),
+  phone: z.string().min(5).optional(),
+  leadTimeDays: z.number().int().positive().optional(),
+  rating: z.number().min(1).max(5).optional(),
+  suppliedMaterials: z.array(z.string()).optional(),
+  active: z.boolean().optional(),
+});
+
 export type CreateSupplierInput = z.infer<typeof CreateSupplierSchema>;
+export type UpdateSupplierInput = z.infer<typeof UpdateSupplierSchema>;
 

@@ -2,6 +2,7 @@ import {
   IWorkforceRepository,
   Worker,
   NewWorker,
+  UpdateWorkerInput,
   AttendanceRecord,
   AttendanceItem,
   DailyOutput,
@@ -38,7 +39,10 @@ export class MongoWorkforceRepository implements IWorkforceRepository {
       workerId: doc.workerId?._id ? doc.workerId._id.toString() : doc.workerId.toString(),
       workerName: doc.workerId?.name,
       date: doc.date,
-      isPresent: doc.isPresent,
+      processId: doc.processId?.toString(),
+      shift: doc.shift || "morning",
+      status: doc.status || (doc.isPresent ? "present" : "absent"),
+      isPresent: doc.isPresent ?? (doc.status !== "absent"),
       hoursWorked: doc.hoursWorked,
       createdAt: doc.createdAt,
     };
@@ -51,8 +55,16 @@ export class MongoWorkforceRepository implements IWorkforceRepository {
       orderId: doc.orderId.toString(),
       processId: doc.processId.toString(),
       date: doc.date,
+      entries: (doc.entries || []).map((e: any) => ({
+        workerId: e.workerId?.toString(),
+        hoursWorked: e.hoursWorked,
+        quantityProduced: e.quantityProduced,
+        quantityDefective: e.quantityDefective || 0,
+        hourlyRatePaiseSnapshot: e.hourlyRatePaiseSnapshot || 0,
+      })),
+      labourCostPaise: doc.labourCostPaise || 0,
       quantityProduced: doc.quantityProduced,
-      quantityDefective: doc.quantityDefective,
+      quantityDefective: doc.quantityDefective || 0,
       operatorId: doc.operatorId,
       notes: doc.notes,
       idempotencyKey: doc.idempotencyKey,
@@ -81,6 +93,20 @@ export class MongoWorkforceRepository implements IWorkforceRepository {
     const doc = await WorkerModel.findOne({ tenantId, workerCode })
       .session(tx?.session || null)
       .lean();
+    return doc ? this.toWorker(doc) : null;
+  }
+
+  async updateWorker(
+    tenantId: string,
+    id: string,
+    data: UpdateWorkerInput,
+    tx?: TxContext
+  ): Promise<Worker | null> {
+    const doc = await WorkerModel.findOneAndUpdate(
+      { _id: id, tenantId },
+      { $set: data },
+      { new: true, session: tx?.session || null }
+    ).lean();
     return doc ? this.toWorker(doc) : null;
   }
 
@@ -113,9 +139,19 @@ export class MongoWorkforceRepository implements IWorkforceRepository {
   ): Promise<AttendanceRecord[]> {
     const results: AttendanceRecord[] = [];
     for (const rec of records) {
+      const isPresent = rec.status ? rec.status !== "absent" : (rec.isPresent ?? true);
+      const status = rec.status || (isPresent ? "present" : "absent");
       const doc = await AttendanceModel.findOneAndUpdate(
         { tenantId, workerId: rec.workerId, date: rec.date },
-        { isPresent: rec.isPresent, hoursWorked: rec.hoursWorked ?? 8 },
+        {
+          $set: {
+            isPresent,
+            status,
+            shift: rec.shift || "morning",
+            hoursWorked: rec.hoursWorked ?? 8,
+            ...(rec.processId ? { processId: rec.processId } : {}),
+          },
+        },
         { upsert: true, new: true, session: tx?.session || null }
       ).lean();
       results.push(this.toAttendance(doc));
@@ -141,6 +177,35 @@ export class MongoWorkforceRepository implements IWorkforceRepository {
     return doc ? this.toDailyOutput(doc) : null;
   }
 
+  async findDailyOutputByOrderProcessDate(
+    tenantId: string,
+    orderId: string,
+    processId: string,
+    date: string,
+    tx?: TxContext
+  ): Promise<DailyOutput | null> {
+    const doc = await DailyOutputModel.findOne({
+      tenantId,
+      orderId,
+      processId,
+      date,
+    })
+      .session(tx?.session || null)
+      .lean();
+    return doc ? this.toDailyOutput(doc) : null;
+  }
+
+  async findDailyOutputById(
+    tenantId: string,
+    id: string,
+    tx?: TxContext
+  ): Promise<DailyOutput | null> {
+    const doc = await DailyOutputModel.findOne({ tenantId, _id: id })
+      .session(tx?.session || null)
+      .lean();
+    return doc ? this.toDailyOutput(doc) : null;
+  }
+
   async upsertDailyOutput(data: NewDailyOutput, tx?: TxContext): Promise<DailyOutput> {
     const doc = await DailyOutputModel.findOneAndUpdate(
       {
@@ -151,6 +216,8 @@ export class MongoWorkforceRepository implements IWorkforceRepository {
       },
       {
         $set: {
+          entries: data.entries || [],
+          labourCostPaise: data.labourCostPaise || 0,
           quantityProduced: data.quantityProduced,
           quantityDefective: data.quantityDefective ?? 0,
           operatorId: data.operatorId,
@@ -161,6 +228,20 @@ export class MongoWorkforceRepository implements IWorkforceRepository {
       { upsert: true, new: true, session: tx?.session || null }
     ).lean();
     return this.toDailyOutput(doc);
+  }
+
+  async updateDailyOutput(
+    tenantId: string,
+    id: string,
+    data: Partial<NewDailyOutput>,
+    tx?: TxContext
+  ): Promise<DailyOutput | null> {
+    const doc = await DailyOutputModel.findOneAndUpdate(
+      { tenantId, _id: id },
+      { $set: data },
+      { new: true, session: tx?.session || null }
+    ).lean();
+    return doc ? this.toDailyOutput(doc) : null;
   }
 
   async getOutputsForOrder(
@@ -175,4 +256,5 @@ export class MongoWorkforceRepository implements IWorkforceRepository {
     return docs.map((d) => this.toDailyOutput(d));
   }
 }
+
 

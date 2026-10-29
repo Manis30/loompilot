@@ -39,6 +39,9 @@ export interface IAttendanceDocument extends Document {
   tenantId: string;
   workerId: mongoose.Types.ObjectId;
   date: string; // YYYY-MM-DD
+  processId?: mongoose.Types.ObjectId;
+  shift: "morning" | "evening" | "night";
+  status: "present" | "absent" | "half_day" | "on_leave";
   isPresent: boolean;
   hoursWorked: number;
   createdAt: Date;
@@ -49,6 +52,17 @@ const AttendanceSchema = new Schema<IAttendanceDocument>(
     tenantId: { type: String, required: true, index: true },
     workerId: { type: Schema.Types.ObjectId, ref: "Worker", required: true, index: true },
     date: { type: String, required: true },
+    processId: { type: Schema.Types.ObjectId, ref: "Process" },
+    shift: {
+      type: String,
+      enum: ["morning", "evening", "night"],
+      default: "morning",
+    },
+    status: {
+      type: String,
+      enum: ["present", "absent", "half_day", "on_leave"],
+      default: "present",
+    },
     isPresent: { type: Boolean, default: true },
     hoursWorked: { type: Number, default: 8, min: 0, max: 24 },
   },
@@ -62,11 +76,21 @@ export const AttendanceModel =
   mongoose.model<IAttendanceDocument>("Attendance", AttendanceSchema);
 
 // 3. DailyOutput Model (Unique compound index on orderId + processId + date)
+export interface IDailyOutputEntry {
+  workerId: mongoose.Types.ObjectId;
+  hoursWorked: number;
+  quantityProduced: number;
+  quantityDefective: number;
+  hourlyRatePaiseSnapshot: number;
+}
+
 export interface IDailyOutputDocument extends Document {
   tenantId: string;
   orderId: mongoose.Types.ObjectId;
   processId: mongoose.Types.ObjectId;
   date: string; // YYYY-MM-DD
+  entries: IDailyOutputEntry[];
+  labourCostPaise: number;
   quantityProduced: number;
   quantityDefective: number;
   operatorId?: string;
@@ -76,12 +100,25 @@ export interface IDailyOutputDocument extends Document {
   updatedAt: Date;
 }
 
+const DailyOutputEntrySchema = new Schema<IDailyOutputEntry>(
+  {
+    workerId: { type: Schema.Types.ObjectId, ref: "Worker", required: true },
+    hoursWorked: { type: Number, required: true, min: 0 },
+    quantityProduced: { type: Number, required: true, min: 0 },
+    quantityDefective: { type: Number, default: 0, min: 0 },
+    hourlyRatePaiseSnapshot: { type: Number, required: true, min: 0 },
+  },
+  { _id: false }
+);
+
 const DailyOutputSchema = new Schema<IDailyOutputDocument>(
   {
     tenantId: { type: String, required: true, index: true },
     orderId: { type: Schema.Types.ObjectId, ref: "ProductionOrder", required: true, index: true },
     processId: { type: Schema.Types.ObjectId, ref: "Process", required: true, index: true },
     date: { type: String, required: true },
+    entries: { type: [DailyOutputEntrySchema], default: [] },
+    labourCostPaise: { type: Number, default: 0, min: 0 },
     quantityProduced: { type: Number, required: true, min: 0 },
     quantityDefective: { type: Number, default: 0, min: 0 },
     operatorId: { type: String },

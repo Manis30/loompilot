@@ -10,6 +10,8 @@ export interface Process {
   standardWastagePct: number;
   avgOutputPerWorkerHour: number;
   unit: string;
+  costPerUnitPaise: number;
+  active: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -21,6 +23,8 @@ export interface NewProcess {
   standardWastagePct?: number;
   avgOutputPerWorkerHour?: number;
   unit?: string;
+  costPerUnitPaise?: number;
+  active?: boolean;
 }
 
 export interface IProcessRepository {
@@ -29,5 +33,6 @@ export interface IProcessRepository {
   findByName(tenantId: string, name: ProcessName, tx?: TxContext): Promise<Process | null>;
   list(tenantId: string, query?: ListQuery): Promise<Page<Process>>;
   listAllOrdered(tenantId: string, tx?: TxContext): Promise<Process[]>;
+  update(tenantId: string, id: string, data: Partial<Process>, tx?: TxContext): Promise<Process | null>;
 }
 

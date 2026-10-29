@@ -9,6 +9,10 @@ export interface ICustomerDocument extends Document {
   phone: string;
   address?: string;
   creditPeriodDays: number;
+  gstin?: string;
+  preferredChannel: "whatsapp" | "email" | "sms";
+  notes?: string;
+  active: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,6 +27,14 @@ const CustomerSchema = new Schema<ICustomerDocument>(
     phone: { type: String, required: true },
     address: { type: String },
     creditPeriodDays: { type: Number, default: 30 },
+    gstin: { type: String },
+    preferredChannel: {
+      type: String,
+      enum: ["whatsapp", "email", "sms"],
+      default: "whatsapp",
+    },
+    notes: { type: String },
+    active: { type: Boolean, default: true, index: true },
   },
   { timestamps: true }
 );

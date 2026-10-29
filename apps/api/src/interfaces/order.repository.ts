@@ -26,6 +26,7 @@ export interface ProductionOrder {
   startDate: string;
   targetDeliveryDate: string;
   actualDeliveryDate?: string;
+  materialCostActualPaise?: number;
   plan: ProcessPlanStep[];
   version?: number;
   createdAt: Date;
@@ -72,6 +73,12 @@ export interface IOrderRepository {
     id: string,
     status: OrderStatus,
     actualDeliveryDate?: string,
+    tx?: TxContext
+  ): Promise<ProductionOrder | null>;
+  addMaterialCost(
+    tenantId: string,
+    id: string,
+    amountPaise: number,
     tx?: TxContext
   ): Promise<ProductionOrder | null>;
   list(tenantId: string, query?: ListQuery): Promise<Page<ProductionOrder>>;

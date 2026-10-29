@@ -17,6 +17,8 @@ export function toMaterialResponse(material: Material, role?: UserRole) {
     onHandQuantity: material.onHandQuantity,
     reservedQuantity: material.reservedQuantity,
     reorderLevel: material.reorderLevel,
+    preferredSupplierId: material.preferredSupplierId,
+    active: material.active ?? true,
     createdAt: material.createdAt,
     updatedAt: material.updatedAt,
   };

@@ -6,8 +6,10 @@ import { validate } from "../middleware/validate.js";
 import { idempotencyMiddleware } from "../middleware/idempotency.js";
 import {
   CreateWorkerSchema,
+  UpdateWorkerSchema,
   RecordAttendanceSchema,
   RecordDailyOutputSchema,
+  UpdateDailyOutputSchema,
 } from "../validators/workforce.validator.js";
 import { UserRole } from "@loompilot/shared";
 
@@ -22,6 +24,12 @@ export function createWorkforceRoutes(controller: WorkforceController): Router {
     requireRole(UserRole.OWNER, UserRole.MANAGER),
     validate(CreateWorkerSchema),
     controller.createWorker
+  );
+  router.patch(
+    "/workers/:id",
+    requireRole(UserRole.OWNER, UserRole.MANAGER),
+    validate(UpdateWorkerSchema),
+    controller.updateWorker
   );
 
   router.get("/attendance", controller.getAttendance);
@@ -38,6 +46,12 @@ export function createWorkforceRoutes(controller: WorkforceController): Router {
     validate(RecordDailyOutputSchema),
     idempotencyMiddleware({ allowBodyAlias: true }),
     controller.recordDailyOutput
+  );
+  router.patch(
+    "/daily-outputs/:id",
+    requireRole(UserRole.OWNER, UserRole.MANAGER),
+    validate(UpdateDailyOutputSchema),
+    controller.updateDailyOutput
   );
 
   router.get("/orders/:orderId/outputs", controller.getOutputsForOrder);

@@ -3,7 +3,7 @@ import { ProcessController } from "../controllers/process.controller.js";
 import { authMiddleware } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { validate } from "../middleware/validate.js";
-import { CreateProcessSchema } from "../validators/process.validator.js";
+import { CreateProcessSchema, UpdateProcessSchema } from "../validators/process.validator.js";
 import { UserRole } from "@loompilot/shared";
 
 export function createProcessRoutes(controller: ProcessController): Router {
@@ -19,6 +19,13 @@ export function createProcessRoutes(controller: ProcessController): Router {
     requireRole(UserRole.OWNER, UserRole.MANAGER),
     validate(CreateProcessSchema),
     controller.create
+  );
+
+  router.patch(
+    "/:id",
+    requireRole(UserRole.OWNER, UserRole.MANAGER),
+    validate(UpdateProcessSchema),
+    controller.update
   );
 
   return router;

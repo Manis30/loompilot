@@ -93,11 +93,36 @@ import { AgentGatewayController } from "./controllers/agent-gateway.controller.j
 import { createAgentGatewayRoutes } from "./routes/agent-gateway.routes.js";
 import { UnavailableAgentsClient } from "./integrations/agents/unavailable.agents-client.js";
 
+// Settings & Holidays
+import { MongoSettingsRepository } from "./repositories/settings.repository.js";
+import { SettingsService } from "./services/settings.service.js";
+import { SettingsController } from "./controllers/settings.controller.js";
+import { createSettingsRoutes } from "./routes/settings.routes.js";
+
+// Products & BOM
+import { MongoProductRepository } from "./repositories/product.repository.js";
+import { ProductService } from "./services/product.service.js";
+import { ProductController } from "./controllers/product.controller.js";
+import { createProductRoutes } from "./routes/product.routes.js";
+
+// Supplier Orders
+import { MongoSupplierOrderRepository } from "./repositories/supplier-order.repository.js";
+import { SupplierOrderService } from "./services/supplier-order.service.js";
+import { SupplierOrderController } from "./controllers/supplier-order.controller.js";
+import { createSupplierOrderRoutes } from "./routes/supplier-order.routes.js";
+import { MongoCounterRepository } from "./repositories/counter.repository.js";
+
+// Bulk Imports
+import { ImportService } from "./services/import.service.js";
+import { ImportController } from "./controllers/import.controller.js";
+import { createImportRoutes } from "./routes/import.routes.js";
+
 // Core Infrastructure
 export const unitOfWork = new MongoUnitOfWork();
 export const auditLogRepository = new MongoAuditLogRepository();
 registerAuditRepository(auditLogRepository);
 export const pdfRenderer = new PdfMakeRenderer();
+export const counterRepository = new MongoCounterRepository();
 
 // Users & Auth Composition
 export const userRepository = new MongoUserRepository();
@@ -115,7 +140,7 @@ export const auditRoutes = createAuditRoutes(auditController);
 
 // Enquiries Composition
 export const enquiryRepository = new MongoEnquiryRepository();
-export const enquiryService = new EnquiryService(enquiryRepository, auditLogRepository);
+export const enquiryService = new EnquiryService(enquiryRepository, counterRepository, auditLogRepository);
 export const enquiryController = new EnquiryController(enquiryService);
 export const enquiryRoutes = createEnquiryRoutes(enquiryController);
 
@@ -149,15 +174,22 @@ export const workforceService = new WorkforceService(workforceRepository, unitOf
 export const workforceController = new WorkforceController(workforceService);
 export const workforceRoutes = createWorkforceRoutes(workforceController);
 
-// Orders Composition
+// Orders & Quotations Composition
+export const quotationRepository = new MongoQuotationRepository();
 export const orderRepository = new MongoOrderRepository();
-export const orderService = new OrderService(orderRepository, workforceRepository, unitOfWork, auditLogRepository);
+export const orderService = new OrderService(
+  orderRepository,
+  workforceRepository,
+  unitOfWork,
+  auditLogRepository,
+  materialRepository,
+  processRepository,
+  quotationRepository
+);
 export const orderController = new OrderController(orderService);
 export const orderRoutes = createOrderRoutes(orderController);
 
-// Quotations Composition
 export const agentsClient = new UnavailableAgentsClient();
-export const quotationRepository = new MongoQuotationRepository();
 export const quotationService = new QuotationService(
   quotationRepository,
   customerRepository,
@@ -204,3 +236,44 @@ export const agentGatewayService = new AgentGatewayService(
 );
 export const agentGatewayController = new AgentGatewayController(agentGatewayService);
 export const agentGatewayRoutes = createAgentGatewayRoutes(agentGatewayController);
+
+
+// Settings & Holidays Composition
+export const settingsRepository = new MongoSettingsRepository();
+export const settingsService = new SettingsService(settingsRepository, auditLogRepository);
+export const settingsController = new SettingsController(settingsService);
+export const settingsRoutes = createSettingsRoutes(settingsController);
+
+// Products & BOM Composition
+export const productRepository = new MongoProductRepository();
+export const productService = new ProductService(
+  productRepository,
+  auditLogRepository
+);
+export const productController = new ProductController(productService);
+export const productRoutes = createProductRoutes(productController);
+
+// Supplier Orders Composition
+export const supplierOrderRepository = new MongoSupplierOrderRepository();
+export const supplierOrderService = new SupplierOrderService(
+  supplierOrderRepository,
+  supplierRepository,
+  materialRepository,
+  counterRepository,
+  unitOfWork,
+  auditLogRepository
+);
+export const supplierOrderController = new SupplierOrderController(supplierOrderService);
+export const supplierOrderRoutes = createSupplierOrderRoutes(supplierOrderController);
+
+// Bulk Imports Composition
+export const importService = new ImportService(
+  customerRepository,
+  supplierRepository,
+  materialRepository,
+  unitOfWork,
+  auditLogRepository
+);
+export const importController = new ImportController(importService);
+export const importRoutes = createImportRoutes(importController);
+

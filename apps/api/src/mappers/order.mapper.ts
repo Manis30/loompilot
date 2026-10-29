@@ -18,6 +18,7 @@ export function toOrderResponse(order: ProductionOrder) {
     startDate: order.startDate,
     targetDeliveryDate: order.targetDeliveryDate,
     actualDeliveryDate: order.actualDeliveryDate,
+    materialCostActualPaise: order.materialCostActualPaise || 0,
     plan: order.plan,
     version: order.version || 1,
     createdAt: order.createdAt,

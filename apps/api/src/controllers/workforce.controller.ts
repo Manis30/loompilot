@@ -31,6 +31,14 @@ export class WorkforceController {
     });
   });
 
+  updateWorker = asyncHandler(async (req: Request, res: Response) => {
+    const worker = await this.service.updateWorker(actorFrom(req), req.params.id!, req.body);
+    res.json({
+      data: toWorkerResponse(worker),
+      requestId: req.requestId,
+    });
+  });
+
   recordAttendance = asyncHandler(async (req: Request, res: Response) => {
     const records = await this.service.recordAttendance(actorFrom(req), req.body);
     res.status(200).json({
@@ -51,6 +59,14 @@ export class WorkforceController {
   recordDailyOutput = asyncHandler(async (req: Request, res: Response) => {
     const output = await this.service.recordDailyOutput(actorFrom(req), req.body);
     res.status(201).json({
+      data: toDailyOutputResponse(output),
+      requestId: req.requestId,
+    });
+  });
+
+  updateDailyOutput = asyncHandler(async (req: Request, res: Response) => {
+    const output = await this.service.updateDailyOutput(actorFrom(req), req.params.id!, req.body);
+    res.json({
       data: toDailyOutputResponse(output),
       requestId: req.requestId,
     });

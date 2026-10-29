@@ -3,7 +3,10 @@ import { SupplierController } from "../controllers/supplier.controller.js";
 import { authMiddleware } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { validate } from "../middleware/validate.js";
-import { CreateSupplierSchema } from "../validators/supplier.validator.js";
+import {
+  CreateSupplierSchema,
+  UpdateSupplierSchema,
+} from "../validators/supplier.validator.js";
 import { UserRole } from "@loompilot/shared";
 
 export function createSupplierRoutes(controller: SupplierController): Router {
@@ -19,6 +22,13 @@ export function createSupplierRoutes(controller: SupplierController): Router {
     requireRole(UserRole.OWNER, UserRole.MANAGER, UserRole.STORE),
     validate(CreateSupplierSchema),
     controller.create
+  );
+
+  router.patch(
+    "/:id",
+    requireRole(UserRole.OWNER, UserRole.MANAGER, UserRole.STORE),
+    validate(UpdateSupplierSchema),
+    controller.update
   );
 
   return router;

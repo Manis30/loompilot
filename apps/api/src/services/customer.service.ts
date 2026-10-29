@@ -41,15 +41,66 @@ export class CustomerService {
     if (this.audit) {
       await this.audit.record({
         tenantId: actor.tenantId,
-        userId: actor.userId,
-        userRole: actor.role,
+        actorId: actor.userId,
+        actorRole: actor.role,
         action: "CUSTOMER_CREATED",
-        entity: "customer",
+        entityType: "customer",
         entityId: customer.id,
+        after: { code: customer.code, name: customer.name },
       });
     }
 
     return customer;
+  }
+
+  async update(
+    actor: Actor,
+    id: string,
+    updates: Partial<Customer>
+  ): Promise<Customer> {
+    const existing = await this.customers.findById(actor.tenantId, id);
+    if (!existing) {
+      throw new NotFoundError(`Customer with ID ${id} not found`);
+    }
+
+    const before = {
+      name: existing.name,
+      contactPerson: existing.contactPerson,
+      email: existing.email,
+      phone: existing.phone,
+      address: existing.address,
+      creditPeriodDays: existing.creditPeriodDays,
+      gstin: existing.gstin,
+      preferredChannel: existing.preferredChannel,
+      notes: existing.notes,
+      active: existing.active,
+    };
+
+    const updated = await this.customers.update(actor.tenantId, id, updates);
+    if (!updated) {
+      throw new NotFoundError(`Customer with ID ${id} not found`);
+    }
+
+    if (this.audit) {
+      await this.audit.record({
+        tenantId: actor.tenantId,
+        actorId: actor.userId,
+        actorRole: actor.role,
+        action: updates.active === false ? "CUSTOMER_DEACTIVATED" : "CUSTOMER_UPDATED",
+        entityType: "customer",
+        entityId: id,
+        before,
+        after: {
+          name: updated.name,
+          contactPerson: updated.contactPerson,
+          email: updated.email,
+          phone: updated.phone,
+          active: updated.active,
+        },
+      });
+    }
+
+    return updated;
   }
 }
 

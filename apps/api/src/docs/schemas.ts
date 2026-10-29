@@ -998,4 +998,332 @@ export const openapiSchemas = {
       timestamp: { type: "string", format: "date-time", example: "2026-10-28T14:30:00.000Z" },
     },
   },
+
+  // ==========================================
+  // Step 3 Schemas
+  // ==========================================
+  TenantSettings: {
+    type: "object",
+    properties: {
+      tenantId: { type: "string" },
+      companyName: { type: "string" },
+      gstin: { type: "string" },
+      pan: { type: "string" },
+      currency: { type: "string", example: "INR" },
+      timezone: { type: "string", example: "Asia/Kolkata" },
+      workingHoursPerDay: { type: "number", example: 8 },
+      weeklyOffDays: { type: "array", items: { type: "integer" } },
+      defaultPaymentTermsDays: { type: "integer", example: 30 },
+      quotationValidityDays: { type: "integer", example: 14 },
+      defaultWastagePct: { type: "number", example: 5 },
+      defaultPriceRiskBufferPct: { type: "number", example: 3 },
+      address: { type: "string" },
+      phone: { type: "string" },
+      email: { type: "string" },
+    },
+  },
+
+  UpdateTenantSettingsRequest: {
+    type: "object",
+    properties: {
+      companyName: { type: "string" },
+      gstin: { type: "string" },
+      pan: { type: "string" },
+      currency: { type: "string" },
+      timezone: { type: "string" },
+      workingHoursPerDay: { type: "number" },
+      weeklyOffDays: { type: "array", items: { type: "integer" } },
+      defaultPaymentTermsDays: { type: "integer" },
+      quotationValidityDays: { type: "integer" },
+      defaultWastagePct: { type: "number" },
+      defaultPriceRiskBufferPct: { type: "number" },
+      address: { type: "string" },
+      phone: { type: "string" },
+      email: { type: "string" },
+    },
+  },
+
+  Holiday: {
+    type: "object",
+    required: ["id", "date", "name"],
+    properties: {
+      id: { type: "string" },
+      date: { type: "string", format: "date" },
+      name: { type: "string" },
+      isOptional: { type: "boolean" },
+    },
+  },
+
+  CreateHolidayRequest: {
+    type: "object",
+    required: ["date", "name"],
+    properties: {
+      date: { type: "string", format: "date" },
+      name: { type: "string" },
+      isOptional: { type: "boolean" },
+    },
+  },
+
+  Product: {
+    type: "object",
+    required: ["id", "code", "name", "category", "unit"],
+    properties: {
+      id: { type: "string" },
+      code: { type: "string" },
+      name: { type: "string" },
+      category: { type: "string" },
+      unit: { type: "string" },
+      hsnCode: { type: "string" },
+      active: { type: "boolean" },
+      activeBomVersion: { type: "integer" },
+    },
+  },
+
+  CreateProductRequest: {
+    type: "object",
+    required: ["code", "name", "category", "unit"],
+    properties: {
+      code: { type: "string" },
+      name: { type: "string" },
+      category: { type: "string" },
+      unit: { type: "string" },
+      hsnCode: { type: "string" },
+    },
+  },
+
+  UpdateProductRequest: {
+    type: "object",
+    properties: {
+      name: { type: "string" },
+      category: { type: "string" },
+      unit: { type: "string" },
+      hsnCode: { type: "string" },
+      active: { type: "boolean" },
+    },
+  },
+
+  Bom: {
+    type: "object",
+    required: ["id", "productId", "version", "materials", "processes"],
+    properties: {
+      id: { type: "string" },
+      productId: { type: "string" },
+      version: { type: "integer" },
+      materials: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            materialId: { type: "string" },
+            quantity: { type: "number" },
+            unit: { type: "string" },
+            wastagePercent: { type: "number" },
+          },
+        },
+      },
+      processes: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            processId: { type: "string" },
+            sequence: { type: "integer" },
+            estimatedHoursPerUnit: { type: "number" },
+          },
+        },
+      },
+      effectiveDate: { type: "string", format: "date" },
+      notes: { type: "string" },
+    },
+  },
+
+  CreateBomRequest: {
+    type: "object",
+    required: ["materials", "processes", "effectiveDate"],
+    properties: {
+      materials: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["materialId", "quantity", "unit"],
+          properties: {
+            materialId: { type: "string" },
+            quantity: { type: "number" },
+            unit: { type: "string" },
+            wastagePercent: { type: "number" },
+          },
+        },
+      },
+      processes: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["processId", "sequence", "estimatedHoursPerUnit"],
+          properties: {
+            processId: { type: "string" },
+            sequence: { type: "integer" },
+            estimatedHoursPerUnit: { type: "number" },
+          },
+        },
+      },
+      effectiveDate: { type: "string", format: "date" },
+      notes: { type: "string" },
+    },
+  },
+
+  SupplierOrder: {
+    type: "object",
+    required: ["id", "orderNumber", "supplierId", "status", "items"],
+    properties: {
+      id: { type: "string" },
+      orderNumber: { type: "string" },
+      supplierId: { type: "string" },
+      status: { type: "string", enum: ["draft", "placed", "partially_received", "received", "cancelled"] },
+      items: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            materialId: { type: "string" },
+            quantity: { type: "number" },
+            unitCostPaise: { type: "integer" },
+            receivedQty: { type: "number" },
+          },
+        },
+      },
+      expectedDeliveryDate: { type: "string", format: "date" },
+      placedAt: { type: "string", format: "date-time" },
+      notes: { type: "string" },
+    },
+  },
+
+  CreateSupplierOrderRequest: {
+    type: "object",
+    required: ["supplierId", "items"],
+    properties: {
+      supplierId: { type: "string" },
+      items: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["materialId", "quantity", "unitCostPaise"],
+          properties: {
+            materialId: { type: "string" },
+            quantity: { type: "number" },
+            unitCostPaise: { type: "integer" },
+          },
+        },
+      },
+      expectedDeliveryDate: { type: "string", format: "date" },
+      notes: { type: "string" },
+    },
+  },
+
+  UpdateSupplierOrderRequest: {
+    type: "object",
+    properties: {
+      supplierId: { type: "string" },
+      items: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            materialId: { type: "string" },
+            quantity: { type: "number" },
+            unitCostPaise: { type: "integer" },
+          },
+        },
+      },
+      status: { type: "string", enum: ["draft", "placed", "cancelled"] },
+      expectedDeliveryDate: { type: "string", format: "date" },
+      notes: { type: "string" },
+    },
+  },
+
+  ReceiveSupplierOrderRequest: {
+    type: "object",
+    required: ["items"],
+    properties: {
+      items: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["materialId", "quantity"],
+          properties: {
+            materialId: { type: "string" },
+            quantity: { type: "number" },
+            unitCostPaise: { type: "integer" },
+          },
+        },
+      },
+      notes: { type: "string" },
+    },
+  },
+
+  ImportReport: {
+    type: "object",
+    required: ["totalRows", "validRows", "invalidRows", "errors", "preview"],
+    properties: {
+      totalRows: { type: "integer" },
+      validRows: { type: "integer" },
+      invalidRows: { type: "integer" },
+      errors: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            row: { type: "integer" },
+            field: { type: "string" },
+            message: { type: "string" },
+          },
+        },
+      },
+      preview: { type: "array", items: { type: "object" } },
+      insertedCount: { type: "integer" },
+      skippedCount: { type: "integer" },
+    },
+  },
+
+  IssueMaterialsRequest: {
+    type: "object",
+    required: ["items"],
+    properties: {
+      items: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["materialId", "quantity"],
+          properties: {
+            materialId: { type: "string" },
+            quantity: { type: "number" },
+          },
+        },
+      },
+      notes: { type: "string" },
+    },
+  },
+
+  OrderCostReport: {
+    type: "object",
+    required: [
+      "orderId",
+      "orderNumber",
+      "actualMaterialCostPaise",
+      "actualLabourCostPaise",
+      "actualProcessCostPaise",
+      "totalActualCostPaise",
+    ],
+    properties: {
+      orderId: { type: "string" },
+      orderNumber: { type: "string" },
+      actualMaterialCostPaise: { type: "integer" },
+      actualLabourCostPaise: { type: "integer" },
+      actualProcessCostPaise: { type: "integer" },
+      totalActualCostPaise: { type: "integer" },
+      quotedMaterialCostPaise: { type: "integer", nullable: true },
+      quotedLabourCostPaise: { type: "integer", nullable: true },
+      quotedTotalCostPaise: { type: "integer", nullable: true },
+      variancePaise: { type: "integer", nullable: true },
+    },
+  },
 };

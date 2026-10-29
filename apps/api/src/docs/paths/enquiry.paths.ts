@@ -99,6 +99,40 @@ export const enquiryPaths = {
         404: { description: "Enquiry not found.", content: { "application/json": { schema: { $ref: "#/components/schemas/StandardError" } } } },
       },
     },
+    patch: {
+      tags: ["Enquiries"],
+      summary: "Update enquiry",
+      description: "Updates an enquiry record while it is in 'new' status. Owner, Manager, Sales.",
+      operationId: "updateEnquiry",
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string" } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: { type: "object" },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Enquiry updated.",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: { $ref: "#/components/schemas/Enquiry" },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   },
 };
 

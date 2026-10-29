@@ -72,3 +72,15 @@ export class RateLimitedError extends AppError {
     super(message, 429, ErrorCode.RATE_LIMITED, details);
   }
 }
+
+export class StockInsufficientError extends BadRequestError {
+  constructor(message: string = "Insufficient material stock for operation", details?: any) {
+    super(message, details, ErrorCode.BELOW_THRESHOLD);
+  }
+}
+
+export class OutputAlreadyRecordedError extends AppError {
+  constructor(message: string = "Daily output has already been recorded for this order, process, and date. Use PATCH with a reason to update.", details?: any) {
+    super(message, 409, ErrorCode.OUTPUT_ALREADY_RECORDED, details);
+  }
+}

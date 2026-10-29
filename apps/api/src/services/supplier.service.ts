@@ -38,16 +38,65 @@ export class SupplierService {
     if (this.audit) {
       await this.audit.record({
         tenantId: actor.tenantId,
-        userId: actor.userId,
-        userRole: actor.role,
+        actorId: actor.userId,
+        actorRole: actor.role,
         action: "SUPPLIER_CREATED",
-        entity: "supplier",
+        entityType: "supplier",
         entityId: supplier.id,
-        changes: { name: supplier.name },
+        after: { name: supplier.name },
       });
     }
 
     return supplier;
+  }
+
+  async update(
+    actor: Actor,
+    id: string,
+    updates: Partial<Supplier>
+  ): Promise<Supplier> {
+    const existing = await this.repo.findById(actor.tenantId, id);
+    if (!existing) {
+      throw new NotFoundError(`Supplier with ID ${id} not found`);
+    }
+
+    const before = {
+      name: existing.name,
+      contactPerson: existing.contactPerson,
+      email: existing.email,
+      phone: existing.phone,
+      leadTimeDays: existing.leadTimeDays,
+      rating: existing.rating,
+      active: existing.active,
+    };
+
+    const updated = await this.repo.update(actor.tenantId, id, updates);
+    if (!updated) {
+      throw new NotFoundError(`Supplier with ID ${id} not found`);
+    }
+
+    if (this.audit) {
+      await this.audit.record({
+        tenantId: actor.tenantId,
+        actorId: actor.userId,
+        actorRole: actor.role,
+        action: updates.active === false ? "SUPPLIER_DEACTIVATED" : "SUPPLIER_UPDATED",
+        entityType: "supplier",
+        entityId: id,
+        before,
+        after: {
+          name: updated.name,
+          contactPerson: updated.contactPerson,
+          email: updated.email,
+          phone: updated.phone,
+          leadTimeDays: updated.leadTimeDays,
+          rating: updated.rating,
+          active: updated.active,
+        },
+      });
+    }
+
+    return updated;
   }
 }
 

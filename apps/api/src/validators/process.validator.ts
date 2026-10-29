@@ -9,5 +9,15 @@ export const CreateProcessSchema = z.object({
   unit: z.string().optional().default("meters"),
 });
 
+export const UpdateProcessSchema = z.object({
+  sequence: z.number().int().positive().optional(),
+  standardWastagePct: z.number().nonnegative().optional(),
+  avgOutputPerWorkerHour: z.number().positive().optional(),
+  unit: z.string().optional(),
+  costPerUnitPaise: z.number().int().nonnegative().optional(),
+  active: z.boolean().optional(),
+});
+
 export type CreateProcessInput = z.infer<typeof CreateProcessSchema>;
+export type UpdateProcessInput = z.infer<typeof UpdateProcessSchema>;
 

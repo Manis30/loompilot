@@ -99,6 +99,40 @@ export const supplierPaths = {
         404: { description: "Supplier not found.", content: { "application/json": { schema: { $ref: "#/components/schemas/StandardError" } } } },
       },
     },
+    patch: {
+      tags: ["Suppliers"],
+      summary: "Update supplier",
+      description: "Updates an existing supplier record. Permitted roles: owner, manager.",
+      operationId: "updateSupplier",
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Supplier ObjectId" },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: { type: "object" },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Supplier updated.",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: { $ref: "#/components/schemas/Supplier" },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   },
 };
 

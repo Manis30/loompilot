@@ -17,6 +17,7 @@ export class MongoEnquiryRepository implements IEnquiryRepository {
       customerId: doc.customerId,
       customerName: doc.customerName,
       rawText: doc.rawText,
+      specs: doc.specs,
       parsedRequirements: doc.parsedRequirements,
       status: doc.status,
       createdAt: doc.createdAt,
@@ -69,6 +70,20 @@ export class MongoEnquiryRepository implements IEnquiryRepository {
 
   async count(tenantId: string): Promise<number> {
     return EnquiryModel.countDocuments({ tenantId });
+  }
+
+  async update(
+    tenantId: string,
+    id: string,
+    data: Partial<Enquiry>,
+    tx?: TxContext
+  ): Promise<Enquiry | null> {
+    const doc = await EnquiryModel.findOneAndUpdate(
+      { _id: id, tenantId },
+      { $set: data },
+      { new: true, session: tx?.session || null }
+    ).lean();
+    return doc ? this.toEntity(doc) : null;
   }
 
   async updateStatus(

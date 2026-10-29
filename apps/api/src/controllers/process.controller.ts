@@ -33,5 +33,17 @@ export class ProcessController {
       requestId: req.requestId,
     });
   });
+
+  update = asyncHandler(async (req: Request, res: Response) => {
+    const processItem = await this.service.update(
+      actorFrom(req),
+      req.params.id as string,
+      req.body
+    );
+    res.json({
+      data: toProcessResponse(processItem),
+      requestId: req.requestId,
+    });
+  });
 }
 

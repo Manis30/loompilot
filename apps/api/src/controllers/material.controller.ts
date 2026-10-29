@@ -41,6 +41,90 @@ export class MaterialController {
     });
   });
 
+  update = asyncHandler(async (req: Request, res: Response) => {
+    const actor = actorFrom(req);
+    const updated = await this.service.update(
+      actor,
+      req.params.id as string,
+      req.body
+    );
+    res.json({
+      data: toMaterialResponse(updated, actor.role),
+      requestId: req.requestId,
+    });
+  });
+
+  updateRate = asyncHandler(async (req: Request, res: Response) => {
+    const actor = actorFrom(req);
+    const material = await this.service.updateRate(
+      actor,
+      req.params.id as string,
+      req.body
+    );
+    res.json({
+      data: toMaterialResponse(material, actor.role),
+      message: "Material unit cost rate updated successfully",
+      requestId: req.requestId,
+    });
+  });
+
+  backfillPriceHistory = asyncHandler(async (req: Request, res: Response) => {
+    const actor = actorFrom(req);
+    const result = await this.service.backfillPriceHistory(
+      actor,
+      req.params.id as string,
+      req.body
+    );
+    res.json({
+      data: result,
+      message: "Historical price points imported successfully",
+      requestId: req.requestId,
+    });
+  });
+
+  goodsReceipt = asyncHandler(async (req: Request, res: Response) => {
+    const actor = actorFrom(req);
+    const result = await this.service.goodsReceipt(
+      actor,
+      req.params.id as string,
+      req.body
+    );
+    res.status(201).json({
+      data: {
+        material: toMaterialResponse(result.material),
+        movement: toStockMovementResponse(result.movement),
+      },
+      message: "Goods receipt recorded and stock updated atomically",
+      requestId: req.requestId,
+    });
+  });
+
+  stockAdjustment = asyncHandler(async (req: Request, res: Response) => {
+    const actor = actorFrom(req);
+    const result = await this.service.stockAdjustment(
+      actor,
+      req.params.id as string,
+      req.body
+    );
+    res.json({
+      data: {
+        material: toMaterialResponse(result.material),
+        movement: toStockMovementResponse(result.movement),
+      },
+      message: "Stock adjusted successfully",
+      requestId: req.requestId,
+    });
+  });
+
+  getStockSummary = asyncHandler(async (req: Request, res: Response) => {
+    const actor = actorFrom(req);
+    const summary = await this.service.getStockSummary(actor);
+    res.json({
+      data: summary,
+      requestId: req.requestId,
+    });
+  });
+
   recordMovement = asyncHandler(async (req: Request, res: Response) => {
     const actor = actorFrom(req);
     const movement = await this.service.recordMovement(actor, req.params.id!, req.body);
@@ -68,4 +152,3 @@ export class MaterialController {
     });
   });
 }
-

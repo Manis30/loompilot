@@ -1,11 +1,21 @@
 import mongoose, { Schema, Document } from "mongoose";
 
+export interface IEnquirySpecs {
+  width?: string;
+  gsm?: number;
+  weaveType?: string;
+  colorOrPantone?: string;
+  finishRequirements?: string;
+  packaging?: string;
+}
+
 export interface IEnquiryDocument extends Document {
   tenantId: string;
   enquiryNumber: string;
   customerId: string;
   customerName: string;
   rawText: string;
+  specs?: IEnquirySpecs;
   parsedRequirements?: {
     productName: string;
     quantity: number;
@@ -25,6 +35,14 @@ const EnquirySchema = new Schema<IEnquiryDocument>(
     customerId: { type: String, required: true, index: true },
     customerName: { type: String, required: true },
     rawText: { type: String, required: true },
+    specs: {
+      width: { type: String },
+      gsm: { type: Number },
+      weaveType: { type: String },
+      colorOrPantone: { type: String },
+      finishRequirements: { type: String },
+      packaging: { type: String },
+    },
     parsedRequirements: {
       productName: { type: String },
       quantity: { type: Number },

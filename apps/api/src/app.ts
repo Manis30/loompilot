@@ -28,6 +28,10 @@ import {
   paymentRoutes,
   reportRoutes,
   agentGatewayRoutes,
+  settingsRoutes,
+  productRoutes,
+  supplierOrderRoutes,
+  importRoutes,
 } from "./container.js";
 
 export const app = express();
@@ -139,6 +143,10 @@ app.use("/api/v1/alerts", alertRoutes);
 app.use("/api/v1/deliveries", deliveryRoutes);
 app.use("/api/v1/payments", paymentRoutes);
 app.use("/api/v1/reports", reportRoutes);
+app.use("/api/v1/settings", settingsRoutes);
+app.use("/api/v1/products", productRoutes);
+app.use("/api/v1/supplier-orders", supplierOrderRoutes);
+app.use("/api/v1/imports", importRoutes);
 
 // Central error handler
 app.use(errorHandler);

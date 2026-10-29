@@ -33,5 +33,13 @@ export class EnquiryController {
       requestId: req.requestId,
     });
   });
+
+  update = asyncHandler(async (req: Request, res: Response) => {
+    const enquiry = await this.service.update(actorFrom(req), req.params.id!, req.body);
+    res.json({
+      data: toEnquiryResponse(enquiry),
+      requestId: req.requestId,
+    });
+  });
 }
 

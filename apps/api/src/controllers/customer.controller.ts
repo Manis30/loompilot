@@ -33,5 +33,17 @@ export class CustomerController {
       requestId: req.requestId,
     });
   });
+
+  update = asyncHandler(async (req: Request, res: Response) => {
+    const customer = await this.service.update(
+      actorFrom(req),
+      req.params.id as string,
+      req.body
+    );
+    res.json({
+      data: toCustomerResponse(customer),
+      requestId: req.requestId,
+    });
+  });
 }
 

@@ -33,5 +33,17 @@ export class SupplierController {
       requestId: req.requestId,
     });
   });
+
+  update = asyncHandler(async (req: Request, res: Response) => {
+    const supplier = await this.service.update(
+      actorFrom(req),
+      req.params.id as string,
+      req.body
+    );
+    res.json({
+      data: toSupplierResponse(supplier),
+      requestId: req.requestId,
+    });
+  });
 }
 

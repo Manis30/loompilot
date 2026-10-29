@@ -24,12 +24,23 @@ export interface NewWorker {
   active?: boolean;
 }
 
+export interface UpdateWorkerInput {
+  name?: string;
+  skillLevel?: "unskilled" | "semi_skilled" | "skilled";
+  hourlyRatePaise?: number;
+  assignedProcessId?: string;
+  active?: boolean;
+}
+
 export interface AttendanceRecord {
   id: string;
   tenantId: string;
   workerId: string;
   workerName?: string;
   date: string;
+  processId?: string;
+  shift: "morning" | "evening" | "night";
+  status: "present" | "absent" | "half_day" | "on_leave";
   isPresent: boolean;
   hoursWorked: number;
   createdAt: Date;
@@ -38,8 +49,19 @@ export interface AttendanceRecord {
 export interface AttendanceItem {
   workerId: string;
   date: string;
-  isPresent: boolean;
+  processId?: string;
+  shift?: "morning" | "evening" | "night";
+  status?: "present" | "absent" | "half_day" | "on_leave";
+  isPresent?: boolean;
   hoursWorked?: number;
+}
+
+export interface DailyOutputEntry {
+  workerId: string;
+  hoursWorked: number;
+  quantityProduced: number;
+  quantityDefective: number;
+  hourlyRatePaiseSnapshot: number;
 }
 
 export interface DailyOutput {
@@ -48,6 +70,8 @@ export interface DailyOutput {
   orderId: string;
   processId: string;
   date: string;
+  entries: DailyOutputEntry[];
+  labourCostPaise: number;
   quantityProduced: number;
   quantityDefective: number;
   operatorId?: string;
@@ -62,6 +86,8 @@ export interface NewDailyOutput {
   orderId: string;
   processId: string;
   date: string;
+  entries?: DailyOutputEntry[];
+  labourCostPaise?: number;
   quantityProduced: number;
   quantityDefective?: number;
   operatorId?: string;
@@ -69,15 +95,28 @@ export interface NewDailyOutput {
   idempotencyKey: string;
 }
 
+export interface UpdateDailyOutputInput {
+  entries?: DailyOutputEntry[];
+  labourCostPaise?: number;
+  quantityProduced?: number;
+  quantityDefective?: number;
+  notes?: string;
+  reason: string;
+}
+
 export interface IWorkforceRepository {
   createWorker(data: NewWorker, tx?: TxContext): Promise<Worker>;
   findWorkerById(tenantId: string, id: string, tx?: TxContext): Promise<Worker | null>;
   findWorkerByCode(tenantId: string, workerCode: string, tx?: TxContext): Promise<Worker | null>;
+  updateWorker(tenantId: string, id: string, data: UpdateWorkerInput, tx?: TxContext): Promise<Worker | null>;
   listWorkers(tenantId: string, query?: ListQuery): Promise<Page<Worker>>;
   recordAttendance(tenantId: string, records: AttendanceItem[], tx?: TxContext): Promise<AttendanceRecord[]>;
   getAttendance(tenantId: string, date: string): Promise<AttendanceRecord[]>;
   findDailyOutputByIdempotencyKey(tenantId: string, idempotencyKey: string, tx?: TxContext): Promise<DailyOutput | null>;
+  findDailyOutputByOrderProcessDate(tenantId: string, orderId: string, processId: string, date: string, tx?: TxContext): Promise<DailyOutput | null>;
+  findDailyOutputById(tenantId: string, id: string, tx?: TxContext): Promise<DailyOutput | null>;
   upsertDailyOutput(data: NewDailyOutput, tx?: TxContext): Promise<DailyOutput>;
+  updateDailyOutput(tenantId: string, id: string, data: Partial<NewDailyOutput>, tx?: TxContext): Promise<DailyOutput | null>;
   getOutputsForOrder(tenantId: string, orderId: string, tx?: TxContext): Promise<DailyOutput[]>;
 }
 

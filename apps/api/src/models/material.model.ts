@@ -13,6 +13,8 @@ export interface IMaterial extends Document {
   onHandQuantity: number;
   reservedQuantity: number;
   reorderLevel: number;
+  preferredSupplierId?: mongoose.Types.ObjectId;
+  active: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,6 +31,8 @@ const MaterialSchema = new Schema<IMaterial>(
     onHandQuantity: { type: Number, default: 0, min: 0 },
     reservedQuantity: { type: Number, default: 0, min: 0 },
     reorderLevel: { type: Number, default: 0, min: 0 },
+    preferredSupplierId: { type: Schema.Types.ObjectId, ref: "Supplier" },
+    active: { type: Boolean, default: true, index: true },
   },
   { timestamps: true }
 );
@@ -111,6 +115,7 @@ export interface IPriceHistory extends Document {
   date: string; // YYYY-MM-DD
   ratePaise: number;
   source: string;
+  referenceId?: string;
   createdAt: Date;
 }
 
@@ -121,6 +126,7 @@ const PriceHistorySchema = new Schema<IPriceHistory>(
     date: { type: String, required: true },
     ratePaise: { type: Number, required: true, min: 0 },
     source: { type: String, default: "manual" },
+    referenceId: { type: String },
   },
   { timestamps: { createdAt: true, updatedAt: false } }
 );

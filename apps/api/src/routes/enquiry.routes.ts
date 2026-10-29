@@ -3,7 +3,7 @@ import { EnquiryController } from "../controllers/enquiry.controller.js";
 import { authMiddleware } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { validate } from "../middleware/validate.js";
-import { CreateEnquirySchema } from "../validators/enquiry.validator.js";
+import { CreateEnquirySchema, UpdateEnquirySchema } from "../validators/enquiry.validator.js";
 import { UserRole } from "@loompilot/shared";
 
 export function createEnquiryRoutes(controller: EnquiryController): Router {
@@ -18,6 +18,12 @@ export function createEnquiryRoutes(controller: EnquiryController): Router {
     requireRole(UserRole.OWNER, UserRole.MANAGER, UserRole.SALES),
     validate(CreateEnquirySchema),
     controller.create
+  );
+  router.patch(
+    "/:id",
+    requireRole(UserRole.OWNER, UserRole.MANAGER, UserRole.SALES),
+    validate(UpdateEnquirySchema),
+    controller.update
   );
 
   return router;

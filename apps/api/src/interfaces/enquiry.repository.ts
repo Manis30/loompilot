@@ -1,6 +1,15 @@
 import { TxContext } from "./unit-of-work.js";
 import { ListQuery, Page } from "../utils/pagination.js";
 
+export interface EnquirySpecs {
+  width?: string;
+  gsm?: number;
+  weaveType?: string;
+  colorOrPantone?: string;
+  finishRequirements?: string;
+  packaging?: string;
+}
+
 export interface EnquiryItemRequirement {
   productName: string;
   quantity: number;
@@ -16,6 +25,7 @@ export interface Enquiry {
   customerId: string;
   customerName: string;
   rawText: string;
+  specs?: EnquirySpecs;
   parsedRequirements?: EnquiryItemRequirement;
   status: "new" | "processing" | "quoted" | "closed";
   createdAt: Date;
@@ -28,6 +38,7 @@ export interface NewEnquiry {
   customerId: string;
   customerName: string;
   rawText: string;
+  specs?: EnquirySpecs;
   parsedRequirements?: EnquiryItemRequirement;
   status?: "new" | "processing" | "quoted" | "closed";
 }
@@ -38,6 +49,7 @@ export interface IEnquiryRepository {
   findByNumber(tenantId: string, enquiryNumber: string): Promise<Enquiry | null>;
   list(tenantId: string, query?: ListQuery): Promise<Page<Enquiry>>;
   count(tenantId: string): Promise<number>;
+  update(tenantId: string, id: string, data: Partial<Enquiry>, tx?: TxContext): Promise<Enquiry | null>;
   updateStatus(tenantId: string, id: string, status: Enquiry["status"], tx?: TxContext): Promise<Enquiry | null>;
 }
 

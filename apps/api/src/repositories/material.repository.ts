@@ -1,3 +1,4 @@
+import { StockInsufficientError, NotFoundError } from "../errors/index.js";
 import {
   IMaterialRepository,
   Material,
@@ -32,6 +33,8 @@ export class MongoMaterialRepository implements IMaterialRepository {
       onHandQuantity: doc.onHandQuantity,
       reservedQuantity: doc.reservedQuantity,
       reorderLevel: doc.reorderLevel,
+      preferredSupplierId: doc.preferredSupplierId ? doc.preferredSupplierId.toString() : undefined,
+      active: doc.active ?? true,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
     };
@@ -190,6 +193,120 @@ export class MongoMaterialRepository implements IMaterialRepository {
       .limit(limitDays)
       .lean();
     return docs.map((d) => this.toPriceHistory(d));
+  }
+
+  async mutateStock(
+    tenantId: string,
+    id: string,
+    onHandChange: number,
+    reservedChange: number,
+    tx?: TxContext
+  ): Promise<Material> {
+    const filter: any = { _id: id, tenantId };
+
+    if (onHandChange < 0) {
+      filter.onHandQuantity = { $gte: -onHandChange };
+    }
+    if (reservedChange < 0) {
+      filter.reservedQuantity = { $gte: -reservedChange };
+    }
+
+    const doc = await MaterialModel.findOneAndUpdate(
+      filter,
+      {
+        $inc: {
+          onHandQuantity: onHandChange,
+          reservedQuantity: reservedChange,
+        },
+      },
+      { new: true, session: tx?.session || null }
+    ).lean();
+
+    if (!doc) {
+      const exists = await MaterialModel.findOne({ _id: id, tenantId }).session(
+        tx?.session || null
+      );
+      if (exists) {
+        throw new StockInsufficientError(
+          `Insufficient stock or reserved stock for material '${exists.name}' (${exists.code})`
+        );
+      }
+      throw new NotFoundError(`Material with ID ${id} not found`);
+    }
+
+    return this.toMaterial(doc);
+  }
+
+  async getStockSummary(tenantId: string): Promise<
+    Array<{
+      id: string;
+      code: string;
+      name: string;
+      unit: string;
+      onHandQuantity: number;
+      reservedQuantity: number;
+      availableQuantity: number;
+      avgCostPaise: number;
+      totalValuePaise: number;
+    }>
+  > {
+    const docs = await MaterialModel.find({ tenantId, active: true })
+      .sort({ code: 1 })
+      .lean();
+
+    return docs.map((m: any) => ({
+      id: m._id.toString(),
+      code: m.code,
+      name: m.name,
+      unit: m.unit,
+      onHandQuantity: m.onHandQuantity,
+      reservedQuantity: m.reservedQuantity,
+      availableQuantity: Math.max(0, m.onHandQuantity - m.reservedQuantity),
+      avgCostPaise: m.avgCostPaise,
+      totalValuePaise: Math.round(m.onHandQuantity * m.avgCostPaise),
+    }));
+  }
+
+  async appendPriceHistory(
+    tenantId: string,
+    materialId: string,
+    effectiveDate: string,
+    ratePaise: number,
+    source: string,
+    referenceId?: string,
+    tx?: TxContext
+  ): Promise<PriceHistory> {
+    const docs = await PriceHistoryModel.create(
+      [
+        {
+          tenantId,
+          materialId,
+          date: effectiveDate,
+          ratePaise,
+          source,
+          referenceId,
+        },
+      ],
+      { session: tx?.session || null }
+    );
+    return this.toPriceHistory(docs[0]!);
+  }
+
+  async backfillPriceHistory(
+    tenantId: string,
+    materialId: string,
+    entries: Array<{ date: string; ratePaise: number; source?: string }>
+  ): Promise<number> {
+    if (!entries.length) return 0;
+    const docs = entries.map((e) => ({
+      tenantId,
+      materialId,
+      date: e.date,
+      ratePaise: e.ratePaise,
+      source: e.source || "backfill",
+    }));
+    await PriceHistoryModel.insertMany(docs);
+    return docs.length;
   }
 }
 

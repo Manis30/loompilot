@@ -33,5 +33,25 @@ export class OrderController {
       requestId: req.requestId,
     });
   });
+
+  issueMaterials = asyncHandler(async (req: Request, res: Response) => {
+    const result = await this.service.issueMaterials(
+      actorFrom(req),
+      req.params.id!,
+      req.body
+    );
+    res.status(200).json({
+      data: result,
+      requestId: req.requestId,
+    });
+  });
+
+  getOrderCosts = asyncHandler(async (req: Request, res: Response) => {
+    const costs = await this.service.getOrderCosts(actorFrom(req), req.params.id!);
+    res.json({
+      data: costs,
+      requestId: req.requestId,
+    });
+  });
 }
 

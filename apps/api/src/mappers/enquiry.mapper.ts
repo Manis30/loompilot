@@ -7,6 +7,7 @@ export function toEnquiryResponse(enquiry: Enquiry) {
     customerId: enquiry.customerId,
     customerName: enquiry.customerName,
     rawText: enquiry.rawText,
+    specs: enquiry.specs,
     parsedRequirements: enquiry.parsedRequirements,
     status: enquiry.status,
     createdAt: enquiry.createdAt,

@@ -102,6 +102,32 @@ export function isPast(dateStr: string, tz: string = DEFAULT_TIMEZONE): boolean 
 }
 
 /**
+ * In-memory holiday cache per tenant with 5-minute TTL to optimize hot loops.
+ */
+const holidayCache = new Map<string, { holidays: string[]; expiresAt: number }>();
+
+export function invalidateHolidayCache(tenantId: string): void {
+  holidayCache.delete(tenantId);
+}
+
+export async function getCachedTenantHolidays(
+  tenantId: string,
+  fetchFn?: (tenantId: string) => Promise<string[]>
+): Promise<string[]> {
+  const cached = holidayCache.get(tenantId);
+  const now = Date.now();
+  if (cached && cached.expiresAt > now) {
+    return cached.holidays;
+  }
+  if (!fetchFn) {
+    return cached?.holidays || [];
+  }
+  const holidays = await fetchFn(tenantId);
+  holidayCache.set(tenantId, { holidays, expiresAt: now + 5 * 60 * 1000 });
+  return holidays;
+}
+
+/**
  * Returns today's ISO date string in tenant timezone (alias for backward compatibility).
  */
 export function todayISO(tz: string = DEFAULT_TIMEZONE): string {

@@ -15,7 +15,7 @@ import { FakeUnitOfWork } from "../fakes/fake-unit-of-work.js";
 import { ListQuery, Page, toPage } from "../../src/utils/pagination.js";
 import { Actor } from "../../src/utils/actor.js";
 import { MaterialType, StockMovementType, UserRole } from "@loompilot/shared";
-import { BadRequestError, NotFoundError } from "../../src/errors/index.js";
+import { BadRequestError, NotFoundError, StockInsufficientError } from "../../src/errors/index.js";
 
 class FakeMaterialRepository implements IMaterialRepository {
   private materials: Material[] = [];
@@ -140,6 +140,80 @@ class FakeMaterialRepository implements IMaterialRepository {
     return this.prices
       .filter((p) => p.tenantId === tenantId && p.materialId === materialId)
       .sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  async mutateStock(
+    tenantId: string,
+    id: string,
+    onHandChange: number,
+    reservedChange: number
+  ): Promise<Material> {
+    const item = await this.findById(tenantId, id);
+    if (!item) {
+      throw new NotFoundError(`Material with ID ${id} not found`);
+    }
+    if (onHandChange < 0 && item.onHandQuantity < -onHandChange) {
+      throw new StockInsufficientError(`Insufficient stock for material ${item.name}`);
+    }
+    if (reservedChange < 0 && item.reservedQuantity < -reservedChange) {
+      throw new StockInsufficientError(`Insufficient reserved stock for material ${item.name}`);
+    }
+    item.onHandQuantity += onHandChange;
+    item.reservedQuantity += reservedChange;
+    item.updatedAt = new Date();
+    return item;
+  }
+
+  async getStockSummary(tenantId: string): Promise<any[]> {
+    return this.materials
+      .filter((m) => m.tenantId === tenantId)
+      .map((m) => ({
+        id: m.id,
+        code: m.code,
+        name: m.name,
+        unit: m.unit,
+        onHandQuantity: m.onHandQuantity,
+        reservedQuantity: m.reservedQuantity,
+        availableQuantity: Math.max(0, m.onHandQuantity - m.reservedQuantity),
+        avgCostPaise: m.avgCostPaise,
+        totalValuePaise: Math.round(m.onHandQuantity * m.avgCostPaise),
+      }));
+  }
+
+  async appendPriceHistory(
+    tenantId: string,
+    materialId: string,
+    effectiveDate: string,
+    ratePaise: number,
+    source: string,
+    referenceId?: string
+  ): Promise<PriceHistory> {
+    const price: PriceHistory = {
+      id: `prc_${Date.now()}_${Math.random()}`,
+      tenantId,
+      materialId,
+      date: effectiveDate,
+      ratePaise,
+      source,
+      referenceId,
+      createdAt: new Date(),
+    };
+    this.prices.push(price);
+    return price;
+  }
+
+  async backfillPriceHistory(tenantId: string, materialId: string, points: any[]): Promise<number> {
+    for (const p of points) {
+      await this.appendPriceHistory(
+        tenantId,
+        materialId,
+        p.date,
+        p.ratePaise,
+        p.source || "historical_import",
+        p.referenceId
+      );
+    }
+    return points.length;
   }
 }
 

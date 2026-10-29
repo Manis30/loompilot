@@ -98,5 +98,61 @@ export const orderPaths = {
       },
     },
   },
+
+  "/api/v1/orders/{id}/costs": {
+    get: {
+      tags: ["Orders"],
+      summary: "Get actual vs quoted costs for order",
+      operationId: "getOrderCosts",
+      security: [{ bearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      responses: {
+        200: {
+          description: "Order costs breakdown and variance",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: { $ref: "#/components/schemas/OrderCostReport" },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+
+  "/api/v1/orders/{id}/issue-materials": {
+    post: {
+      tags: ["Orders"],
+      summary: "Issue materials to production floor for order",
+      operationId: "issueMaterialsToOrder",
+      security: [{ bearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { $ref: "#/components/schemas/IssueMaterialsRequest" } } },
+      },
+      responses: {
+        200: {
+          description: "Materials issued",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: { type: "object" },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
 };
 

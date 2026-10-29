@@ -19,6 +19,10 @@ export class MongoCustomerRepository implements ICustomerRepository {
       phone: doc.phone,
       address: doc.address,
       creditPeriodDays: doc.creditPeriodDays,
+      gstin: doc.gstin,
+      preferredChannel: doc.preferredChannel || "whatsapp",
+      notes: doc.notes,
+      active: doc.active ?? true,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
     };
@@ -34,8 +38,29 @@ export class MongoCustomerRepository implements ICustomerRepository {
     return doc ? this.toEntity(doc) : null;
   }
 
-  async findByCode(tenantId: string, code: string): Promise<Customer | null> {
-    const doc = await CustomerModel.findOne({ tenantId, code }).lean();
+  async findByCode(tenantId: string, code: string, tx?: TxContext): Promise<Customer | null> {
+    const doc = await CustomerModel.findOne({ tenantId, code })
+      .session(tx?.session || null)
+      .lean();
+    return doc ? this.toEntity(doc) : null;
+  }
+
+  async findByEmail(tenantId: string, email: string): Promise<Customer | null> {
+    const doc = await CustomerModel.findOne({ tenantId, email: email.toLowerCase().trim() }).lean();
+    return doc ? this.toEntity(doc) : null;
+  }
+
+  async update(
+    tenantId: string,
+    id: string,
+    data: Partial<Customer>,
+    tx?: TxContext
+  ): Promise<Customer | null> {
+    const doc = await CustomerModel.findOneAndUpdate(
+      { _id: id, tenantId },
+      { $set: data },
+      { new: true, session: tx?.session || null }
+    ).lean();
     return doc ? this.toEntity(doc) : null;
   }
 

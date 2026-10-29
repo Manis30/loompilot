@@ -10,6 +10,10 @@ export function toCustomerResponse(customer: Customer) {
     phone: customer.phone,
     address: customer.address,
     creditPeriodDays: customer.creditPeriodDays,
+    gstin: customer.gstin,
+    preferredChannel: customer.preferredChannel,
+    notes: customer.notes,
+    active: customer.active,
     createdAt: customer.createdAt,
     updatedAt: customer.updatedAt,
   };

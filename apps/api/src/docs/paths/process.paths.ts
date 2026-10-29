@@ -93,6 +93,40 @@ export const processPaths = {
         404: { description: "Process not found.", content: { "application/json": { schema: { $ref: "#/components/schemas/StandardError" } } } },
       },
     },
+    patch: {
+      tags: ["Processes"],
+      summary: "Update production process",
+      description: "Updates an existing production process. Owner only.",
+      operationId: "updateProcess",
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Process ObjectId" },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: { type: "object" },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Process updated.",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: { $ref: "#/components/schemas/Process" },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   },
 };
 

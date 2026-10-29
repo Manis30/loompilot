@@ -25,6 +25,7 @@ export class MongoOrderRepository implements IOrderRepository {
       startDate: doc.startDate,
       targetDeliveryDate: doc.targetDeliveryDate,
       actualDeliveryDate: doc.actualDeliveryDate,
+      materialCostActualPaise: doc.materialCostActualPaise || 0,
       plan: (doc.plan || []).map((step: any): ProcessPlanStep => ({
         processId: step.processId.toString(),
         processName: step.processName,
@@ -90,6 +91,20 @@ export class MongoOrderRepository implements IOrderRepository {
     const doc = await ProductionOrderModel.findOneAndUpdate(
       { _id: id, tenantId },
       { $set: update },
+      { new: true, session: tx?.session || null }
+    ).lean();
+    return doc ? this.toEntity(doc) : null;
+  }
+
+  async addMaterialCost(
+    tenantId: string,
+    id: string,
+    amountPaise: number,
+    tx?: TxContext
+  ): Promise<ProductionOrder | null> {
+    const doc = await ProductionOrderModel.findOneAndUpdate(
+      { _id: id, tenantId },
+      { $inc: { materialCostActualPaise: amountPaise } },
       { new: true, session: tx?.session || null }
     ).lean();
     return doc ? this.toEntity(doc) : null;

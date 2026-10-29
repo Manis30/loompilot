@@ -45,16 +45,57 @@ export class ProcessService {
     if (this.audit) {
       await this.audit.record({
         tenantId: actor.tenantId,
-        userId: actor.userId,
-        userRole: actor.role,
+        actorId: actor.userId,
+        actorRole: actor.role,
         action: "PROCESS_CREATED",
-        entity: "process",
+        entityType: "process",
         entityId: processItem.id,
-        changes: { name: processItem.name, sequence: processItem.sequence },
+        after: { name: processItem.name, sequence: processItem.sequence },
       });
     }
 
     return processItem;
+  }
+
+  async update(
+    actor: Actor,
+    id: string,
+    updates: Partial<Process>
+  ): Promise<Process> {
+    const existing = await this.repo.findById(actor.tenantId, id);
+    if (!existing) {
+      throw new NotFoundError(`Process with ID ${id} not found`);
+    }
+
+    const updated = await this.repo.update(actor.tenantId, id, updates);
+    if (!updated) {
+      throw new NotFoundError(`Process with ID ${id} not found`);
+    }
+
+    if (this.audit) {
+      await this.audit.record({
+        tenantId: actor.tenantId,
+        actorId: actor.userId,
+        actorRole: actor.role,
+        action: "PROCESS_UPDATED",
+        entityType: "process",
+        entityId: id,
+        before: {
+          sequence: existing.sequence,
+          standardWastagePct: existing.standardWastagePct,
+          costPerUnitPaise: existing.costPerUnitPaise,
+          active: existing.active,
+        },
+        after: {
+          sequence: updated.sequence,
+          standardWastagePct: updated.standardWastagePct,
+          costPerUnitPaise: updated.costPerUnitPaise,
+          active: updated.active,
+        },
+      });
+    }
+
+    return updated;
   }
 }
 

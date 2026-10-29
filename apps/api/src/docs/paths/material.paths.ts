@@ -2,6 +2,31 @@
  * OpenAPI 3.0.3 Paths for Materials & Inventory
  */
 export const materialPaths = {
+  "/api/v1/materials/stock-summary": {
+    get: {
+      tags: ["Materials"],
+      summary: "Get stock summary report",
+      operationId: "getStockSummary",
+      security: [{ bearerAuth: [] }],
+      responses: {
+        200: {
+          description: "Summary of stock across all materials",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: { type: "array", items: { type: "object" } },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+
   "/api/v1/materials": {
     get: {
       tags: ["Materials"],
@@ -100,6 +125,123 @@ export const materialPaths = {
         404: { description: "Material not found.", content: { "application/json": { schema: { $ref: "#/components/schemas/StandardError" } } } },
       },
     },
+    patch: {
+      tags: ["Materials"],
+      summary: "Update material",
+      operationId: "updateMaterial",
+      security: [{ bearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { type: "object" } } },
+      },
+      responses: {
+        200: {
+          description: "Material updated",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: { $ref: "#/components/schemas/Material" },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+
+  "/api/v1/materials/{id}/rate": {
+    post: {
+      tags: ["Materials"],
+      summary: "Update material market rate",
+      operationId: "updateMaterialRate",
+      security: [{ bearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { type: "object" } } },
+      },
+      responses: {
+        200: {
+          description: "Material rate updated",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: { $ref: "#/components/schemas/Material" },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+
+  "/api/v1/materials/{id}/receipt": {
+    post: {
+      tags: ["Materials"],
+      summary: "Record goods receipt",
+      operationId: "materialGoodsReceipt",
+      security: [{ bearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { type: "object" } } },
+      },
+      responses: {
+        200: {
+          description: "Goods receipt recorded",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: { type: "object" },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+
+  "/api/v1/materials/{id}/adjust": {
+    post: {
+      tags: ["Materials"],
+      summary: "Adjust material stock balance",
+      operationId: "materialStockAdjustment",
+      security: [{ bearerAuth: [] }],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { type: "object" } } },
+      },
+      responses: {
+        200: {
+          description: "Stock adjusted",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: { type: "object" },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   },
 
   "/api/v1/materials/{id}/movements": {
@@ -196,6 +338,35 @@ export const materialPaths = {
           },
         },
         401: { description: "Unauthorized.", content: { "application/json": { schema: { $ref: "#/components/schemas/StandardError" } } } },
+      },
+    },
+    post: {
+      tags: ["Materials"],
+      summary: "Backfill or append price history",
+      operationId: "backfillPriceHistory",
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Material ObjectId" },
+      ],
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { type: "object" } } },
+      },
+      responses: {
+        200: {
+          description: "Price history records added",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: { type: "object" },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
       },
     },
   },

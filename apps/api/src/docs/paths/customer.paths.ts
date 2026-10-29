@@ -100,6 +100,40 @@ export const customerPaths = {
         404: { description: "Customer not found.", content: { "application/json": { schema: { $ref: "#/components/schemas/StandardError" } } } },
       },
     },
+    patch: {
+      tags: ["Customers"],
+      summary: "Update customer",
+      description: "Updates an existing customer record.",
+      operationId: "updateCustomer",
+      security: [{ bearerAuth: [] }],
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string" }, description: "Customer ObjectId" },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: { type: "object" },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Customer updated.",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: { $ref: "#/components/schemas/Customer" },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   },
 };
 

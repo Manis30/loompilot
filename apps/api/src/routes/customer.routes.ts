@@ -3,7 +3,10 @@ import { CustomerController } from "../controllers/customer.controller.js";
 import { authMiddleware } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { validate } from "../middleware/validate.js";
-import { CreateCustomerSchema } from "../validators/customer.validator.js";
+import {
+  CreateCustomerSchema,
+  UpdateCustomerSchema,
+} from "../validators/customer.validator.js";
 import { UserRole } from "@loompilot/shared";
 
 export function createCustomerRoutes(controller: CustomerController): Router {
@@ -18,6 +21,12 @@ export function createCustomerRoutes(controller: CustomerController): Router {
     requireRole(UserRole.OWNER, UserRole.MANAGER, UserRole.SALES),
     validate(CreateCustomerSchema),
     controller.create
+  );
+  router.patch(
+    "/:id",
+    requireRole(UserRole.OWNER, UserRole.MANAGER, UserRole.SALES),
+    validate(UpdateCustomerSchema),
+    controller.update
   );
 
   return router;

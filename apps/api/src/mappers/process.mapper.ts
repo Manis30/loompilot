@@ -10,6 +10,8 @@ export function toProcessResponse(processItem: Process) {
     standardWastagePct: processItem.standardWastagePct,
     avgOutputPerWorkerHour: processItem.avgOutputPerWorkerHour,
     unit: processItem.unit,
+    costPerUnitPaise: processItem.costPerUnitPaise || 0,
+    active: processItem.active ?? true,
     createdAt: processItem.createdAt,
     updatedAt: processItem.updatedAt,
   };

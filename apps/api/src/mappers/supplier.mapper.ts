@@ -12,6 +12,7 @@ export function toSupplierResponse(supplier: Supplier) {
     leadTimeDays: supplier.leadTimeDays,
     rating: supplier.rating,
     suppliedMaterials: supplier.suppliedMaterials,
+    active: supplier.active ?? true,
     createdAt: supplier.createdAt,
     updatedAt: supplier.updatedAt,
   };

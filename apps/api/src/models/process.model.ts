@@ -8,6 +8,8 @@ export interface IProcessDocument extends Document {
   standardWastagePct: number;
   avgOutputPerWorkerHour: number;
   unit: string;
+  costPerUnitPaise: number;
+  active: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -20,6 +22,8 @@ const ProcessSchema = new Schema<IProcessDocument>(
     standardWastagePct: { type: Number, required: true, default: 2.0 },
     avgOutputPerWorkerHour: { type: Number, required: true, default: 10 },
     unit: { type: String, required: true, default: "meters" },
+    costPerUnitPaise: { type: Number, default: 0, min: 0 },
+    active: { type: Boolean, default: true, index: true },
   },
   { timestamps: true }
 );
