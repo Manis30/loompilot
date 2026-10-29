@@ -62,7 +62,7 @@ describe("Table-Driven & Integration: Daily-Output Idempotent Entry", () => {
 
     // First submission
     const res1 = await request(app)
-      .post("/api/workforce/daily-outputs")
+      .post("/api/v1/workforce/daily-outputs")
       .set("Authorization", `Bearer ${managerToken}`)
       .send(payload);
 
@@ -71,12 +71,13 @@ describe("Table-Driven & Integration: Daily-Output Idempotent Entry", () => {
     const createdId = res1.body.data.id;
     expect(res1.body.data.quantityProduced).toBe(450);
 
-    // Second submission with exact same orderId + processId + date (different or same idempotency key)
+    // Second submission with exact same orderId + processId + date (different idempotency key)
     const res2 = await request(app)
-      .post("/api/workforce/daily-outputs")
+      .post("/api/v1/workforce/daily-outputs")
       .set("Authorization", `Bearer ${managerToken}`)
       .send({
         ...payload,
+        idempotencyKey: "idem_key_output_002",
         notes: "Second duplicate submission",
       });
 
@@ -106,5 +107,33 @@ describe("Table-Driven & Integration: Daily-Output Idempotent Entry", () => {
 
     expect(out1.id).toBe(out2.id);
     expect(out2.quantityProduced).toBe(600);
+  });
+
+  it("returns 409 IDEMPOTENCY_CONFLICT when same idempotency key is submitted with different body", async () => {
+    const payloadA = {
+      orderId: new mongoose.Types.ObjectId().toString(),
+      processId: new mongoose.Types.ObjectId().toString(),
+      date: "2026-10-30",
+      quantityProduced: 200,
+    };
+
+    // First request with key
+    const resA = await request(app)
+      .post("/api/v1/workforce/daily-outputs")
+      .set("Authorization", `Bearer ${managerToken}`)
+      .set("Idempotency-Key", "idem_conflict_test_key_01")
+      .send(payloadA);
+
+    expect(resA.status).toBe(201);
+
+    // Second request with SAME key but DIFFERENT body (different quantityProduced)
+    const resB = await request(app)
+      .post("/api/v1/workforce/daily-outputs")
+      .set("Authorization", `Bearer ${managerToken}`)
+      .set("Idempotency-Key", "idem_conflict_test_key_01")
+      .send({ ...payloadA, quantityProduced: 999 });
+
+    expect(resB.status).toBe(409);
+    expect(resB.body.error.code).toBe("IDEMPOTENCY_CONFLICT");
   });
 });

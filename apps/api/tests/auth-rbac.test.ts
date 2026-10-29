@@ -72,7 +72,7 @@ describe("Stage 2: Auth & Role-Permission Matrix Tests", () => {
 
   it("authenticates user and returns JWT + sets httpOnly refresh token cookie", async () => {
     const res = await request(app)
-      .post("/api/auth/login")
+      .post("/api/v1/auth/login")
       .send({
         tenantId,
         email: "owner@loompilot.test",
@@ -92,9 +92,9 @@ describe("Stage 2: Auth & Role-Permission Matrix Tests", () => {
   });
 
   it("rejects unauthenticated requests to protected routes with 401", async () => {
-    const res = await request(app).get("/api/materials");
+    const res = await request(app).get("/api/v1/materials");
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe("Unauthorized");
+    expect(res.body.error.code).toBe("UNAUTHENTICATED");
   });
 
   it("Rule 1: Store role cannot read cost or margin fields on materials", async () => {
@@ -112,7 +112,7 @@ describe("Stage 2: Auth & Role-Permission Matrix Tests", () => {
 
     // 1. Owner query: sees cost fields
     const ownerRes = await request(app)
-      .get(`/api/materials/${material._id}`)
+      .get(`/api/v1/materials/${material._id}`)
       .set("Authorization", `Bearer ${ownerToken}`);
 
     expect(ownerRes.status).toBe(200);
@@ -121,7 +121,7 @@ describe("Stage 2: Auth & Role-Permission Matrix Tests", () => {
 
     // 2. Store query: cost fields MUST be stripped
     const storeRes = await request(app)
-      .get(`/api/materials/${material._id}`)
+      .get(`/api/v1/materials/${material._id}`)
       .set("Authorization", `Bearer ${storeToken}`);
 
     expect(storeRes.status).toBe(200);
@@ -167,7 +167,7 @@ describe("Stage 2: Auth & Role-Permission Matrix Tests", () => {
     });
 
     const storeRes = await request(app)
-      .get(`/api/quotations/${quotation._id}`)
+      .get(`/api/v1/quotations/${quotation._id}`)
       .set("Authorization", `Bearer ${storeToken}`);
 
     expect(storeRes.status).toBe(200);
@@ -216,16 +216,16 @@ describe("Stage 2: Auth & Role-Permission Matrix Tests", () => {
 
     // 1. Owner attempt -> Forbidden 403
     const ownerRes = await request(app)
-      .post(`/api/payments/${payment._id}/reminders/${reminderId}/approve`)
+      .post(`/api/v1/payments/${payment._id}/reminders/${reminderId}/approve`)
       .set("Authorization", `Bearer ${ownerToken}`)
       .send({ action: "approve" });
 
     expect(ownerRes.status).toBe(403);
-    expect(ownerRes.body.error).toBe("Forbidden");
+    expect(ownerRes.body.error.code).toBe("FORBIDDEN");
 
     // 2. Sales attempt -> Forbidden 403
     const salesRes = await request(app)
-      .post(`/api/payments/${payment._id}/reminders/${reminderId}/approve`)
+      .post(`/api/v1/payments/${payment._id}/reminders/${reminderId}/approve`)
       .set("Authorization", `Bearer ${salesToken}`)
       .send({ action: "approve" });
 
@@ -233,7 +233,7 @@ describe("Stage 2: Auth & Role-Permission Matrix Tests", () => {
 
     // 3. Accounts attempt -> Allowed 200 OK
     const accountsRes = await request(app)
-      .post(`/api/payments/${payment._id}/reminders/${reminderId}/approve`)
+      .post(`/api/v1/payments/${payment._id}/reminders/${reminderId}/approve`)
       .set("Authorization", `Bearer ${accountsToken}`)
       .send({ action: "approve" });
 

@@ -43,6 +43,7 @@ export interface Quotation {
   approvedBy?: string;
   approvedAt?: Date;
   sentAt?: Date;
+  version?: number;
   createdAt: Date;
   updatedAt: Date;
 }

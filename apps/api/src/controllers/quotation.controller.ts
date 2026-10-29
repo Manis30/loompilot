@@ -31,7 +31,8 @@ export class QuotationController {
 
   approve = asyncHandler(async (req: Request, res: Response) => {
     const actor = actorFrom(req);
-    const quote = await this.service.approve(actor, req.params.id!);
+    const expectedVersion = req.body?.expectedVersion !== undefined ? Number(req.body.expectedVersion) : undefined;
+    const quote = await this.service.approve(actor, req.params.id!, expectedVersion);
     res.json({
       data: toQuotationResponse(quote, actor.role),
       requestId: req.requestId,
@@ -61,7 +62,8 @@ export class QuotationController {
 
   confirm = asyncHandler(async (req: Request, res: Response) => {
     const actor = actorFrom(req);
-    const order = await this.service.confirmOrder(actor, req.params.id!);
+    const expectedVersion = req.body?.expectedVersion !== undefined ? Number(req.body.expectedVersion) : undefined;
+    const order = await this.service.confirmOrder(actor, req.params.id!, expectedVersion);
     res.status(201).json({
       data: toOrderResponse(order),
       message: "Quotation confirmed. Stock reserved and production order plan initialized.",

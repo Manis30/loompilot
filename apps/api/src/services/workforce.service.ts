@@ -24,8 +24,7 @@ export class WorkforceService {
     private readonly repo: IWorkforceRepository,
     private readonly uow: IUnitOfWork,
     private readonly audit?: IAuditLogRepository
-  ) {}
-
+  ) { }
   registerMonitoringTrigger(trigger: MonitoringTrigger): void {
     this.monitoringTrigger = trigger;
   }
@@ -80,13 +79,23 @@ export class WorkforceService {
     actor: Actor,
     input: RecordDailyOutputInput
   ): Promise<DailyOutput> {
-    let isNewRecord = false;
+    // 1. Idempotency check: if output with this key already recorded, return it
+    const existing = await this.repo.findDailyOutputByIdempotencyKey(
+      actor.tenantId,
+      input.idempotencyKey
+    );
+    if (existing) {
+      return existing;
+    }
+    const idempotencyKey =
+      input.idempotencyKey ||
+      `daily_${input.orderId}_${input.processId}_${input.date}`;
 
     const output = await this.uow.run(async (tx) => {
       // 1. Idempotency check: if output with this key already recorded, return it
       const existing = await this.repo.findDailyOutputByIdempotencyKey(
         actor.tenantId,
-        input.idempotencyKey,
+        idempotencyKey,
         tx
       );
       if (existing) {
@@ -105,15 +114,15 @@ export class WorkforceService {
           quantityDefective: input.quantityDefective,
           operatorId: input.operatorId,
           notes: input.notes,
-          idempotencyKey: input.idempotencyKey,
+          idempotencyKey,
         },
         tx
       );
     });
 
-    // 3. Amendment 2: Event-triggered debounced monitoring run per order (only on new records)
-    if (isNewRecord && this.monitoringTrigger) {
-      this.monitoringTrigger(actor.tenantId, input.orderId).catch(() => {});
+    // 3. Amendment 2: Event-triggered debounced monitoring run per order
+    if (this.monitoringTrigger) {
+      this.monitoringTrigger(actor.tenantId, input.orderId).catch(() => { });
     }
 
     if (this.audit) {

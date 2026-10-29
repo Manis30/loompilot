@@ -64,7 +64,7 @@ No manual client subscriptions or room joining commands are required. The server
 Emitted in realtime whenever:
 - Shop floor daily output falls below the required daily production target.
 - The monitoring sweep detects a production delay.
-- An agent posts a new shortfall alert via `/internal/alerts`.
+- An agent posts a new shortfall alert via `/internal/v1/alerts`.
 
 **Receiving Roles**: `owner`, `manager`
 

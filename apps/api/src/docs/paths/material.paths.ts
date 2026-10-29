@@ -2,7 +2,7 @@
  * OpenAPI 3.0.3 Paths for Materials & Inventory
  */
 export const materialPaths = {
-  "/api/materials": {
+  "/api/v1/materials": {
     get: {
       tags: ["Materials"],
       summary: "List inventory materials",
@@ -71,7 +71,7 @@ export const materialPaths = {
     },
   },
 
-  "/api/materials/{id}": {
+  "/api/v1/materials/{id}": {
     get: {
       tags: ["Materials"],
       summary: "Get material by ID",
@@ -102,7 +102,7 @@ export const materialPaths = {
     },
   },
 
-  "/api/materials/{id}/movements": {
+  "/api/v1/materials/{id}/movements": {
     get: {
       tags: ["Materials"],
       summary: "Get stock movement ledger for material",
@@ -170,7 +170,7 @@ export const materialPaths = {
     },
   },
 
-  "/api/materials/{id}/price-history": {
+  "/api/v1/materials/{id}/price-history": {
     get: {
       tags: ["Materials"],
       summary: "Get material price history",

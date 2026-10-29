@@ -2,7 +2,7 @@
  * OpenAPI 3.0.3 Paths for Alerts and AI Recovery Recommendations
  */
 export const alertPaths = {
-  "/api/alerts": {
+  "/api/v1/alerts": {
     get: {
       tags: ["Alerts"],
       summary: "List production shortfall alerts",
@@ -38,7 +38,7 @@ export const alertPaths = {
     },
   },
 
-  "/api/alerts/{id}/ack": {
+  "/api/v1/alerts/{id}/ack": {
     post: {
       tags: ["Alerts"],
       summary: "Acknowledge alert",
@@ -70,7 +70,7 @@ export const alertPaths = {
     },
   },
 
-  "/api/alerts/recommendations": {
+  "/api/v1/alerts/recommendations": {
     get: {
       tags: ["Alerts"],
       summary: "List recovery recommendations",
@@ -106,7 +106,7 @@ export const alertPaths = {
     },
   },
 
-  "/api/alerts/recommendations/{id}/decide": {
+  "/api/v1/alerts/recommendations/{id}/decide": {
     post: {
       tags: ["Alerts"],
       summary: "Decide recovery recommendation",

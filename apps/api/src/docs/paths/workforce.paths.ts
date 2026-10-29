@@ -2,7 +2,7 @@
  * OpenAPI 3.0.3 Paths for Workforce, Attendance & Daily Output
  */
 export const workforcePaths = {
-  "/api/workforce/workers": {
+  "/api/v1/workforce/workers": {
     get: {
       tags: ["Workforce"],
       summary: "List factory workers",
@@ -71,7 +71,7 @@ export const workforcePaths = {
     },
   },
 
-  "/api/workforce/attendance": {
+  "/api/v1/workforce/attendance": {
     get: {
       tags: ["Workforce"],
       summary: "Get daily attendance records",
@@ -136,7 +136,7 @@ export const workforcePaths = {
     },
   },
 
-  "/api/workforce/daily-outputs": {
+  "/api/v1/workforce/daily-outputs": {
     post: {
       tags: ["Workforce"],
       summary: "Capture daily process output (Idempotent)",
@@ -173,7 +173,7 @@ export const workforcePaths = {
     },
   },
 
-  "/api/workforce/orders/{orderId}/outputs": {
+  "/api/v1/workforce/orders/{orderId}/outputs": {
     get: {
       tags: ["Workforce"],
       summary: "Get daily outputs for an order",

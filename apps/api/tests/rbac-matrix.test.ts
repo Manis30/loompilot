@@ -16,7 +16,7 @@ interface RouteTestCase {
 const RBAC_MATRIX: RouteTestCase[] = [
   {
     method: "post",
-    pathBuilder: () => "/api/workforce/workers",
+    pathBuilder: () => "/api/v1/workforce/workers",
     allowedRoles: [UserRole.OWNER, UserRole.MANAGER],
     payload: {
       workerCode: "WRK-RBAC-01",
@@ -26,43 +26,43 @@ const RBAC_MATRIX: RouteTestCase[] = [
   },
   {
     method: "post",
-    pathBuilder: ({ quoteId }) => `/api/quotations/${quoteId}/approve`,
+    pathBuilder: ({ quoteId }) => `/api/v1/quotations/${quoteId}/approve`,
     allowedRoles: [UserRole.OWNER, UserRole.MANAGER],
   },
   {
     method: "post",
-    pathBuilder: ({ quoteId }) => `/api/quotations/${quoteId}/send`,
+    pathBuilder: ({ quoteId }) => `/api/v1/quotations/${quoteId}/send`,
     allowedRoles: [UserRole.OWNER, UserRole.MANAGER, UserRole.SALES],
   },
   {
     method: "post",
-    pathBuilder: ({ quoteId }) => `/api/quotations/${quoteId}/confirm`,
+    pathBuilder: ({ quoteId }) => `/api/v1/quotations/${quoteId}/confirm`,
     allowedRoles: [UserRole.OWNER, UserRole.MANAGER],
   },
   {
     method: "get",
-    pathBuilder: () => "/api/reports/margin",
+    pathBuilder: () => "/api/v1/reports/margin",
     allowedRoles: [UserRole.OWNER, UserRole.ACCOUNTS],
   },
   {
     method: "get",
-    pathBuilder: () => "/api/reports/on-time",
+    pathBuilder: () => "/api/v1/reports/on-time",
     allowedRoles: [UserRole.OWNER, UserRole.MANAGER, UserRole.SALES],
   },
   {
     method: "get",
-    pathBuilder: () => "/api/reports/collections",
+    pathBuilder: () => "/api/v1/reports/collections",
     allowedRoles: [UserRole.OWNER, UserRole.ACCOUNTS],
   },
   {
     method: "post",
-    pathBuilder: ({ paymentId, reminderId }) => `/api/payments/${paymentId}/reminders/${reminderId}/approve`,
+    pathBuilder: ({ paymentId, reminderId }) => `/api/v1/payments/${paymentId}/reminders/${reminderId}/approve`,
     allowedRoles: [UserRole.ACCOUNTS],
     payload: { action: "approve" },
   },
   {
     method: "post",
-    pathBuilder: () => "/api/workforce/daily-outputs",
+    pathBuilder: () => "/api/v1/workforce/daily-outputs",
     allowedRoles: [UserRole.OWNER, UserRole.MANAGER],
     payload: {
       orderId: new mongoose.Types.ObjectId().toString(),
@@ -178,7 +178,9 @@ describe("Table-Driven: Complete RBAC Route Matrix (docs/roles-matrix.md)", () =
         const isAllowed = allowedRoles.includes(role);
 
         let req = method === "get" ? request(app).get(path) : request(app).post(path);
-        req = req.set("Authorization", `Bearer ${token}`);
+        req = req
+          .set("Authorization", `Bearer ${token}`)
+          .set("Idempotency-Key", `idem_${role}_${Math.random().toString(36).slice(2)}`);
         if (payload) req = req.send(payload);
 
         const res = await req;
@@ -190,7 +192,7 @@ describe("Table-Driven: Complete RBAC Route Matrix (docs/roles-matrix.md)", () =
         } else {
           // Forbidden roles MUST receive 403 Forbidden
           expect(res.status).toBe(403);
-          expect(res.body.error).toBe("Forbidden");
+          expect(res.body.error.code).toBe("FORBIDDEN");
         }
       });
     }

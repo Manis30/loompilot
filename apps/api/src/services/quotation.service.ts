@@ -13,7 +13,8 @@ import { IAuditLogRepository } from "../interfaces/audit-log.js";
 import { Actor } from "../utils/actor.js";
 import { ListQuery, Page } from "../utils/pagination.js";
 import { CreateQuotationDraftInput } from "../validators/quotation.validator.js";
-import { NotFoundError, BadRequestError } from "../errors/index.js";
+import { NotFoundError, BadRequestError, VersionConflictError } from "../errors/index.js";
+import { todayInTz, formatDateInTz } from "../utils/dates.js";
 import { QuotationStatus, OrderStatus, StockMovementType } from "@loompilot/shared";
 
 export class QuotationService {
@@ -106,14 +107,10 @@ export class QuotationService {
    * immediately to generation_failed state for user retry.
    */
   async requestDraft(actor: Actor, enquiryId: string): Promise<Quotation> {
-    const count = await this.quoteRepo.count(actor.tenantId);
-    const quotationNumber = `QT-${String(count + 1).padStart(5, "0")}`;
-
     const quote = await this.quoteRepo.create({
       tenantId: actor.tenantId,
       enquiryId,
       customerId: "pending",
-      quotationNumber,
       lineItems: [],
       materialCostPaise: 0,
       processingCostPaise: 0,
@@ -126,8 +123,8 @@ export class QuotationService {
       marginPct: 0,
       profitPaise: 0,
       finalPricePaise: 0,
-      etaDate: new Date().toISOString().split("T")[0]!,
-      validUntil: new Date().toISOString().split("T")[0]!,
+      etaDate: todayInTz(),
+      validUntil: todayInTz(),
       status: QuotationStatus.DRAFT,
       explanation: "Draft quotation generation initiated.",
     });
@@ -213,10 +210,15 @@ export class QuotationService {
     return updated!;
   }
 
-  async approve(actor: Actor, id: string): Promise<Quotation> {
+  async approve(actor: Actor, id: string, expectedVersion?: number): Promise<Quotation> {
     const quote = await this.quoteRepo.findById(actor.tenantId, id);
     if (!quote) {
       throw new NotFoundError(`Quotation with ID ${id} not found`);
+    }
+    if (expectedVersion !== undefined && (quote.version || 1) !== expectedVersion) {
+      throw new VersionConflictError(
+        `Quotation version mismatch. Expected version ${expectedVersion} but found ${quote.version || 1}`
+      );
     }
     if (quote.status === QuotationStatus.CONFIRMED) {
       throw new BadRequestError("Quotation has already been confirmed into an order");
@@ -226,6 +228,7 @@ export class QuotationService {
       status: QuotationStatus.APPROVED,
       approvedBy: actor.userId,
       approvedAt: new Date(),
+      version: (quote.version || 1) + 1,
     });
 
     if (this.audit) {
@@ -306,12 +309,19 @@ export class QuotationService {
    */
   async confirmOrder(
     actor: Actor,
-    quotationId: string
+    quotationId: string,
+    expectedVersion?: number
   ): Promise<ProductionOrder> {
     return this.uow.run(async (tx) => {
       const quote = await this.quoteRepo.findById(actor.tenantId, quotationId, tx);
       if (!quote) {
         throw new NotFoundError(`Quotation ${quotationId} not found`);
+      }
+
+      if (expectedVersion !== undefined && (quote.version || 1) !== expectedVersion) {
+        throw new VersionConflictError(
+          `Quotation version mismatch. Expected version ${expectedVersion} but found ${quote.version || 1}`
+        );
       }
 
       if (quote.status === QuotationStatus.CONFIRMED) {
@@ -377,8 +387,8 @@ export class QuotationService {
           sequence: proc.sequence,
           targetQty: totalQty,
           dailyTarget: Math.round(totalQty / 5),
-          startDate: startDate.toISOString().split("T")[0]!,
-          endDate: endDate.toISOString().split("T")[0]!,
+          startDate: formatDateInTz(startDate),
+          endDate: formatDateInTz(endDate),
           completedQty: 0,
         };
       });
@@ -393,7 +403,7 @@ export class QuotationService {
           totalQuantity: totalQty,
           unit: quote.inputsSnapshot?.unit || "meters",
           status: OrderStatus.PLANNED,
-          startDate: new Date().toISOString().split("T")[0]!,
+          startDate: todayInTz(),
           targetDeliveryDate: quote.etaDate,
           plan,
         },

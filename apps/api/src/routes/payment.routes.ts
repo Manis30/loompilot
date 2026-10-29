@@ -3,6 +3,7 @@ import { PaymentController } from "../controllers/payment.controller.js";
 import { authMiddleware } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { validate } from "../middleware/validate.js";
+import { idempotencyMiddleware } from "../middleware/idempotency.js";
 import { ApproveReminderSchema, RecordReceiptSchema } from "../validators/payment.validator.js";
 import { UserRole } from "@loompilot/shared";
 
@@ -36,6 +37,7 @@ export function createPaymentRoutes(controller: PaymentController): Router {
     "/:id/receipts",
     requireRole(UserRole.OWNER, UserRole.ACCOUNTS),
     validate(RecordReceiptSchema),
+    idempotencyMiddleware(),
     controller.recordReceipt
   );
 

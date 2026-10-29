@@ -2,7 +2,7 @@
  * OpenAPI 3.0.3 Paths for Customers
  */
 export const customerPaths = {
-  "/api/customers": {
+  "/api/v1/customers": {
     get: {
       tags: ["Customers"],
       summary: "List customers",
@@ -71,7 +71,7 @@ export const customerPaths = {
     },
   },
 
-  "/api/customers/{id}": {
+  "/api/v1/customers/{id}": {
     get: {
       tags: ["Customers"],
       summary: "Get customer by ID",

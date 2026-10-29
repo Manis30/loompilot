@@ -24,12 +24,8 @@ export class EnquiryService {
   }
 
   async create(actor: Actor, input: CreateEnquiryInput): Promise<Enquiry> {
-    const currentCount = await this.enquiries.count(actor.tenantId);
-    const enquiryNumber = `ENQ-${String(currentCount + 1).padStart(5, "0")}`;
-
     const enquiry = await this.enquiries.create({
       tenantId: actor.tenantId,
-      enquiryNumber,
       customerId: input.customerId,
       customerName: input.customerName,
       rawText: input.rawText,

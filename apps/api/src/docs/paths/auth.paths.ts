@@ -2,7 +2,7 @@
  * OpenAPI 3.0.3 Paths for Authentication & User Management
  */
 export const authPaths = {
-  "/api/auth/login": {
+  "/api/v1/auth/login": {
     post: {
       tags: ["Authentication"],
       summary: "User login and session establishment",
@@ -50,7 +50,7 @@ export const authPaths = {
     },
   },
 
-  "/api/auth/refresh": {
+  "/api/v1/auth/refresh": {
     post: {
       tags: ["Authentication"],
       summary: "Rotate access and refresh tokens",
@@ -98,7 +98,7 @@ export const authPaths = {
     },
   },
 
-  "/api/auth/register": {
+  "/api/v1/auth/register": {
     post: {
       tags: ["Authentication"],
       summary: "Register new user or bootstrap first tenant owner",
@@ -144,7 +144,7 @@ export const authPaths = {
     },
   },
 
-  "/api/auth/logout": {
+  "/api/v1/auth/logout": {
     post: {
       tags: ["Authentication"],
       summary: "Log out current user",
@@ -179,7 +179,7 @@ export const authPaths = {
     },
   },
 
-  "/api/auth/me": {
+  "/api/v1/auth/me": {
     get: {
       tags: ["Authentication"],
       summary: "Get current authenticated user info",

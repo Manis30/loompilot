@@ -9,6 +9,7 @@ import { Actor } from "../utils/actor.js";
 import { ListQuery, Page } from "../utils/pagination.js";
 import { RecordDeliveryInput } from "../validators/delivery.validator.js";
 import { NotFoundError } from "../errors/index.js";
+import { todayInTz } from "../utils/dates.js";
 import { OrderStatus } from "@loompilot/shared";
 
 export type DeliveryTrigger = (tenantId: string, delivery: Delivery) => Promise<void>;
@@ -49,7 +50,7 @@ export class DeliveryService {
         throw new NotFoundError(`Order with ID ${input.orderId} not found`);
       }
 
-      const deliveryDateStr = input.deliveryDate || new Date().toISOString().split("T")[0]!;
+      const deliveryDateStr = input.deliveryDate || todayInTz();
       const isOnTime = deliveryDateStr <= order.targetDeliveryDate;
 
       const createdDelivery = await this.deliveryRepo.create(

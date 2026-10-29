@@ -37,10 +37,12 @@ export function errorHandler(
   }
 
   res.status(statusCode).json({
-    error: errorCode,
-    message,
-    ...(err.details ? { details: err.details } : {}),
-    requestId: req.requestId,
+    error: {
+      code: errorCode,
+      message,
+      ...(err.details ? { details: err.details } : {}),
+      requestId: req.requestId,
+    },
     ...(process.env.NODE_ENV === "development" ? { stack: err.stack } : {}),
   });
 }

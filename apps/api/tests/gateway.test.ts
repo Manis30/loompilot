@@ -25,21 +25,21 @@ describe("Stage 2: Internal Agent Gateway Tests", () => {
 
   it("rejects calls to /internal without x-service-token header (401)", async () => {
     const res = await request(app)
-      .post("/internal/quotations/drafts")
+      .post("/internal/v1/quotations/drafts")
       .send({ tenantId });
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe("Unauthorized");
+    expect(res.body.error.code).toBe("UNAUTHENTICATED");
   });
 
   it("rejects calls with an incorrect service token (403)", async () => {
     const res = await request(app)
-      .post("/internal/quotations/drafts")
+      .post("/internal/v1/quotations/drafts")
       .set("x-service-token", "wrong_token_12345678")
       .send({ tenantId });
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe("Forbidden");
+    expect(res.body.error.code).toBe("FORBIDDEN");
   });
 
   it("rejects user JWT tokens on /internal routes (only service tokens accepted)", async () => {
@@ -54,7 +54,7 @@ describe("Stage 2: Internal Agent Gateway Tests", () => {
 
     // Pass user JWT instead of service token
     const res = await request(app)
-      .post("/internal/quotations/drafts")
+      .post("/internal/v1/quotations/drafts")
       .set("Authorization", `Bearer ${auth!.accessToken}`)
       .send({ tenantId });
 
@@ -97,7 +97,7 @@ describe("Stage 2: Internal Agent Gateway Tests", () => {
     };
 
     const res = await request(app)
-      .post("/internal/quotations/drafts")
+      .post("/internal/v1/quotations/drafts")
       .set("x-service-token", validToken)
       .send(proposal);
 
@@ -127,7 +127,7 @@ describe("Stage 2: Internal Agent Gateway Tests", () => {
 
     // First ingestion
     const res1 = await request(app)
-      .post("/internal/alerts")
+      .post("/internal/v1/alerts")
       .set("x-service-token", validToken)
       .send(alertData);
 
@@ -136,7 +136,7 @@ describe("Stage 2: Internal Agent Gateway Tests", () => {
 
     // Second ingestion with updated metrics (deduplication / upsert)
     const res2 = await request(app)
-      .post("/internal/alerts")
+      .post("/internal/v1/alerts")
       .set("x-service-token", validToken)
       .send({
         ...alertData,

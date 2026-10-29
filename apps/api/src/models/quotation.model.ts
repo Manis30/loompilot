@@ -41,6 +41,7 @@ export interface IQuotationDocument extends Document {
   approvedBy?: mongoose.Types.ObjectId;
   approvedAt?: Date;
   sentAt?: Date;
+  version: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -95,6 +96,7 @@ const QuotationSchema = new Schema<IQuotationDocument>(
     approvedBy: { type: Schema.Types.ObjectId, ref: "User" },
     approvedAt: { type: Date },
     sentAt: { type: Date },
+    version: { type: Number, required: true, default: 1 },
   },
   { timestamps: true }
 );

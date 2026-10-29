@@ -2,6 +2,7 @@ import { Router } from "express";
 import { QuotationController } from "../controllers/quotation.controller.js";
 import { authMiddleware } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
+import { idempotencyMiddleware } from "../middleware/idempotency.js";
 import { UserRole } from "@loompilot/shared";
 
 export function createQuotationRoutes(controller: QuotationController): Router {
@@ -16,6 +17,7 @@ export function createQuotationRoutes(controller: QuotationController): Router {
   router.post(
     "/draft",
     requireRole(UserRole.OWNER, UserRole.MANAGER, UserRole.SALES),
+    idempotencyMiddleware(),
     controller.requestDraft
   );
 
@@ -40,6 +42,7 @@ export function createQuotationRoutes(controller: QuotationController): Router {
   router.post(
     "/:id/confirm",
     requireRole(UserRole.OWNER, UserRole.MANAGER),
+    idempotencyMiddleware(),
     controller.confirm
   );
 

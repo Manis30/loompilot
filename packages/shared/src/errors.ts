@@ -1,0 +1,39 @@
+export enum ErrorCode {
+  VALIDATION_FAILED = "VALIDATION_FAILED",
+  UNAUTHENTICATED = "UNAUTHENTICATED",
+  FORBIDDEN = "FORBIDDEN",
+  NOT_FOUND = "NOT_FOUND",
+  VERSION_CONFLICT = "VERSION_CONFLICT",
+  INVALID_TRANSITION = "INVALID_TRANSITION",
+  DUPLICATE = "DUPLICATE",
+  IDEMPOTENCY_CONFLICT = "IDEMPOTENCY_CONFLICT",
+  RATE_LIMITED = "RATE_LIMITED",
+
+  // Domain & Business Rule Error Codes
+  PLAN_MISSING = "PLAN_MISSING",
+  DRAFT_INCOMPLETE = "DRAFT_INCOMPLETE",
+  BELOW_THRESHOLD = "BELOW_THRESHOLD",
+  INVOICE_EXCEEDS_ORDER_VALUE = "INVOICE_EXCEEDS_ORDER_VALUE",
+  OVERPAYMENT = "OVERPAYMENT",
+  OUTPUT_ALREADY_RECORDED = "OUTPUT_ALREADY_RECORDED",
+  AGENTS_UNAVAILABLE = "AGENTS_UNAVAILABLE",
+  INTERNAL_ERROR = "INTERNAL_ERROR",
+}
+
+export interface ApiErrorDetail {
+  field?: string;
+  message: string;
+  [key: string]: any;
+}
+
+export interface ApiErrorBody {
+  code: ErrorCode | string;
+  message: string;
+  details?: any;
+  requestId?: string;
+}
+
+export interface ApiErrorEnvelope {
+  error: ApiErrorBody;
+}
+

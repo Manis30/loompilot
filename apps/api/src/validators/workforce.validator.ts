@@ -27,7 +27,7 @@ export const RecordDailyOutputSchema = z.object({
   quantityDefective: z.number().nonnegative().optional().default(0),
   operatorId: z.string().optional(),
   notes: z.string().optional(),
-  idempotencyKey: z.string().min(1, "idempotencyKey is required"),
+  idempotencyKey: z.string().optional(),
 });
 
 export type CreateWorkerInput = z.infer<typeof CreateWorkerSchema>;

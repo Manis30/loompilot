@@ -6,6 +6,7 @@ import {
 import { TxContext } from "../interfaces/unit-of-work.js";
 import { ListQuery, Page, toPage } from "../utils/pagination.js";
 import { EnquiryModel } from "../models/enquiry.model.js";
+import { getNextDocumentNumber } from "../models/counter.model.js";
 
 export class MongoEnquiryRepository implements IEnquiryRepository {
   private toEntity(doc: any): Enquiry {
@@ -24,7 +25,18 @@ export class MongoEnquiryRepository implements IEnquiryRepository {
   }
 
   async create(data: NewEnquiry, tx?: TxContext): Promise<Enquiry> {
-    const docs = await EnquiryModel.create([data], { session: tx?.session || null });
+    const enquiryNumber =
+      data.enquiryNumber ||
+      (await getNextDocumentNumber(data.tenantId, "enquiry", "ENQ", 5, tx?.session));
+    const docs = await EnquiryModel.create(
+      [
+        {
+          ...data,
+          enquiryNumber,
+        },
+      ],
+      { session: tx?.session || null }
+    );
     return this.toEntity(docs[0]!);
   }
 

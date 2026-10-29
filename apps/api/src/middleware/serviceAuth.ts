@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
-import { HEADERS } from "@loompilot/shared";
+import { HEADERS, ErrorCode } from "@loompilot/shared";
 import { env } from "../config/env.js";
 
 export function serviceAuthMiddleware(req: Request, res: Response, next: NextFunction): void {
@@ -8,9 +8,11 @@ export function serviceAuthMiddleware(req: Request, res: Response, next: NextFun
 
   if (!token) {
     res.status(401).json({
-      error: "Unauthorized",
-      message: `Missing ${HEADERS.SERVICE_TOKEN} header`,
-      requestId: req.requestId,
+      error: {
+        code: ErrorCode.UNAUTHENTICATED,
+        message: `Missing ${HEADERS.SERVICE_TOKEN} header`,
+        requestId: req.requestId,
+      },
     });
     return;
   }
@@ -24,13 +26,14 @@ export function serviceAuthMiddleware(req: Request, res: Response, next: NextFun
     !crypto.timingSafeEqual(expectedBuffer, actualBuffer)
   ) {
     res.status(403).json({
-      error: "Forbidden",
-      message: "Invalid internal service token",
-      requestId: req.requestId,
+      error: {
+        code: ErrorCode.FORBIDDEN,
+        message: "Invalid internal service token",
+        requestId: req.requestId,
+      },
     });
     return;
   }
 
   next();
 }
-

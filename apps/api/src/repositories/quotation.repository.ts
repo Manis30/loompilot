@@ -7,6 +7,7 @@ import {
 import { TxContext } from "../interfaces/unit-of-work.js";
 import { ListQuery, Page, toPage } from "../utils/pagination.js";
 import { QuotationModel } from "../models/quotation.model.js";
+import { getNextDocumentNumber } from "../models/counter.model.js";
 
 export class MongoQuotationRepository implements IQuotationRepository {
   private toEntity(doc: any): Quotation {
@@ -49,6 +50,7 @@ export class MongoQuotationRepository implements IQuotationRepository {
       approvedBy: doc.approvedBy?.toString(),
       approvedAt: doc.approvedAt,
       sentAt: doc.sentAt,
+      version: doc.version || 1,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
     };
@@ -57,7 +59,7 @@ export class MongoQuotationRepository implements IQuotationRepository {
   async create(data: NewQuotation, tx?: TxContext): Promise<Quotation> {
     const quotationNumber =
       data.quotationNumber ||
-      `QT-${String((await this.count(data.tenantId, tx)) + 1).padStart(5, "0")}`;
+      (await getNextDocumentNumber(data.tenantId, "quotation", "QT", 5, tx?.session));
 
     const docs = await QuotationModel.create(
       [

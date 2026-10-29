@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { ZodSchema, ZodError } from "zod";
+import { ErrorCode } from "@loompilot/shared";
 
 export function validate(schema: ZodSchema, source: "body" | "query" | "params" = "body") {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -10,10 +11,12 @@ export function validate(schema: ZodSchema, source: "body" | "query" | "params" 
     } catch (err) {
       if (err instanceof ZodError) {
         res.status(400).json({
-          error: "ValidationError",
-          message: "Request validation failed",
-          details: err.errors,
-          requestId: req.requestId,
+          error: {
+            code: ErrorCode.VALIDATION_FAILED,
+            message: "Request validation failed",
+            details: err.errors,
+            requestId: req.requestId,
+          },
         });
         return;
       }
@@ -21,4 +24,3 @@ export function validate(schema: ZodSchema, source: "body" | "query" | "params" 
     }
   };
 }
-

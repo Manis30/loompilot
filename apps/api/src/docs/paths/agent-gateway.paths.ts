@@ -3,7 +3,7 @@
  * Protected by serviceTokenAuth (header x-service-token).
  */
 export const agentGatewayPaths = {
-  "/internal/quotations/drafts": {
+  "/internal/v1/quotations/drafts": {
     post: {
       tags: ["Agent Gateway (Internal)"],
       summary: "Ingest quotation draft from Python agent service",
@@ -61,7 +61,7 @@ export const agentGatewayPaths = {
     },
   },
 
-  "/internal/alerts": {
+  "/internal/v1/alerts": {
     post: {
       tags: ["Agent Gateway (Internal)"],
       summary: "Ingest production shortfall alert from Python agent service",
@@ -96,7 +96,7 @@ export const agentGatewayPaths = {
     },
   },
 
-  "/internal/recommendations": {
+  "/internal/v1/recommendations": {
     post: {
       tags: ["Agent Gateway (Internal)"],
       summary: "Ingest recovery recommendation from Python agent service",
@@ -131,7 +131,7 @@ export const agentGatewayPaths = {
     },
   },
 
-  "/internal/monitoring-snapshots": {
+  "/internal/v1/monitoring-snapshots": {
     post: {
       tags: ["Agent Gateway (Internal)"],
       summary: "Record monitoring run snapshot",
@@ -166,7 +166,7 @@ export const agentGatewayPaths = {
     },
   },
 
-  "/internal/payment-followups": {
+  "/internal/v1/payment-followups": {
     post: {
       tags: ["Agent Gateway (Internal)"],
       summary: "Ingest payment follow-up record",
@@ -201,7 +201,7 @@ export const agentGatewayPaths = {
     },
   },
 
-  "/internal/payment-reminder-drafts": {
+  "/internal/v1/payment-reminder-drafts": {
     post: {
       tags: ["Agent Gateway (Internal)"],
       summary: "Ingest drafted payment reminder",

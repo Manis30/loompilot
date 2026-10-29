@@ -2,7 +2,7 @@
  * OpenAPI 3.0.3 Paths for Production Processes
  */
 export const processPaths = {
-  "/api/processes": {
+  "/api/v1/processes": {
     get: {
       tags: ["Processes"],
       summary: "List production processes",
@@ -64,7 +64,7 @@ export const processPaths = {
     },
   },
 
-  "/api/processes/{id}": {
+  "/api/v1/processes/{id}": {
     get: {
       tags: ["Processes"],
       summary: "Get process by ID",

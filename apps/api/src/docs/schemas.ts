@@ -1,4 +1,4 @@
-import { UserRole, MaterialType, StockMovementType, ProcessName, OrderStatus, QuotationStatus, DeliveryStatus, PaymentStatus, ReminderStatus, AlertType, AlertSeverity, RecommendationStatus, NotificationChannel } from "@loompilot/shared";
+import { UserRole, ErrorCode, MaterialType, StockMovementType, ProcessName, OrderStatus, QuotationStatus, DeliveryStatus, PaymentStatus, ReminderStatus, AlertType, AlertSeverity, RecommendationStatus, NotificationChannel } from "@loompilot/shared";
 
 /**
  * Reusable OpenAPI 3.0.3 Schemas for LoomPilot Backend
@@ -24,37 +24,57 @@ export const openapiSchemas = {
     },
   },
 
+  ErrorCode: {
+    type: "string",
+    enum: Object.values(ErrorCode),
+    example: ErrorCode.NOT_FOUND,
+    description: "Standard application error code",
+  },
+
   StandardError: {
     type: "object",
-    required: ["error", "message", "requestId"],
+    required: ["error"],
     properties: {
-      error: { type: "string", example: "NotFoundError", description: "Standardized error code or error class name" },
-      message: { type: "string", example: "Customer with ID 65e0a1b2c3d4e5f6a7b8c901 not found", description: "Human-readable failure explanation" },
-      requestId: { $ref: "#/components/schemas/RequestId" },
+      error: {
+        type: "object",
+        required: ["code", "message", "requestId"],
+        properties: {
+          code: { $ref: "#/components/schemas/ErrorCode" },
+          message: { type: "string", example: "Customer with ID 65e0a1b2c3d4e5f6a7b8c901 not found", description: "Human-readable failure explanation" },
+          details: { type: "object", description: "Optional error context or field-level details" },
+          requestId: { $ref: "#/components/schemas/RequestId" },
+        },
+      },
       stack: { type: "string", description: "Stack trace emitted exclusively in development mode" },
     },
   },
 
   ValidationError: {
     type: "object",
-    required: ["error", "message", "details", "requestId"],
+    required: ["error"],
     properties: {
-      error: { type: "string", example: "ValidationError" },
-      message: { type: "string", example: "Request validation failed" },
-      details: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            code: { type: "string", example: "invalid_type" },
-            expected: { type: "string", example: "string" },
-            received: { type: "string", example: "undefined" },
-            path: { type: "array", items: { type: "string" }, example: ["name"] },
-            message: { type: "string", example: "Required" },
+      error: {
+        type: "object",
+        required: ["code", "message", "details", "requestId"],
+        properties: {
+          code: { type: "string", example: ErrorCode.VALIDATION_FAILED },
+          message: { type: "string", example: "Request validation failed" },
+          details: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                code: { type: "string", example: "invalid_type" },
+                expected: { type: "string", example: "string" },
+                received: { type: "string", example: "undefined" },
+                path: { type: "array", items: { type: "string" }, example: ["name"] },
+                message: { type: "string", example: "Required" },
+              },
+            },
           },
+          requestId: { $ref: "#/components/schemas/RequestId" },
         },
       },
-      requestId: { $ref: "#/components/schemas/RequestId" },
     },
   },
 

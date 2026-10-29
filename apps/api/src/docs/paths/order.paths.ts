@@ -2,7 +2,7 @@
  * OpenAPI 3.0.3 Paths for Production Orders
  */
 export const orderPaths = {
-  "/api/orders": {
+  "/api/v1/orders": {
     get: {
       tags: ["Orders"],
       summary: "List production orders",
@@ -36,7 +36,7 @@ export const orderPaths = {
     },
   },
 
-  "/api/orders/{id}": {
+  "/api/v1/orders/{id}": {
     get: {
       tags: ["Orders"],
       summary: "Get order by ID",
@@ -67,7 +67,7 @@ export const orderPaths = {
     },
   },
 
-  "/api/orders/{id}/variance": {
+  "/api/v1/orders/{id}/variance": {
     get: {
       tags: ["Orders"],
       summary: "Get order production variance report",

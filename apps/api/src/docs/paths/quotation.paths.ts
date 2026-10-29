@@ -2,7 +2,7 @@
  * OpenAPI 3.0.3 Paths for Quotations
  */
 export const quotationPaths = {
-  "/api/quotations": {
+  "/api/v1/quotations": {
     get: {
       tags: ["Quotations"],
       summary: "List quotations",
@@ -36,7 +36,7 @@ export const quotationPaths = {
     },
   },
 
-  "/api/quotations/draft": {
+  "/api/v1/quotations/draft": {
     post: {
       tags: ["Quotations"],
       summary: "Request quotation draft from enquiry",
@@ -73,7 +73,7 @@ export const quotationPaths = {
     },
   },
 
-  "/api/quotations/{id}": {
+  "/api/v1/quotations/{id}": {
     get: {
       tags: ["Quotations"],
       summary: "Get quotation by ID",
@@ -104,7 +104,7 @@ export const quotationPaths = {
     },
   },
 
-  "/api/quotations/{id}/recalculate": {
+  "/api/v1/quotations/{id}/recalculate": {
     post: {
       tags: ["Quotations"],
       summary: "Recalculate quotation upon user edits",
@@ -145,7 +145,7 @@ export const quotationPaths = {
     },
   },
 
-  "/api/quotations/{id}/approve": {
+  "/api/v1/quotations/{id}/approve": {
     post: {
       tags: ["Quotations"],
       summary: "Human review approval of quotation",
@@ -178,7 +178,7 @@ export const quotationPaths = {
     },
   },
 
-  "/api/quotations/{id}/send": {
+  "/api/v1/quotations/{id}/send": {
     post: {
       tags: ["Quotations"],
       summary: "Mark quotation as sent to customer",
@@ -211,7 +211,7 @@ export const quotationPaths = {
     },
   },
 
-  "/api/quotations/{id}/pdf": {
+  "/api/v1/quotations/{id}/pdf": {
     get: {
       tags: ["Quotations"],
       summary: "Download quotation PDF",
@@ -240,7 +240,7 @@ export const quotationPaths = {
     },
   },
 
-  "/api/quotations/{id}/confirm": {
+  "/api/v1/quotations/{id}/confirm": {
     post: {
       tags: ["Quotations"],
       summary: "Confirm quotation into production order (Atomic Transaction)",

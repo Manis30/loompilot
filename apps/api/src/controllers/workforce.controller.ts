@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { WorkforceService } from "../services/workforce.service.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { actorFrom } from "../utils/actor.js";
+import { todayInTz } from "../utils/dates.js";
 import {
   toWorkerResponse,
   toAttendanceResponse,
@@ -39,7 +40,7 @@ export class WorkforceController {
   });
 
   getAttendance = asyncHandler(async (req: Request, res: Response) => {
-    const date = (req.query.date as string) || new Date().toISOString().split("T")[0]!;
+    const date = (req.query.date as string) || todayInTz();
     const records = await this.service.getAttendance(actorFrom(req), date);
     res.json({
       data: records.map(toAttendanceResponse),

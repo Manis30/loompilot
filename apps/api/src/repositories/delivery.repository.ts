@@ -6,6 +6,7 @@ import {
 import { TxContext } from "../interfaces/unit-of-work.js";
 import { ListQuery, Page, toPage } from "../utils/pagination.js";
 import { DeliveryModel } from "../models/delivery.model.js";
+import { getNextDocumentNumber } from "../models/counter.model.js";
 
 export class MongoDeliveryRepository implements IDeliveryRepository {
   private toEntity(doc: any): Delivery {
@@ -29,9 +30,12 @@ export class MongoDeliveryRepository implements IDeliveryRepository {
   }
 
   async create(data: NewDelivery, tx?: TxContext): Promise<Delivery> {
-    const count = await this.count(data.tenantId, tx);
-    const deliveryNumber = data.deliveryNumber || `DEL-${String(count + 1).padStart(5, "0")}`;
-    const invoiceNumber = data.invoiceNumber || `INV-${String(count + 1).padStart(5, "0")}`;
+    const deliveryNumber =
+      data.deliveryNumber ||
+      (await getNextDocumentNumber(data.tenantId, "delivery", "DEL", 5, tx?.session));
+    const invoiceNumber =
+      data.invoiceNumber ||
+      (await getNextDocumentNumber(data.tenantId, "invoice", "INV", 5, tx?.session));
 
     const docs = await DeliveryModel.create(
       [

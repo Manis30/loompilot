@@ -7,6 +7,7 @@ import {
 import { TxContext } from "../interfaces/unit-of-work.js";
 import { ListQuery, Page, toPage } from "../utils/pagination.js";
 import { ProductionOrderModel } from "../models/order.model.js";
+import { getNextDocumentNumber } from "../models/counter.model.js";
 import { OrderStatus } from "@loompilot/shared";
 
 export class MongoOrderRepository implements IOrderRepository {
@@ -34,6 +35,7 @@ export class MongoOrderRepository implements IOrderRepository {
         endDate: step.endDate,
         completedQty: step.completedQty || 0,
       })),
+      version: doc.version || 1,
       createdAt: doc.createdAt,
       updatedAt: doc.updatedAt,
     };
@@ -42,7 +44,7 @@ export class MongoOrderRepository implements IOrderRepository {
   async create(data: NewProductionOrder, tx?: TxContext): Promise<ProductionOrder> {
     const orderNumber =
       data.orderNumber ||
-      `PO-${String((await this.count(data.tenantId, tx)) + 1).padStart(5, "0")}`;
+      (await getNextDocumentNumber(data.tenantId, "order", "PO", 5, tx?.session));
 
     const docs = await ProductionOrderModel.create(
       [

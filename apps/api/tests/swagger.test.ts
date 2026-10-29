@@ -81,57 +81,59 @@ describe("OpenAPI Specification & Swagger UI Integration", () => {
       // Check key endpoints across modules
       const expectedPaths = [
         "/health",
-        "/api/auth/login",
-        "/api/auth/refresh",
-        "/api/auth/register",
-        "/api/auth/logout",
-        "/api/auth/me",
-        "/api/customers",
-        "/api/customers/{id}",
-        "/api/enquiries",
-        "/api/enquiries/{id}",
-        "/api/quotations",
-        "/api/quotations/draft",
-        "/api/quotations/{id}",
-        "/api/quotations/{id}/recalculate",
-        "/api/quotations/{id}/approve",
-        "/api/quotations/{id}/send",
-        "/api/quotations/{id}/pdf",
-        "/api/quotations/{id}/confirm",
-        "/api/materials",
-        "/api/materials/{id}",
-        "/api/materials/{id}/movements",
-        "/api/materials/{id}/price-history",
-        "/api/suppliers",
-        "/api/suppliers/{id}",
-        "/api/processes",
-        "/api/processes/{id}",
-        "/api/workforce/workers",
-        "/api/workforce/attendance",
-        "/api/workforce/daily-outputs",
-        "/api/workforce/orders/{orderId}/outputs",
-        "/api/orders",
-        "/api/orders/{id}",
-        "/api/orders/{id}/variance",
-        "/api/alerts",
-        "/api/alerts/{id}/ack",
-        "/api/alerts/recommendations",
-        "/api/alerts/recommendations/{id}/decide",
-        "/api/deliveries",
-        "/api/deliveries/{id}",
-        "/api/payments",
-        "/api/payments/{id}",
-        "/api/payments/{id}/reminders/{reminderId}/approve",
-        "/api/payments/{id}/receipts",
-        "/api/reports/margin",
-        "/api/reports/on-time",
-        "/api/reports/collections",
-        "/internal/quotations/drafts",
-        "/internal/alerts",
-        "/internal/recommendations",
-        "/internal/monitoring-snapshots",
-        "/internal/payment-followups",
-        "/internal/payment-reminder-drafts",
+        "/health/live",
+        "/health/ready",
+        "/api/v1/auth/login",
+        "/api/v1/auth/refresh",
+        "/api/v1/auth/register",
+        "/api/v1/auth/logout",
+        "/api/v1/auth/me",
+        "/api/v1/customers",
+        "/api/v1/customers/{id}",
+        "/api/v1/enquiries",
+        "/api/v1/enquiries/{id}",
+        "/api/v1/quotations",
+        "/api/v1/quotations/draft",
+        "/api/v1/quotations/{id}",
+        "/api/v1/quotations/{id}/recalculate",
+        "/api/v1/quotations/{id}/approve",
+        "/api/v1/quotations/{id}/send",
+        "/api/v1/quotations/{id}/pdf",
+        "/api/v1/quotations/{id}/confirm",
+        "/api/v1/materials",
+        "/api/v1/materials/{id}",
+        "/api/v1/materials/{id}/movements",
+        "/api/v1/materials/{id}/price-history",
+        "/api/v1/suppliers",
+        "/api/v1/suppliers/{id}",
+        "/api/v1/processes",
+        "/api/v1/processes/{id}",
+        "/api/v1/workforce/workers",
+        "/api/v1/workforce/attendance",
+        "/api/v1/workforce/daily-outputs",
+        "/api/v1/workforce/orders/{orderId}/outputs",
+        "/api/v1/orders",
+        "/api/v1/orders/{id}",
+        "/api/v1/orders/{id}/variance",
+        "/api/v1/alerts",
+        "/api/v1/alerts/{id}/ack",
+        "/api/v1/alerts/recommendations",
+        "/api/v1/alerts/recommendations/{id}/decide",
+        "/api/v1/deliveries",
+        "/api/v1/deliveries/{id}",
+        "/api/v1/payments",
+        "/api/v1/payments/{id}",
+        "/api/v1/payments/{id}/reminders/{reminderId}/approve",
+        "/api/v1/payments/{id}/receipts",
+        "/api/v1/reports/margin",
+        "/api/v1/reports/on-time",
+        "/api/v1/reports/collections",
+        "/internal/v1/quotations/drafts",
+        "/internal/v1/alerts",
+        "/internal/v1/recommendations",
+        "/internal/v1/monitoring-snapshots",
+        "/internal/v1/payment-followups",
+        "/internal/v1/payment-reminder-drafts",
       ];
 
       for (const p of expectedPaths) {
@@ -144,7 +146,7 @@ describe("OpenAPI Specification & Swagger UI Integration", () => {
 
     it("correctly documents binary PDF download for quotations", async () => {
       const res = await request(app).get("/api-docs.json").expect(200);
-      const pdfEndpoint = res.body.paths["/api/quotations/{id}/pdf"].get;
+      const pdfEndpoint = res.body.paths["/api/v1/quotations/{id}/pdf"].get;
 
       expect(pdfEndpoint).toBeDefined();
       expect(pdfEndpoint.operationId).toBe("downloadQuotationPdf");
@@ -156,16 +158,16 @@ describe("OpenAPI Specification & Swagger UI Integration", () => {
       const res = await request(app).get("/api-docs.json").expect(200);
 
       // Payment reminders approval: strictly accounts
-      const approveReminder = res.body.paths["/api/payments/{id}/reminders/{reminderId}/approve"].post;
+      const approveReminder = res.body.paths["/api/v1/payments/{id}/reminders/{reminderId}/approve"].post;
       expect(approveReminder.description).toContain("accounts");
 
       // Margin report: owner & accounts
-      const marginReport = res.body.paths["/api/reports/margin"].get;
+      const marginReport = res.body.paths["/api/v1/reports/margin"].get;
       expect(marginReport.description).toContain("owner");
       expect(marginReport.description).toContain("accounts");
 
       // Internal agent gateway: service token
-      const internalAlerts = res.body.paths["/internal/alerts"].post;
+      const internalAlerts = res.body.paths["/internal/v1/alerts"].post;
       expect(internalAlerts.security).toEqual([{ serviceTokenAuth: [] }]);
     });
   });

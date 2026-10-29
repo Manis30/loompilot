@@ -5,6 +5,7 @@ import {
   CollectionsReport,
 } from "../interfaces/report.repository.js";
 import { Actor } from "../utils/actor.js";
+import { todayInTz } from "../utils/dates.js";
 
 export class ReportService {
   constructor(private readonly repo: IReportRepository) {}
@@ -78,7 +79,7 @@ export class ReportService {
     let totalOutstandingPaise = 0;
     let totalOverduePaise = 0;
 
-    const todayStr = new Date().toISOString().split("T")[0]!;
+    const todayStr = todayInTz();
 
     for (const p of payments) {
       totalInvoicedPaise += p.totalInvoicePaise;

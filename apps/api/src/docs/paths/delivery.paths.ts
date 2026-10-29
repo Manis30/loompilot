@@ -2,7 +2,7 @@
  * OpenAPI 3.0.3 Paths for Deliveries
  */
 export const deliveryPaths = {
-  "/api/deliveries": {
+  "/api/v1/deliveries": {
     get: {
       tags: ["Deliveries"],
       summary: "List deliveries",
@@ -73,7 +73,7 @@ export const deliveryPaths = {
     },
   },
 
-  "/api/deliveries/{id}": {
+  "/api/v1/deliveries/{id}": {
     get: {
       tags: ["Deliveries"],
       summary: "Get delivery by ID",

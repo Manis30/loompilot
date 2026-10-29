@@ -27,6 +27,7 @@ export interface ProductionOrder {
   targetDeliveryDate: string;
   actualDeliveryDate?: string;
   plan: ProcessPlanStep[];
+  version?: number;
   createdAt: Date;
   updatedAt: Date;
 }

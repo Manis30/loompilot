@@ -25,6 +25,7 @@ export interface IProductionOrder extends Document {
   targetDeliveryDate: string;
   actualDeliveryDate?: string;
   plan: IProcessPlanStep[];
+  version: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -63,6 +64,7 @@ const ProductionOrderSchema = new Schema<IProductionOrder>(
     targetDeliveryDate: { type: String, required: true },
     actualDeliveryDate: { type: String },
     plan: [ProcessPlanStepSchema],
+    version: { type: Number, required: true, default: 1 },
   },
   { timestamps: true }
 );

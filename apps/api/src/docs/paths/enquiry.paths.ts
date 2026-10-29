@@ -2,7 +2,7 @@
  * OpenAPI 3.0.3 Paths for Enquiries
  */
 export const enquiryPaths = {
-  "/api/enquiries": {
+  "/api/v1/enquiries": {
     get: {
       tags: ["Enquiries"],
       summary: "List customer enquiries",
@@ -70,7 +70,7 @@ export const enquiryPaths = {
     },
   },
 
-  "/api/enquiries/{id}": {
+  "/api/v1/enquiries/{id}": {
     get: {
       tags: ["Enquiries"],
       summary: "Get enquiry by ID",

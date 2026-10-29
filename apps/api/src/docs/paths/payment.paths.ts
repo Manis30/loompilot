@@ -2,7 +2,7 @@
  * OpenAPI 3.0.3 Paths for Payments & Follow-up Reminders
  */
 export const paymentPaths = {
-  "/api/payments": {
+  "/api/v1/payments": {
     get: {
       tags: ["Payments"],
       summary: "List payments and follow-ups",
@@ -39,7 +39,7 @@ export const paymentPaths = {
     },
   },
 
-  "/api/payments/{id}": {
+  "/api/v1/payments/{id}": {
     get: {
       tags: ["Payments"],
       summary: "Get payment by ID",
@@ -71,7 +71,7 @@ export const paymentPaths = {
     },
   },
 
-  "/api/payments/{id}/reminders/{reminderId}/approve": {
+  "/api/v1/payments/{id}/reminders/{reminderId}/approve": {
     post: {
       tags: ["Payments"],
       summary: "Approve or reject reminder draft (Accounts Exclusive)",
@@ -113,7 +113,7 @@ export const paymentPaths = {
     },
   },
 
-  "/api/payments/{id}/receipts": {
+  "/api/v1/payments/{id}/receipts": {
     post: {
       tags: ["Payments"],
       summary: "Record payment receipt",

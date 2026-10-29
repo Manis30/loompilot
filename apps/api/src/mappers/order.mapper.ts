@@ -19,6 +19,7 @@ export function toOrderResponse(order: ProductionOrder) {
     targetDeliveryDate: order.targetDeliveryDate,
     actualDeliveryDate: order.actualDeliveryDate,
     plan: order.plan,
+    version: order.version || 1,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
   };

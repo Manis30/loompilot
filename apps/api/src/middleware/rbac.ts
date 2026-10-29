@@ -1,22 +1,26 @@
 import { Request, Response, NextFunction } from "express";
-import { UserRole } from "@loompilot/shared";
+import { UserRole, ErrorCode } from "@loompilot/shared";
 
 export function requireRole(...allowedRoles: UserRole[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({
-        error: "Unauthorized",
-        message: "User authentication required",
-        requestId: req.requestId,
+        error: {
+          code: ErrorCode.UNAUTHENTICATED,
+          message: "User authentication required",
+          requestId: req.requestId,
+        },
       });
       return;
     }
 
     if (!allowedRoles.includes(req.user.role)) {
       res.status(403).json({
-        error: "Forbidden",
-        message: `Role '${req.user.role}' is not authorized to access this resource`,
-        requestId: req.requestId,
+        error: {
+          code: ErrorCode.FORBIDDEN,
+          message: `Role '${req.user.role}' is not authorized to access this resource`,
+          requestId: req.requestId,
+        },
       });
       return;
     }

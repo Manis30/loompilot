@@ -2,7 +2,7 @@
  * OpenAPI 3.0.3 Paths for Business Reports
  */
 export const reportPaths = {
-  "/api/reports/margin": {
+  "/api/v1/reports/margin": {
     get: {
       tags: ["Reports"],
       summary: "Get margin report",
@@ -30,7 +30,7 @@ export const reportPaths = {
     },
   },
 
-  "/api/reports/on-time": {
+  "/api/v1/reports/on-time": {
     get: {
       tags: ["Reports"],
       summary: "Get on-time delivery report",
@@ -58,7 +58,7 @@ export const reportPaths = {
     },
   },
 
-  "/api/reports/collections": {
+  "/api/v1/reports/collections": {
     get: {
       tags: ["Reports"],
       summary: "Get collections aging report",

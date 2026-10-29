@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import { UserRole } from "@loompilot/shared";
+import { UserRole, ErrorCode } from "@loompilot/shared";
 import { env } from "../config/env.js";
 
 export interface AuthUser {
@@ -22,9 +22,11 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     res.status(401).json({
-      error: "Unauthorized",
-      message: "Authorization token required",
-      requestId: req.requestId,
+      error: {
+        code: ErrorCode.UNAUTHENTICATED,
+        message: "Authorization token required",
+        requestId: req.requestId,
+      },
     });
     return;
   }
@@ -39,12 +41,13 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
       tenantId: payload.tenantId,
     };
     next();
-  } catch (err) {
+  } catch (_err) {
     res.status(401).json({
-      error: "Unauthorized",
-      message: "Invalid or expired authorization token",
-      requestId: req.requestId,
+      error: {
+        code: ErrorCode.UNAUTHENTICATED,
+        message: "Invalid or expired authorization token",
+        requestId: req.requestId,
+      },
     });
   }
 }
-

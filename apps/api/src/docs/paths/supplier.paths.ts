@@ -2,7 +2,7 @@
  * OpenAPI 3.0.3 Paths for Suppliers
  */
 export const supplierPaths = {
-  "/api/suppliers": {
+  "/api/v1/suppliers": {
     get: {
       tags: ["Suppliers"],
       summary: "List suppliers",
@@ -70,7 +70,7 @@ export const supplierPaths = {
     },
   },
 
-  "/api/suppliers/{id}": {
+  "/api/v1/suppliers/{id}": {
     get: {
       tags: ["Suppliers"],
       summary: "Get supplier by ID",

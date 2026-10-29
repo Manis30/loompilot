@@ -3,6 +3,7 @@ import { WorkforceController } from "../controllers/workforce.controller.js";
 import { authMiddleware } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { validate } from "../middleware/validate.js";
+import { idempotencyMiddleware } from "../middleware/idempotency.js";
 import {
   CreateWorkerSchema,
   RecordAttendanceSchema,
@@ -35,6 +36,7 @@ export function createWorkforceRoutes(controller: WorkforceController): Router {
     "/daily-outputs",
     requireRole(UserRole.OWNER, UserRole.MANAGER),
     validate(RecordDailyOutputSchema),
+    idempotencyMiddleware({ allowBodyAlias: true }),
     controller.recordDailyOutput
   );
 

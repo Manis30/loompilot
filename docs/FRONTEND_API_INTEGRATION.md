@@ -49,26 +49,26 @@ LoomPilot uses a dual-token authentication model:
 | Frontend App  |              |    Express API     |              |   MongoDB Store    |
 +---------------+              +--------------------+              +--------------------+
         |                                |                                   |
-        |--- POST /api/auth/login ------>|                                   |
+        |--- POST /api/v1/auth/login ------>|                                   |
         |    { email, password }         |--- Verify credentials ----------->|
         |                                |<-- User & Tenant record ----------|
         |<-- 200 OK ---------------------|                                   |
         |    Set-Cookie: refresh_token   |                                   |
         |    Body: { accessToken, user } |                                   |
         |                                |                                   |
-        |--- GET /api/orders ----------->|                                   |
+        |--- GET /api/v1/orders ----------->|                                   |
         |    Header: Bearer <token>      |--- Authenticate JWT & RBAC ------>|
         |<-- 200 OK { data: [...] } -----|                                   |
         |                                |                                   |
         |    [Access Token Expires]      |                                   |
-        |--- GET /api/orders ----------->|                                   |
+        |--- GET /api/v1/orders ----------->|                                   |
         |<-- 401 Unauthorized -----------|                                   |
         |                                |                                   |
-        |--- POST /api/auth/refresh ---->|                                   |
+        |--- POST /api/v1/auth/refresh ---->|                                   |
         |    Cookie: refresh_token       |--- Verify & Rotate Token -------->|
         |<-- 200 OK { accessToken } -----|                                   |
         |                                |                                   |
-        |--- Retry GET /api/orders ----->|                                   |
+        |--- Retry GET /api/v1/orders ----->|                                   |
         |<-- 200 OK ---------------------|                                   |
 ```
 
@@ -132,7 +132,7 @@ apiClient.interceptors.response.use(
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       // Avoid infinite loop if refresh itself fails
-      if (originalRequest.url?.includes("/api/auth/refresh") || originalRequest.url?.includes("/api/auth/login")) {
+      if (originalRequest.url?.includes("/api/v1/auth/refresh") || originalRequest.url?.includes("/api/v1/auth/login")) {
         setAccessToken(null);
         return Promise.reject(error);
       }
@@ -152,7 +152,7 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshResponse = await apiClient.post<{ data: { accessToken: string } }>("/api/auth/refresh");
+        const refreshResponse = await apiClient.post<{ data: { accessToken: string } }>("/api/v1/auth/refresh");
         const newAccessToken = refreshResponse.data.data.accessToken;
 
         setAccessToken(newAccessToken);
@@ -207,8 +207,8 @@ export async function apiFetch<T>(endpoint: string, options: RequestInit = {}): 
   let response = await fetch(`${BASE_URL}${endpoint}`, config);
 
   // Auto-refresh token on 401
-  if (response.status === 401 && !endpoint.includes("/api/auth/")) {
-    const refreshRes = await fetch(`${BASE_URL}/api/auth/refresh`, {
+  if (response.status === 401 && !endpoint.includes("/api/v1/auth/")) {
+    const refreshRes = await fetch(`${BASE_URL}/api/v1/auth/refresh`, {
       method: "POST",
       credentials: "include",
     });
@@ -275,16 +275,16 @@ export function rupeesToPaise(rupees: number | string): number {
 
 ## 6. Quotation PDF Streaming & Download Helper
 
-The backend endpoint `GET /api/quotations/:id/pdf` streams a binary `application/pdf` buffer with `Content-Disposition: attachment`.
+The backend endpoint `GET /api/v1/quotations/:id/pdf` streams a binary `application/pdf` buffer with `Content-Disposition: attachment`.
 
 To download it seamlessly in the user's browser without opening a raw tab:
 
 ```typescript
-// src/api/quotations.ts
+// src/api/v1/quotations.ts
 import { apiClient } from "./client";
 
 export async function downloadQuotationPdf(quotationId: string, filename = `Quotation-${quotationId}.pdf`) {
-  const response = await apiClient.get(`/api/quotations/${quotationId}/pdf`, {
+  const response = await apiClient.get(`/api/v1/quotations/${quotationId}/pdf`, {
     responseType: "blob", // Instruct Axios to parse as binary Blob
   });
 

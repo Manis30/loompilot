@@ -16,7 +16,7 @@ class FakeEnquiryRepository implements IEnquiryRepository {
     const enquiry: Enquiry = {
       id: `enq_${Date.now()}_${Math.random()}`,
       tenantId: data.tenantId,
-      enquiryNumber: data.enquiryNumber || `ENQ-${this.items.length + 1}`,
+      enquiryNumber: data.enquiryNumber || `ENQ-${String(this.items.length + 1).padStart(5, "0")}`,
       customerId: data.customerId,
       customerName: data.customerName,
       rawText: data.rawText,
