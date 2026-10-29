@@ -318,3 +318,4 @@ All 19 Mongoose models across 13 files enforce a required and indexed `tenantId:
 | **Reminder Draft** | `draft`, `approved`, `sent`, `failed`, `cancelled` | Initialized to `draft` on `addReminderDraft`<br>`draft` -> `approved` on `approveReminder` (`action: "approve"`)<br>`draft` -> `cancelled` on `approveReminder` (`action: "reject"`) | `sent`, `failed` (no notification outbox worker transitions reminder to sent or failed) |
 | **Alert** | No enum. Boolean `isAcknowledged` | `isAcknowledged: false` -> `true` on `acknowledgeAlert` (`AlertService.acknowledgeAlert#L62`) | None |
 | **Recommendation** | `proposed`, `accepted`, `rejected` | Initialized to `proposed` on `createRecommendation`<br>`proposed` -> `accepted` on `decideRecommendation` (`action: "accept"`)<br>`proposed` -> `rejected` on `decideRecommendation` (`action: "reject"`) | None |
+

@@ -5,6 +5,7 @@ import { env } from "./config/env.js";
 import { requestIdMiddleware } from "./middleware/requestId.js";
 import { auditMiddleware } from "./middleware/audit.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { setupSwagger } from "./docs/openapi.js";
 
 import {
   authRoutes,
@@ -46,6 +47,9 @@ app.get("/health", (_req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// Interactive Swagger UI & OpenAPI Specification
+setupSwagger(app);
 
 // Internal Agent Gateway (service token authenticated)
 app.use("/internal", agentGatewayRoutes);

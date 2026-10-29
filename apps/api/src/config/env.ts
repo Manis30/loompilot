@@ -45,6 +45,9 @@ const EnvSchema = z.object({
 
   // Python Agents Service
   AGENTS_SERVICE_URL: z.string().default("http://localhost:8000"),
+
+  // OpenAPI Documentation
+  ENABLE_API_DOCS: z.coerce.boolean().default(true),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

@@ -1,0 +1,212 @@
+/**
+ * OpenAPI 3.0.3 Paths for Authentication & User Management
+ */
+export const authPaths = {
+  "/api/auth/login": {
+    post: {
+      tags: ["Authentication"],
+      summary: "User login and session establishment",
+      description: "Authenticates tenant user credentials, returns a short-lived JWT access token in response body, and sets an HTTP-only refresh token cookie (`loompilot_refresh_token`). Public endpoint.",
+      operationId: "loginUser",
+      security: [],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: { $ref: "#/components/schemas/LoginRequest" },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Login successful; access token and user profile returned.",
+          headers: {
+            "Set-Cookie": {
+              schema: { type: "string", example: "loompilot_refresh_token=eyJ...; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800" },
+              description: "HTTP-only 7-day refresh token cookie.",
+            },
+          },
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: { $ref: "#/components/schemas/LoginResponse" },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
+        400: {
+          description: "Invalid email, password, or tenantId format.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/ValidationError" } } },
+        },
+        401: {
+          description: "Invalid credentials or inactive user.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/StandardError" } } },
+        },
+      },
+    },
+  },
+
+  "/api/auth/refresh": {
+    post: {
+      tags: ["Authentication"],
+      summary: "Rotate access and refresh tokens",
+      description: "Rotates refresh token and issues a new access token. Reads refresh token from HTTP-only cookie `loompilot_refresh_token` (or fallback request body `refreshToken`). Implements strict token reuse detection.",
+      operationId: "refreshToken",
+      security: [{ cookieAuth: [] }],
+      requestBody: {
+        required: false,
+        content: {
+          "application/json": {
+            schema: { $ref: "#/components/schemas/RefreshTokenRequest" },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "New access token returned and rotated refresh token cookie set.",
+          headers: {
+            "Set-Cookie": {
+              schema: { type: "string", example: "loompilot_refresh_token=eyJ...; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800" },
+            },
+          },
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: {
+                    type: "object",
+                    properties: {
+                      accessToken: { type: "string", example: "eyJhbGciOi..." },
+                    },
+                  },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
+        401: {
+          description: "Missing, expired, revoked, or reused refresh token.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/StandardError" } } },
+        },
+      },
+    },
+  },
+
+  "/api/auth/register": {
+    post: {
+      tags: ["Authentication"],
+      summary: "Register new user or bootstrap first tenant owner",
+      description: "Creates a new user. In an uninitialized tenant with zero users, anyone can register the first user if role is `owner`. In an existing tenant with users, caller must be an authenticated `owner` of that tenant.",
+      operationId: "registerUser",
+      security: [{ bearerAuth: [] }, {}],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: { $ref: "#/components/schemas/RegisterUserRequest" },
+          },
+        },
+      },
+      responses: {
+        201: {
+          description: "User registered successfully.",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: { $ref: "#/components/schemas/User" },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
+        400: {
+          description: "Validation error (e.g. invalid role, weak password).",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/ValidationError" } } },
+        },
+        403: {
+          description: "Forbidden. Non-owner attempting to create user in existing tenant.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/StandardError" } } },
+        },
+        409: {
+          description: "Conflict. Email already registered in this tenant.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/StandardError" } } },
+        },
+      },
+    },
+  },
+
+  "/api/auth/logout": {
+    post: {
+      tags: ["Authentication"],
+      summary: "Log out current user",
+      description: "Invalidates the current session's refresh token and clears the `loompilot_refresh_token` HTTP cookie. Requires valid access token.",
+      operationId: "logoutUser",
+      security: [{ bearerAuth: [] }],
+      responses: {
+        200: {
+          description: "Logged out successfully and cookie cleared.",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: {
+                    type: "object",
+                    properties: {
+                      message: { type: "string", example: "Logged out successfully" },
+                    },
+                  },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
+        401: {
+          description: "Unauthorized. Missing or invalid Bearer JWT.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/StandardError" } } },
+        },
+      },
+    },
+  },
+
+  "/api/auth/me": {
+    get: {
+      tags: ["Authentication"],
+      summary: "Get current authenticated user info",
+      description: "Returns decoded identity claims (userId, email, role, tenantId) from the authenticated access token. Accessible to all roles.",
+      operationId: "getCurrentUser",
+      security: [{ bearerAuth: [] }],
+      responses: {
+        200: {
+          description: "User profile claims.",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  data: { $ref: "#/components/schemas/AuthMeResponse" },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
+        401: {
+          description: "Unauthorized. Missing or expired access token.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/StandardError" } } },
+        },
+      },
+    },
+  },
+};
+

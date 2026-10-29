@@ -327,3 +327,4 @@ Implemented in `QuotationService` (`services/quotation.service.ts`):
 1. `IAgentsClient.requestDraft({ tenantId, enquiryId })`: Invoked when user requests draft from enquiry (`POST /api/quotations/draft`).
 2. `IAgentsClient.recalculate({ tenantId, quotationId, lineItems, marginPct, assumptions })`: Invoked when user edits quotation line items (`POST /api/quotations/:id/recalculate`).
 - **Active Status**: In production wiring, uses `UnavailableAgentsClient` (`integrations/agents/unavailable.agents-client.ts#L5`). Transitions draft to `generation_failed` and rejects recalculate with `BadRequestError` because Stage 4 real client connection is not yet wired. Tests utilize `FakeAgentsClient` (`tests/fakes/fake-agents-client.ts`).
+
