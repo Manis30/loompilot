@@ -10,7 +10,10 @@ export class AuthController {
   constructor(private readonly service: AuthService) {}
 
   login = asyncHandler(async (req: Request, res: Response) => {
-    const result = await this.service.login(req.body);
+    const result = await this.service.login(req.body, {
+      ip: req.ip,
+      userAgent: req.headers["user-agent"],
+    });
 
     res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, {
       httpOnly: true,
@@ -34,7 +37,10 @@ export class AuthController {
       throw new UnauthorizedError("Refresh token is missing");
     }
 
-    const result = await this.service.refresh(token);
+    const result = await this.service.refresh(token, {
+      ip: req.ip,
+      userAgent: req.headers["user-agent"],
+    });
 
     res.cookie(REFRESH_COOKIE_NAME, result.refreshToken, {
       httpOnly: true,
@@ -52,7 +58,7 @@ export class AuthController {
   });
 
   logout = asyncHandler(async (req: Request, res: Response) => {
-    const token = req.cookies?.[REFRESH_COOKIE_NAME];
+    const token = req.cookies?.[REFRESH_COOKIE_NAME] || req.body?.refreshToken;
     if (req.user && token) {
       await this.service.logout(req.user.tenantId, req.user.userId, token);
     }
@@ -60,6 +66,38 @@ export class AuthController {
     res.clearCookie(REFRESH_COOKIE_NAME);
     res.json({
       message: "Successfully logged out",
+      requestId: req.requestId,
+    });
+  });
+
+  logoutAll = asyncHandler(async (req: Request, res: Response) => {
+    if (req.user) {
+      await this.service.logoutAll(req.user.tenantId, req.user.userId);
+    }
+
+    res.clearCookie(REFRESH_COOKIE_NAME);
+    res.json({
+      message: "Successfully logged out from all sessions",
+      requestId: req.requestId,
+    });
+  });
+
+  changePassword = asyncHandler(async (req: Request, res: Response) => {
+    const actor = {
+      tenantId: req.user!.tenantId,
+      userId: req.user!.userId,
+      role: req.user!.role,
+      email: req.user!.email,
+    };
+
+    await this.service.changePassword(
+      actor,
+      req.body.currentPassword,
+      req.body.newPassword
+    );
+
+    res.json({
+      message: "Password changed successfully",
       requestId: req.requestId,
     });
   });
@@ -81,11 +119,16 @@ export class AuthController {
         }
       : undefined;
 
-    const user = await this.service.register(req.body, actor);
+    // Must be restricted to caller's tenant
+    const input = {
+      ...req.body,
+      tenantId: req.user?.tenantId || req.body.tenantId,
+    };
+
+    const user = await this.service.register(input, actor);
     res.status(201).json({
       data: toUserResponse(user),
       requestId: req.requestId,
     });
   });
 }
-

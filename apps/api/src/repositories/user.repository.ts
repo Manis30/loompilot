@@ -64,11 +64,33 @@ export class MongoUserRepository implements IUserRepository {
   }
 
   async list(tenantId: string): Promise<User[]> {
-    const docs = await UserModel.find({ tenantId, isActive: true }).sort({ name: 1 }).lean();
+    const docs = await UserModel.find({ tenantId }).sort({ name: 1 }).lean();
     return docs.map((d) => this.toEntity(d));
   }
 
   async count(tenantId: string): Promise<number> {
     return UserModel.countDocuments({ tenantId });
+  }
+
+  async countActiveOwners(tenantId: string): Promise<number> {
+    return UserModel.countDocuments({
+      tenantId,
+      role: "owner",
+      isActive: true,
+    });
+  }
+
+  async update(
+    tenantId: string,
+    id: string,
+    data: Partial<User>,
+    tx?: TxContext
+  ): Promise<User | null> {
+    const doc = await UserModel.findOneAndUpdate(
+      { _id: id, tenantId },
+      { $set: data },
+      { new: true, session: tx?.session || null }
+    ).lean();
+    return doc ? this.toEntity(doc) : null;
   }
 }

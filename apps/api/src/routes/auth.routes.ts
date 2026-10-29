@@ -1,39 +1,34 @@
 import { Router } from "express";
-import jwt from "jsonwebtoken";
 import { AuthController } from "../controllers/auth.controller.js";
 import { authMiddleware } from "../middleware/auth.js";
+import { requireRole } from "../middleware/rbac.js";
 import { validate } from "../middleware/validate.js";
-import { LoginSchema, RegisterUserSchema } from "../validators/auth.validator.js";
-import { env } from "../config/env.js";
+import { authLoginLimiter } from "../middleware/rateLimiter.js";
+import {
+  LoginSchema,
+  RegisterUserSchema,
+  ChangePasswordSchema,
+} from "../validators/auth.validator.js";
+import { UserRole } from "@loompilot/shared";
 
 export function createAuthRoutes(controller: AuthController): Router {
   const router = Router();
 
-  router.post("/login", validate(LoginSchema), controller.login);
+  router.post("/login", authLoginLimiter, validate(LoginSchema), controller.login);
   router.post("/refresh", controller.refresh);
   router.post("/logout", authMiddleware, controller.logout);
+  router.post("/logout-all", authMiddleware, controller.logoutAll);
+  router.post("/change-password", authMiddleware, validate(ChangePasswordSchema), controller.changePassword);
   router.get("/me", authMiddleware, controller.me);
 
-  // User creation: owner-only in existing tenant, or first owner bootstrap in new tenant
+  // User registration: strictly authenticated OWNER-only within caller's tenant
   router.post(
     "/register",
+    authMiddleware,
+    requireRole(UserRole.OWNER),
     validate(RegisterUserSchema),
-    (req, _res, next) => {
-      const authHeader = req.headers.authorization;
-      if (authHeader?.startsWith("Bearer ")) {
-        try {
-          const token = authHeader.substring(7);
-          const payload = jwt.verify(token, env.JWT_SECRET) as any;
-          req.user = payload;
-        } catch {
-          // Token invalid, req.user remains undefined
-        }
-      }
-      next();
-    },
     controller.register
   );
 
   return router;
 }
-

@@ -79,14 +79,7 @@ export class WorkforceService {
     actor: Actor,
     input: RecordDailyOutputInput
   ): Promise<DailyOutput> {
-    // 1. Idempotency check: if output with this key already recorded, return it
-    const existing = await this.repo.findDailyOutputByIdempotencyKey(
-      actor.tenantId,
-      input.idempotencyKey
-    );
-    if (existing) {
-      return existing;
-    }
+    let isNewRecord = false;
     const idempotencyKey =
       input.idempotencyKey ||
       `daily_${input.orderId}_${input.processId}_${input.date}`;
@@ -121,7 +114,7 @@ export class WorkforceService {
     });
 
     // 3. Amendment 2: Event-triggered debounced monitoring run per order
-    if (this.monitoringTrigger) {
+    if (isNewRecord && this.monitoringTrigger) {
       this.monitoringTrigger(actor.tenantId, input.orderId).catch(() => { });
     }
 

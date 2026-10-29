@@ -32,5 +32,7 @@ export interface IUserRepository {
   removeRefreshToken(tenantId: string, userId: string, token: string): Promise<void>;
   list(tenantId: string): Promise<User[]>;
   count(tenantId: string): Promise<number>;
+  countActiveOwners(tenantId: string): Promise<number>;
+  update(tenantId: string, id: string, data: Partial<User>, tx?: TxContext): Promise<User | null>;
 }
 

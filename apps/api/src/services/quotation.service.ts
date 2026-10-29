@@ -234,11 +234,13 @@ export class QuotationService {
     if (this.audit) {
       await this.audit.record({
         tenantId: actor.tenantId,
-        userId: actor.userId,
-        userRole: actor.role,
+        actorId: actor.userId,
+        actorRole: actor.role,
         action: "QUOTATION_APPROVED",
-        entity: "quotation",
+        entityType: "quotation",
         entityId: id,
+        before: { status: quote.status, version: quote.version },
+        after: { status: QuotationStatus.APPROVED, version: (quote.version || 1) + 1 },
       });
     }
 
@@ -422,12 +424,17 @@ export class QuotationService {
         await this.audit.record(
           {
             tenantId: actor.tenantId,
-            userId: actor.userId,
-            userRole: actor.role,
-            action: "QUOTATION_CONFIRMED",
-            entity: "quotation",
-            entityId: quote.id,
-            changes: { orderId: order.id, orderNumber: order.orderNumber },
+            actorId: actor.userId,
+            actorRole: actor.role,
+            action: "ORDER_CONFIRMED",
+            entityType: "order",
+            entityId: order.id,
+            before: { quotationId: quote.id, status: quote.status },
+            after: {
+              orderId: order.id,
+              orderNumber: order.orderNumber,
+              status: order.status,
+            },
           },
           tx
         );

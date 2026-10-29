@@ -127,12 +127,13 @@ export class PaymentService {
     if (this.audit) {
       await this.audit.record({
         tenantId: actor.tenantId,
-        userId: actor.userId,
-        userRole: actor.role,
+        actorId: actor.userId,
+        actorRole: actor.role,
         action: `REMINDER_${input.action.toUpperCase()}`,
-        entity: "payment_reminder",
+        entityType: "payment_reminder",
         entityId: reminderId,
-        changes: { paymentId, action: input.action },
+        before: { status: reminder.status },
+        after: { paymentId, ...update },
       });
     }
 

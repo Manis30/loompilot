@@ -101,10 +101,10 @@ export const authPaths = {
   "/api/v1/auth/register": {
     post: {
       tags: ["Authentication"],
-      summary: "Register new user or bootstrap first tenant owner",
-      description: "Creates a new user. In an uninitialized tenant with zero users, anyone can register the first user if role is `owner`. In an existing tenant with users, caller must be an authenticated `owner` of that tenant.",
+      summary: "Register new user in tenant",
+      description: "Creates a new user within caller's tenant. Caller must be an authenticated `owner` of that tenant.",
       operationId: "registerUser",
-      security: [{ bearerAuth: [] }, {}],
+      security: [{ bearerAuth: [] }],
       requestBody: {
         required: true,
         content: {
@@ -132,12 +132,95 @@ export const authPaths = {
           description: "Validation error (e.g. invalid role, weak password).",
           content: { "application/json": { schema: { $ref: "#/components/schemas/ValidationError" } } },
         },
+        401: {
+          description: "Unauthorized. Missing or invalid Bearer JWT.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/StandardError" } } },
+        },
         403: {
-          description: "Forbidden. Non-owner attempting to create user in existing tenant.",
+          description: "Forbidden. Caller is not an owner.",
           content: { "application/json": { schema: { $ref: "#/components/schemas/StandardError" } } },
         },
         409: {
           description: "Conflict. Email already registered in this tenant.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/StandardError" } } },
+        },
+      },
+    },
+  },
+
+  "/api/v1/auth/logout-all": {
+    post: {
+      tags: ["Authentication"],
+      summary: "Log out from all sessions",
+      description: "Revokes all refresh tokens across all sessions for the authenticated user and clears the cookie.",
+      operationId: "logoutAllSessions",
+      security: [{ bearerAuth: [] }],
+      responses: {
+        200: {
+          description: "Logged out from all sessions successfully.",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  message: { type: "string", example: "Successfully logged out from all sessions" },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
+        401: {
+          description: "Unauthorized.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/StandardError" } } },
+        },
+      },
+    },
+  },
+
+  "/api/v1/auth/change-password": {
+    post: {
+      tags: ["Authentication"],
+      summary: "Change own password",
+      description: "Allows an authenticated user to change their own password by providing current and new passwords.",
+      operationId: "changePassword",
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              required: ["currentPassword", "newPassword"],
+              properties: {
+                currentPassword: { type: "string" },
+                newPassword: { type: "string", minLength: 8 },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        200: {
+          description: "Password changed successfully.",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  message: { type: "string", example: "Password changed successfully" },
+                  requestId: { $ref: "#/components/schemas/RequestId" },
+                },
+              },
+            },
+          },
+        },
+        400: {
+          description: "Validation error.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/ValidationError" } } },
+        },
+        401: {
+          description: "Current password incorrect or unauthorized.",
           content: { "application/json": { schema: { $ref: "#/components/schemas/StandardError" } } },
         },
       },

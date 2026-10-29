@@ -15,6 +15,12 @@ export const RegisterUserSchema = z.object({
   role: z.nativeEnum(UserRole).default(UserRole.SALES),
 });
 
+export const ChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "currentPassword is required"),
+  newPassword: z.string().min(8, "newPassword must be at least 8 characters"),
+});
+
 export type LoginInput = z.infer<typeof LoginSchema>;
 export type RegisterUserInput = z.infer<typeof RegisterUserSchema>;
+export type ChangePasswordInput = z.infer<typeof ChangePasswordSchema>;
 

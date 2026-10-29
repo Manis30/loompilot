@@ -1,4 +1,6 @@
 import { authPaths } from "./auth.paths.js";
+import { userPaths } from "./user.paths.js";
+import { auditPaths } from "./audit.paths.js";
 import { customerPaths } from "./customer.paths.js";
 import { enquiryPaths } from "./enquiry.paths.js";
 import { quotationPaths } from "./quotation.paths.js";
@@ -17,6 +19,8 @@ import { healthPaths } from "./health.paths.js";
 export const openapiPaths = {
   ...healthPaths,
   ...authPaths,
+  ...userPaths,
+  ...auditPaths,
   ...customerPaths,
   ...enquiryPaths,
   ...quotationPaths,

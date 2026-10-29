@@ -967,6 +967,25 @@ export const openapiSchemas = {
     },
   },
 
+  AuditLogEntry: {
+    type: "object",
+    required: ["id", "tenantId", "actorId", "actorRole", "action", "entityType", "timestamp"],
+    properties: {
+      id: { type: "string", example: "65e0a1b2c3d4e5f6a7b8c999" },
+      tenantId: { type: "string", example: "tenant_default" },
+      actorId: { type: "string", example: "usr_101" },
+      actorRole: { type: "string", example: "owner" },
+      action: { type: "string", example: "QUOTATION_APPROVED" },
+      entityType: { type: "string", example: "quotation" },
+      entityId: { type: "string", example: "65e0a1b2c3d4e5f6a7b8c801" },
+      before: { type: "object", nullable: true },
+      after: { type: "object", nullable: true },
+      ip: { type: "string", example: "127.0.0.1" },
+      userAgent: { type: "string" },
+      timestamp: { type: "string", format: "date-time" },
+    },
+  },
+
   // ==========================================
   // System Health
   // ==========================================

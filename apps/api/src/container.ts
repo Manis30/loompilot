@@ -4,9 +4,15 @@ import { registerAuditRepository } from "./middleware/audit.js";
 
 // Users & Auth
 import { MongoUserRepository } from "./repositories/user.repository.js";
+import { MongoRefreshTokenRepository } from "./repositories/refresh-token.repository.js";
 import { AuthService } from "./services/auth.service.js";
 import { AuthController } from "./controllers/auth.controller.js";
 import { createAuthRoutes } from "./routes/auth.routes.js";
+import { UserService } from "./services/user.service.js";
+import { UserController } from "./controllers/user.controller.js";
+import { createUserRoutes } from "./routes/user.routes.js";
+import { AuditController } from "./controllers/audit.controller.js";
+import { createAuditRoutes } from "./routes/audit.routes.js";
 
 // Enquiries
 import { MongoEnquiryRepository } from "./repositories/enquiry.repository.js";
@@ -95,9 +101,17 @@ export const pdfRenderer = new PdfMakeRenderer();
 
 // Users & Auth Composition
 export const userRepository = new MongoUserRepository();
-export const authService = new AuthService(userRepository, auditLogRepository);
+export const refreshTokenRepository = new MongoRefreshTokenRepository();
+export const authService = new AuthService(userRepository, refreshTokenRepository, auditLogRepository);
 export const authController = new AuthController(authService);
 export const authRoutes = createAuthRoutes(authController);
+
+export const userService = new UserService(userRepository, auditLogRepository);
+export const userController = new UserController(userService);
+export const userRoutes = createUserRoutes(userController);
+
+export const auditController = new AuditController(auditLogRepository);
+export const auditRoutes = createAuditRoutes(auditController);
 
 // Enquiries Composition
 export const enquiryRepository = new MongoEnquiryRepository();

@@ -1,16 +1,20 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import helmet from "helmet";
 import mongoose from "mongoose";
 import { env } from "./config/env.js";
 import { getRedisClient } from "./config/redis.js";
 import { requestIdMiddleware } from "./middleware/requestId.js";
 import { auditMiddleware } from "./middleware/audit.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+import { generalApiLimiter } from "./middleware/rateLimiter.js";
 import { setupSwagger } from "./docs/openapi.js";
 
 import {
   authRoutes,
+  userRoutes,
+  auditRoutes,
   enquiryRoutes,
   customerRoutes,
   materialRoutes,
@@ -28,14 +32,42 @@ import {
 
 export const app = express();
 
+// Trust reverse proxy in production
+if (env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
+// Helmet security headers (bypass CSP on /docs for Swagger UI)
+app.use((req, res, next) => {
+  if (req.path.startsWith("/docs")) {
+    return next();
+  }
+  helmet()(req, res, next);
+});
+
+// Explicit CORS allowlist
+const allowedOrigins = (env.ALLOWED_ORIGINS || env.CORS_ORIGIN)
+  .split(",")
+  .map((s) => s.trim());
+
 app.use(
   cors({
-    origin: env.CORS_ORIGIN,
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes("*") && env.NODE_ENV !== "production") {
+        return callback(null, true);
+      }
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
   })
 );
+
 app.use(cookieParser());
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
 // Request tracing and auditing
 app.use(requestIdMiddleware);
@@ -88,8 +120,13 @@ setupSwagger(app);
 // Internal Agent Gateway (service token authenticated)
 app.use("/internal/v1", agentGatewayRoutes);
 
+// Rate limiter applied across all application API routes
+app.use("/api/v1", generalApiLimiter);
+
 // Public / Authenticated Application API routes v1
 app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/users", userRoutes);
+app.use("/api/v1/audit", auditRoutes);
 app.use("/api/v1/customers", customerRoutes);
 app.use("/api/v1/enquiries", enquiryRoutes);
 app.use("/api/v1/quotations", quotationRoutes);

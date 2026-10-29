@@ -8,14 +8,23 @@ export interface IAuditLogDocument extends Document, Omit<AuditLogEntry, "id"> {
 const AuditLogSchema = new Schema<IAuditLogDocument>(
   {
     tenantId: { type: String, required: true, index: true },
-    userId: { type: String, required: true, index: true },
-    userRole: { type: String, required: true },
+    actorId: { type: String, required: true, index: true },
+    actorRole: { type: String, required: true },
     action: { type: String, required: true },
-    entity: { type: String, required: true, index: true },
-    entityId: { type: String },
+    entityType: { type: String, required: true, index: true },
+    entityId: { type: String, index: true },
+    before: { type: Schema.Types.Mixed },
+    after: { type: Schema.Types.Mixed },
+    ip: { type: String },
+    userAgent: { type: String },
+    timestamp: { type: Date, default: Date.now, index: true },
+
+    // Compatibility fields
+    userId: { type: String },
+    userRole: { type: String },
+    entity: { type: String },
     changes: { type: Schema.Types.Mixed },
     ipAddress: { type: String },
-    userAgent: { type: String },
     statusCode: { type: Number, default: 200 },
     durationMs: { type: Number, default: 0 },
     requestId: { type: String, default: "unknown" },
@@ -23,7 +32,8 @@ const AuditLogSchema = new Schema<IAuditLogDocument>(
   { timestamps: { createdAt: true, updatedAt: false } }
 );
 
-AuditLogSchema.index({ tenantId: 1, createdAt: -1 });
+AuditLogSchema.index({ tenantId: 1, timestamp: -1 });
+AuditLogSchema.index({ tenantId: 1, entityType: 1, entityId: 1 });
+AuditLogSchema.index({ tenantId: 1, actorId: 1 });
 
 export const AuditLogModel = mongoose.model<IAuditLogDocument>("AuditLog", AuditLogSchema);
-
