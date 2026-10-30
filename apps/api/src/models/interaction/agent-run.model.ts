@@ -84,4 +84,4 @@ AgentRunSchema.index({ tenantId: 1, orderId: 1, createdAt: 1 });
 
 export const AgentRunModel: mongoose.Model<IAgentRun> =
   (mongoose.models.AgentRun as mongoose.Model<IAgentRun>) ||
-  mongoose.model<IAgentRun>("AgentRun", AgentRunSchema);
+  mongoose.model<IAgentRun>("AgentRun", AgentRunSchema, "agentRuns");

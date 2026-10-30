@@ -38,4 +38,4 @@ IdempotencyKeySchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // TTL 
 
 export const IdempotencyKeyModel: mongoose.Model<IIdempotencyKey> =
   (mongoose.models.IdempotencyKey as mongoose.Model<IIdempotencyKey>) ||
-  mongoose.model<IIdempotencyKey>("IdempotencyKey", IdempotencyKeySchema);
+  mongoose.model<IIdempotencyKey>("IdempotencyKey", IdempotencyKeySchema, "idempotencyKeys");

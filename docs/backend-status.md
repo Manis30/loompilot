@@ -1,6 +1,6 @@
 # LoomPilot Backend Status Report (Generated)
 
-**Generated At:** `2026-10-30T11:43:56.425Z`  
+**Generated At:** `2026-10-30T12:15:23.830Z`  
 **Monorepo:** pnpm workspace (`apps/api`, `packages/shared`, `packages/agents-client`, `apps/web`)  
 **TypeScript Typecheck:** Passing (0 errors)  
 **Architectural Decoupling (`depcruise`):** Passing (0 violations across 122 modules, 346 dependencies)  
@@ -77,25 +77,27 @@ Total Registered Route Endpoints: **28**
 
 ## 3. Repositories (`apps/api/src/repositories`)
 
-Total Repositories: **8**
+Total Repositories: **10**
 
 | # | Repository |
 | :---: | :--- |
-| 1 | `audit-log.repository.ts` |
-| 2 | `base.repository.ts` |
-| 3 | `client-account.repository.ts` |
-| 4 | `idempotency.repository.ts` |
-| 5 | `refresh-token.repository.ts` |
-| 6 | `settings.repository.ts` |
-| 7 | `unit-of-work.ts` |
-| 8 | `user.repository.ts` |
+| 1 | `admin-costing.repository.ts` |
+| 2 | `audit-log.repository.ts` |
+| 3 | `base.repository.ts` |
+| 4 | `client-account.repository.ts` |
+| 5 | `idempotency.repository.ts` |
+| 6 | `orders.repository.ts` |
+| 7 | `refresh-token.repository.ts` |
+| 8 | `settings.repository.ts` |
+| 9 | `unit-of-work.ts` |
+| 10 | `user.repository.ts` |
 
 ---
 
 ## 4. Test Suite Summary (`apps/api/test`)
 
 Total Test Files: **28**  
-Total Test Declarations: **134**
+Total Test Declarations: **141**
 
 | Test File | Test Count |
 | :--- | :---: |
@@ -113,13 +115,13 @@ Total Test Declarations: **134**
 | `middleware/rate-limiter.test.ts` | 4 |
 | `middleware/rbac-matrix.test.ts` | 5 |
 | `middleware/request-id.test.ts` | 2 |
-| `models/client-safe-security.test.ts` | 6 |
 | `models/paise-validation.test.ts` | 4 |
-| `models/partial-indexes.test.ts` | 2 |
+| `models/partial-indexes.test.ts` | 6 |
 | `models/ref-types.test.ts` | 2 |
 | `models/schema-indexes.test.ts` | 11 |
-| `models/schema-v4-rules.test.ts` | 16 |
+| `models/schema-v4-rules.test.ts` | 17 |
 | `repositories/base-repository.test.ts` | 7 |
+| `repositories/orders-repository.test.ts` | 8 |
 | `repositories/unit-of-work.test.ts` | 7 |
 | `routes/health.test.ts` | 6 |
 | `scripts/create-admin.test.ts` | 1 |

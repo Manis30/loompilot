@@ -65,6 +65,17 @@ module.exports = {
         path: "^src/(models|repositories)",
       },
     },
+    {
+      name: "admin-costing-isolation",
+      severity: "error",
+      comment: "Only admin costing repository and admin costing services may access AdminCostingRepository",
+      from: {
+        pathNot: "^src/(repositories/admin-costing\\.repository\\.ts|services/admin/)",
+      },
+      to: {
+        path: "^src/repositories/admin-costing\\.repository\\.ts",
+      },
+    },
   ],
   options: {
     doNotFollow: {

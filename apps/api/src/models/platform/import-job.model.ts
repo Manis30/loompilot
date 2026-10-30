@@ -48,4 +48,4 @@ ImportJobSchema.index({ tenantId: 1, createdAt: -1 });
 
 export const ImportJobModel: mongoose.Model<IImportJob> =
   (mongoose.models.ImportJob as mongoose.Model<IImportJob>) ||
-  mongoose.model<IImportJob>("ImportJob", ImportJobSchema);
+  mongoose.model<IImportJob>("ImportJob", ImportJobSchema, "importJobs");

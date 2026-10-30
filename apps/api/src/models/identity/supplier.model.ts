@@ -37,4 +37,4 @@ SupplierSchema.index({ tenantId: 1, supplierName: 1 });
 
 export const SupplierModel: mongoose.Model<ISupplier> =
   (mongoose.models.Supplier as mongoose.Model<ISupplier>) ||
-  mongoose.model<ISupplier>("Supplier", SupplierSchema);
+  mongoose.model<ISupplier>("Supplier", SupplierSchema, "suppliers");

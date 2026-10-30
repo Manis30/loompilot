@@ -63,7 +63,7 @@ const UserSchema = new Schema<IUser>(
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, lowercase: true, trim: true },
     phone: { type: String, trim: true },
-    passwordHash: { type: String, required: true },
+    passwordHash: { type: String, required: true, select: false },
     processAreas: { type: [String], required: true },
     status: {
       type: String,
@@ -82,4 +82,4 @@ UserSchema.index({ tenantId: 1, email: 1 }, { unique: true });
 
 export const UserModel: mongoose.Model<IUser> =
   (mongoose.models.User as mongoose.Model<IUser>) ||
-  mongoose.model<IUser>("User", UserSchema);
+  mongoose.model<IUser>("User", UserSchema, "users");

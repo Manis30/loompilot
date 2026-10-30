@@ -16,6 +16,7 @@
 export interface ManifestField {
   type: "String" | "Number" | "Boolean" | "Date" | "ObjectId" | "Mixed" | "Array";
   ref?: string;
+  description?: string;
   enum?: readonly string[];
   paise?: boolean;
   allowSigned?: boolean;
@@ -75,7 +76,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   // =========================================================================
 
   SettingsModel: {
-    modelName: "SettingsModel",
+    modelName: "Settings",
     collectionName: "settings",
     isDomain: true,
     fields: {
@@ -158,13 +159,13 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   },
 
   UserModel: {
-    modelName: "UserModel",
+    modelName: "User",
     collectionName: "users",
     isDomain: true,
     fields: {
       role: { type: "String", enum: ["admin", "supervisor"], required: true },
       name: { type: "String", required: true },
-      email: { type: "String", required: true },
+      email: { type: "String" },
       phone: { type: "String" },
       passwordHash: { type: "String", required: true, select: false },
       processAreas: {
@@ -194,13 +195,13 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   },
 
   ClientModel: {
-    modelName: "ClientModel",
+    modelName: "Client",
     collectionName: "clients",
     isDomain: true,
     fields: {
       clientName: { type: "String", required: true },
       contactPerson: { type: "String" },
-      email: { type: "String", required: true },
+      email: { type: "String" },
       phone: { type: "String" },
       city: { type: "String" },
       address: { type: "String" },
@@ -251,13 +252,13 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   // =========================================================================
 
   SupplierModel: {
-    modelName: "SupplierModel",
+    modelName: "Supplier",
     collectionName: "suppliers",
     isDomain: true,
     fields: {
       supplierName: { type: "String", required: true },
       contactPerson: { type: "String" },
-      email: { type: "String", required: true },
+      email: { type: "String" },
       phone: { type: "String", required: true },
       city: { type: "String", required: true },
       country: { type: "String" },
@@ -268,7 +269,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   },
 
   MaterialModel: {
-    modelName: "MaterialModel",
+    modelName: "Material",
     collectionName: "materials",
     isDomain: true,
     fields: {
@@ -304,7 +305,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   },
 
   MachineModel: {
-    modelName: "MachineModel",
+    modelName: "Machine",
     collectionName: "machines",
     isDomain: true,
     fields: {
@@ -324,7 +325,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   },
 
   ProductModel: {
-    modelName: "ProductModel",
+    modelName: "Product",
     collectionName: "products",
     isDomain: true,
     fields: {
@@ -365,7 +366,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   },
 
   MarketPriceModel: {
-    modelName: "MarketPriceModel",
+    modelName: "MarketPrice",
     collectionName: "marketPrices",
     isDomain: true,
     fields: {
@@ -424,14 +425,18 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   // =========================================================================
 
   OrderModel: {
-    modelName: "OrderModel",
+    modelName: "Order",
     collectionName: "orders",
     isDomain: true,
     fields: {
       // Identity Block
       orderNumber: { type: "String", required: true },
       clientId: { type: "ObjectId", ref: "Client", required: true },
-      productId: { type: "ObjectId", ref: "Product", required: true },
+      productId: {
+        type: "ObjectId",
+        ref: "Product",
+        description: "Catalog product FK (optional when productDescription is present)",
+      },
       quantity: { type: "Number", required: true },
       deliveryDeadline: { type: "String", required: true }, // YYYY-MM-DD
       status: {
@@ -1007,9 +1012,10 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
       { fields: { tenantId: 1, "production.assignedSupervisors.supervisorId": 1, status: 1 } },
       { fields: { tenantId: 1, "financials.milestones.status": 1, "financials.milestones.dueDate": 1 } },
       {
-        fields: { tenantId: 1, "financials.milestones.receipts.razorpayPaymentId": 1 },
-        unique: true,
-        partialFilterExpression: { "financials.milestones.receipts.razorpayPaymentId": { $type: "string" } },
+        fields: {
+          tenantId: 1,
+          "financials.milestones.receipts.razorpayPaymentId": 1,
+        },
       },
       {
         fields: { tenantId: 1, idempotencyKey: 1 },
@@ -1020,7 +1026,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   },
 
   SupervisorDailyReportModel: {
-    modelName: "SupervisorDailyReportModel",
+    modelName: "SupervisorDailyReport",
     collectionName: "supervisorDailyReports",
     isDomain: true,
     fields: {
@@ -1127,7 +1133,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   },
 
   ConversationModel: {
-    modelName: "ConversationModel",
+    modelName: "Conversation",
     collectionName: "conversations",
     isDomain: true,
     fields: {
@@ -1212,7 +1218,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   },
 
   MaintenanceTicketModel: {
-    modelName: "MaintenanceTicketModel",
+    modelName: "MaintenanceTicket",
     collectionName: "maintenanceTickets",
     isDomain: true,
     fields: {
@@ -1236,7 +1242,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   },
 
   StockMovementModel: {
-    modelName: "StockMovementModel",
+    modelName: "StockMovement",
     collectionName: "stockMovements",
     isDomain: true,
     fields: {
@@ -1262,7 +1268,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   },
 
   AgentRunModel: {
-    modelName: "AgentRunModel",
+    modelName: "AgentRun",
     collectionName: "agentRuns",
     isDomain: true,
     fields: {
@@ -1305,7 +1311,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   // =========================================================================
 
   RefreshTokenModel: {
-    modelName: "RefreshTokenModel",
+    modelName: "RefreshToken",
     collectionName: "refreshTokens",
     isDomain: false,
     fields: {
@@ -1326,7 +1332,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   },
 
   IdempotencyKeyModel: {
-    modelName: "IdempotencyKeyModel",
+    modelName: "IdempotencyKey",
     collectionName: "idempotencyKeys",
     isDomain: false,
     fields: {
@@ -1350,7 +1356,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   },
 
   AuditLogModel: {
-    modelName: "AuditLogModel",
+    modelName: "AuditLog",
     collectionName: "auditLogs",
     isDomain: false,
     fields: {
@@ -1384,7 +1390,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   },
 
   CounterModel: {
-    modelName: "CounterModel",
+    modelName: "Counter",
     collectionName: "counters",
     isDomain: false,
     fields: {
@@ -1395,7 +1401,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   },
 
   NotificationModel: {
-    modelName: "NotificationModel",
+    modelName: "Notification",
     collectionName: "notifications",
     isDomain: false,
     fields: {
@@ -1447,7 +1453,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   },
 
   OutboxMessageModel: {
-    modelName: "OutboxMessageModel",
+    modelName: "OutboxMessage",
     collectionName: "outboxMessages",
     isDomain: false,
     fields: {
@@ -1475,7 +1481,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   },
 
   ImportJobModel: {
-    modelName: "ImportJobModel",
+    modelName: "ImportJob",
     collectionName: "importJobs",
     isDomain: false,
     fields: {
@@ -1505,7 +1511,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
   },
 
   FileRecordModel: {
-    modelName: "FileRecordModel",
+    modelName: "File",
     collectionName: "files",
     isDomain: false,
     fields: {

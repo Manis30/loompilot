@@ -8,10 +8,12 @@ export class UserRepository extends BaseRepository<IUser> {
   }
 
   async findByEmail(tenantId: string, email: string): Promise<IUser | null> {
-    return this.model.findOne({
-      tenantId,
-      email: email.toLowerCase().trim(),
-    });
+    return this.model
+      .findOne({
+        tenantId,
+        email: email.toLowerCase().trim(),
+      })
+      .select("+passwordHash");
   }
 
   async countActiveAdmins(tenantId: string): Promise<number> {

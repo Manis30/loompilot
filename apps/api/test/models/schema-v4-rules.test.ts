@@ -15,22 +15,26 @@ import { SCHEMA_V4_MANIFEST } from "@loompilot/shared";
 
 describe("Stage 3.5: Step 2 Schema v4 Architectural Rules & Invariants", () => {
   // -------------------------------------------------------------------------
-  // 1. Model Set == Manifest
+  // 1. Model Set == Manifest (mongoose.modelNames() & collection.name)
   // -------------------------------------------------------------------------
-  it("proves model-set == manifest (exactly the 22 Schema v4 models are loaded)", () => {
-    const manifestModelNames = Object.keys(SCHEMA_V4_MANIFEST).sort();
-    const actualModelNames = Object.keys(Models)
-      .filter((k) => k in SCHEMA_V4_MANIFEST)
+  it("proves model-set == manifest (compares mongoose.modelNames() and collection.name, failing on extras)", () => {
+    const expectedModelNames = Object.values(SCHEMA_V4_MANIFEST)
+      .map((m) => m.modelName)
       .sort();
+    const actualModelNames = mongoose.modelNames().sort();
 
+    // 1. Exactly the 22 models are registered, fail on any extra models
     expect(actualModelNames.length).toBe(22);
-    expect(manifestModelNames.length).toBe(22);
-    expect(actualModelNames).toEqual(manifestModelNames);
+    expect(expectedModelNames.length).toBe(22);
+    expect(actualModelNames).toEqual(expectedModelNames);
 
-    for (const modelName of manifestModelNames) {
-      const model = (Models as any)[modelName];
+    // 2. Verify each model matches its manifest definition and collection.name
+    for (const [key, manifest] of Object.entries(SCHEMA_V4_MANIFEST)) {
+      const model = (Models as any)[key] || mongoose.model(manifest.modelName);
+      expect(model).toBeDefined();
       expect(typeof model).toBe("function");
-      expect(model.schema).toBeDefined();
+      expect(model.modelName).toBe(manifest.modelName);
+      expect(model.collection.name).toBe(manifest.collectionName);
     }
   });
 
@@ -259,25 +263,56 @@ describe("Stage 3.5: Step 2 Schema v4 Architectural Rules & Invariants", () => {
   });
 
   // -------------------------------------------------------------------------
-  // 6. User processAreas Validated against Settings processConfig Areas
+  // 7. Order productId vs productDescription Validation
   // -------------------------------------------------------------------------
-  describe("User processAreas vs Settings processConfig Areas Validation", () => {
-    const validConfigAreas = ["spinning", "weaving", "dyeing", "finishing", "packing"];
+  describe("Order productId vs productDescription Validation", () => {
+    const baseOrder = {
+      tenantId: "tenant_t1",
+      orderNumber: "ORD-VAL-001",
+      clientId: new mongoose.Types.ObjectId(),
+      quantity: 1000,
+      deliveryDeadline: "2026-12-31",
+      spec: { sizes: ["M", "L"] },
+    };
 
-    it("validates successfully when all user processAreas exist in processConfig", () => {
-      const userAreas = ["spinning", "weaving"];
-      const isValid = validateUserProcessAreas(userAreas, validConfigAreas);
-      expect(isValid).toBe(true);
+    it("passes validation when only productId is provided", () => {
+      const order = new OrderModel({
+        ...baseOrder,
+        productId: new mongoose.Types.ObjectId(),
+      });
+      const err = order.validateSync();
+      expect(err).toBeUndefined();
     });
 
-    it("fails validation when a user processArea does not exist in processConfig", () => {
-      const userAreas = ["weaving", "unknown_dept"];
-      const isValid = validateUserProcessAreas(userAreas, validConfigAreas);
-      expect(isValid).toBe(false);
+    it("passes validation when only productDescription is provided", () => {
+      const order = new OrderModel({
+        ...baseOrder,
+        productDescription: "Custom 100% Organic Combed Cotton Twill",
+      });
+      const err = order.validateSync();
+      expect(err).toBeUndefined();
     });
 
-    it("passes validation for empty or unassigned areas", () => {
-      expect(validateUserProcessAreas([], validConfigAreas)).toBe(true);
+    it("passes validation when both productId and productDescription are provided", () => {
+      const order = new OrderModel({
+        ...baseOrder,
+        productId: new mongoose.Types.ObjectId(),
+        productDescription: "Custom modification of catalog shirt fabric",
+      });
+      const err = order.validateSync();
+      expect(err).toBeUndefined();
+    });
+
+    it("fails validation when neither productId nor productDescription is provided", () => {
+      const order = new OrderModel({
+        ...baseOrder,
+      });
+      const err = order.validateSync();
+      expect(err).toBeDefined();
+      expect(err?.errors["productId"]).toBeDefined();
+      expect(err?.errors["productId"].message).toContain(
+        "Either productId or productDescription must be provided"
+      );
     });
   });
 });

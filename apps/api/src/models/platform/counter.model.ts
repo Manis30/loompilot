@@ -20,4 +20,4 @@ CounterSchema.index({ tenantId: 1, key: 1 }, { unique: true });
 
 export const CounterModel: mongoose.Model<ICounter> =
   (mongoose.models.Counter as mongoose.Model<ICounter>) ||
-  mongoose.model<ICounter>("Counter", CounterSchema);
+  mongoose.model<ICounter>("Counter", CounterSchema, "counters");

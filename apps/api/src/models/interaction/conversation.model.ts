@@ -138,4 +138,4 @@ ConversationSchema.index({ tenantId: 1, orderId: 1 }, { unique: true });
 
 export const ConversationModel: mongoose.Model<IConversation> =
   (mongoose.models.Conversation as mongoose.Model<IConversation>) ||
-  mongoose.model<IConversation>("Conversation", ConversationSchema);
+  mongoose.model<IConversation>("Conversation", ConversationSchema, "conversations");

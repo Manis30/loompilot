@@ -47,4 +47,4 @@ StockMovementSchema.index({ tenantId: 1, materialId: 1, createdAt: 1 });
 
 export const StockMovementModel: mongoose.Model<IStockMovement> =
   (mongoose.models.StockMovement as mongoose.Model<IStockMovement>) ||
-  mongoose.model<IStockMovement>("StockMovement", StockMovementSchema);
+  mongoose.model<IStockMovement>("StockMovement", StockMovementSchema, "stockMovements");

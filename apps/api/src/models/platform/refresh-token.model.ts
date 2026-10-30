@@ -36,4 +36,4 @@ RefreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // TTL on
 
 export const RefreshTokenModel: mongoose.Model<IRefreshToken> =
   (mongoose.models.RefreshToken as mongoose.Model<IRefreshToken>) ||
-  mongoose.model<IRefreshToken>("RefreshToken", RefreshTokenSchema);
+  mongoose.model<IRefreshToken>("RefreshToken", RefreshTokenSchema, "refreshTokens");

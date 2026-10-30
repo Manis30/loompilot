@@ -126,4 +126,4 @@ const SettingsSchema = new Schema<ISettings>(
 
 export const SettingsModel: mongoose.Model<ISettings> =
   (mongoose.models.Settings as mongoose.Model<ISettings>) ||
-  mongoose.model<ISettings>("Settings", SettingsSchema);
+  mongoose.model<ISettings>("Settings", SettingsSchema, "settings");

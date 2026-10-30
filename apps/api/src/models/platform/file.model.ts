@@ -32,4 +32,4 @@ FileSchema.index({ tenantId: 1, ownerRealm: 1, ownerId: 1 });
 
 export const FileRecordModel: mongoose.Model<IFileRecord> =
   (mongoose.models.File as mongoose.Model<IFileRecord>) ||
-  mongoose.model<IFileRecord>("File", FileSchema);
+  mongoose.model<IFileRecord>("File", FileSchema, "files");

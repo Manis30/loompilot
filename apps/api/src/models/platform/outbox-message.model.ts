@@ -59,4 +59,4 @@ OutboxMessageSchema.index({ tenantId: 1, status: 1, nextAttemptAt: 1 });
 
 export const OutboxMessageModel: mongoose.Model<IOutboxMessage> =
   (mongoose.models.OutboxMessage as mongoose.Model<IOutboxMessage>) ||
-  mongoose.model<IOutboxMessage>("OutboxMessage", OutboxMessageSchema);
+  mongoose.model<IOutboxMessage>("OutboxMessage", OutboxMessageSchema, "outboxMessages");

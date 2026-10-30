@@ -61,4 +61,4 @@ ProductSchema.index({ tenantId: 1, productName: 1 });
 
 export const ProductModel: mongoose.Model<IProduct> =
   (mongoose.models.Product as mongoose.Model<IProduct>) ||
-  mongoose.model<IProduct>("Product", ProductSchema);
+  mongoose.model<IProduct>("Product", ProductSchema, "products");

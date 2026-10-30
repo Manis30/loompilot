@@ -53,4 +53,4 @@ AuditLogSchema.index({ tenantId: 1, createdAt: -1 });
 
 export const AuditLogModel: mongoose.Model<IAuditLog> =
   (mongoose.models.AuditLog as mongoose.Model<IAuditLog>) ||
-  mongoose.model<IAuditLog>("AuditLog", AuditLogSchema);
+  mongoose.model<IAuditLog>("AuditLog", AuditLogSchema, "auditLogs");

@@ -41,4 +41,5 @@ MaintenanceTicketSchema.index({ tenantId: 1, machineId: 1, status: 1 });
 
 export const MaintenanceTicketModel: mongoose.Model<IMaintenanceTicket> =
   (mongoose.models.MaintenanceTicket as mongoose.Model<IMaintenanceTicket>) ||
-  mongoose.model<IMaintenanceTicket>("MaintenanceTicket", MaintenanceTicketSchema);
+  mongoose.model<IMaintenanceTicket>("MaintenanceTicket", MaintenanceTicketSchema, "maintenanceTickets");
+

@@ -57,4 +57,4 @@ MaterialSchema.index({ tenantId: 1, materialName: 1 });
 
 export const MaterialModel: mongoose.Model<IMaterial> =
   (mongoose.models.Material as mongoose.Model<IMaterial>) ||
-  mongoose.model<IMaterial>("Material", MaterialSchema);
+  mongoose.model<IMaterial>("Material", MaterialSchema, "materials");

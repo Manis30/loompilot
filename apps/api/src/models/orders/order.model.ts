@@ -314,7 +314,7 @@ export interface IDelivery {
 export interface IOrder extends BaseEntity {
   orderNumber: string;
   clientId: Types.ObjectId;
-  productId: Types.ObjectId;
+  productId?: Types.ObjectId;
   quantity: number;
   deliveryDeadline: string;
   status: OrderStatus;
@@ -819,7 +819,16 @@ const OrderSchema = new Schema<IOrder>(
     tenantId: { type: String, required: true, index: true },
     orderNumber: { type: String, required: true, uppercase: true, trim: true },
     clientId: { type: Schema.Types.ObjectId, required: true, ref: "Client" },
-    productId: { type: Schema.Types.ObjectId, required: true, ref: "Product" },
+    productId: {
+      type: Schema.Types.ObjectId,
+      ref: "Product",
+      required: [
+        function (this: any) {
+          return !this?.productDescription;
+        },
+        "Either productId or productDescription must be provided",
+      ],
+    },
     quantity: { type: Number, required: true },
     deliveryDeadline: { type: String, required: true },
     status: {
@@ -864,15 +873,10 @@ OrderSchema.index({ tenantId: 1, status: 1, deliveryDeadline: 1 });
 OrderSchema.index({ tenantId: 1, clientId: 1, createdAt: 1 });
 OrderSchema.index({ tenantId: 1, "production.assignedSupervisors.supervisorId": 1, status: 1 });
 OrderSchema.index({ tenantId: 1, "financials.milestones.status": 1, "financials.milestones.dueDate": 1 });
-OrderSchema.index(
-  { tenantId: 1, "financials.milestones.receipts.razorpayPaymentId": 1 },
-  {
-    unique: true,
-    partialFilterExpression: {
-      "financials.milestones.receipts.razorpayPaymentId": { $type: "string" },
-    },
-  }
-);
+OrderSchema.index({
+  tenantId: 1,
+  "financials.milestones.receipts.razorpayPaymentId": 1,
+});
 OrderSchema.index(
   { tenantId: 1, idempotencyKey: 1 },
   {
@@ -883,4 +887,4 @@ OrderSchema.index(
 
 export const OrderModel: mongoose.Model<IOrder> =
   (mongoose.models.Order as mongoose.Model<IOrder>) ||
-  mongoose.model<IOrder>("Order", OrderSchema);
+  mongoose.model<IOrder>("Order", OrderSchema, "orders");

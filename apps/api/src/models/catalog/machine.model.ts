@@ -33,4 +33,4 @@ MachineSchema.index({ tenantId: 1, machineCode: 1 }, { unique: true });
 
 export const MachineModel: mongoose.Model<IMachine> =
   (mongoose.models.Machine as mongoose.Model<IMachine>) ||
-  mongoose.model<IMachine>("Machine", MachineSchema);
+  mongoose.model<IMachine>("Machine", MachineSchema, "machines");

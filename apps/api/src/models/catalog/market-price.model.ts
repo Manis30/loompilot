@@ -95,4 +95,5 @@ MarketPriceSchema.index({ tenantId: 1, materialId: 1, date: 1 }, { unique: true 
 
 export const MarketPriceModel: mongoose.Model<IMarketPrice> =
   (mongoose.models.MarketPrice as mongoose.Model<IMarketPrice>) ||
-  mongoose.model<IMarketPrice>("MarketPrice", MarketPriceSchema);
+  mongoose.model<IMarketPrice>("MarketPrice", MarketPriceSchema, "marketPrices");
+

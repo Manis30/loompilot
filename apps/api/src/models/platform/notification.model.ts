@@ -96,4 +96,4 @@ NotificationSchema.index(
 
 export const NotificationModel: mongoose.Model<INotification> =
   (mongoose.models.Notification as mongoose.Model<INotification>) ||
-  mongoose.model<INotification>("Notification", NotificationSchema);
+  mongoose.model<INotification>("Notification", NotificationSchema, "notifications");

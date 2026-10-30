@@ -182,4 +182,8 @@ SupervisorDailyReportSchema.index(
 
 export const SupervisorDailyReportModel: mongoose.Model<ISupervisorDailyReport> =
   (mongoose.models.SupervisorDailyReport as mongoose.Model<ISupervisorDailyReport>) ||
-  mongoose.model<ISupervisorDailyReport>("SupervisorDailyReport", SupervisorDailyReportSchema);
+  mongoose.model<ISupervisorDailyReport>(
+    "SupervisorDailyReport",
+    SupervisorDailyReportSchema,
+    "supervisorDailyReports"
+  );
