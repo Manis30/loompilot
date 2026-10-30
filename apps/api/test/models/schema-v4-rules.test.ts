@@ -315,4 +315,202 @@ describe("Stage 3.5: Step 2 Schema v4 Architectural Rules & Invariants", () => {
       );
     });
   });
+
+  // -------------------------------------------------------------------------
+  // 6. Drift Fixture Verification (Against expected-schema-paths.json)
+  // -------------------------------------------------------------------------
+  describe("Schema Drift Prevention (Against expected-schema-paths.json)", () => {
+    it("verifies all 22 registered models match their expected schema paths fixture exactly", async () => {
+      const fixtureModule = await import("../fixtures/expected-schema-paths.json");
+      const expectedPaths: Record<string, string[]> = fixtureModule.default || fixtureModule;
+
+      expect(Object.keys(expectedPaths).length).toBe(22);
+
+      for (const [modelExportName, expectedList] of Object.entries(expectedPaths)) {
+        const model = (Models as any)[modelExportName];
+        expect(model, `Export ${modelExportName} not found in Models`).toBeDefined();
+        const actualPaths = Object.keys(model.schema.paths).sort();
+        expect(actualPaths).toEqual(expectedList.slice().sort());
+      }
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 7. Minimal Create of Each Domain Model (Verifies Defaults)
+  // -------------------------------------------------------------------------
+  describe("Minimal Create of All 14 Domain Models Yields Expected Defaults", () => {
+    const tId = "tenant_defaults_test";
+
+    it("1. SettingsModel minimal create gives expected defaults", () => {
+      const doc = new Models.SettingsModel({
+        tenantId: tId,
+        minMarginPct: 15,
+        defaultMarginPct: 20,
+        processConfig: [{ area: "weaving", hours: 8, overlap: false }],
+        holidays: [],
+        weeklyOffs: [0],
+      });
+      const err = doc.validateSync();
+      expect(err).toBeUndefined();
+      expect(doc.timezone).toBe("Asia/Kolkata");
+      expect(doc.advancePct).toBe(30);
+      expect(doc.marketRuntime).toBe("06:00");
+      expect(doc.reportCutoff).toBe("19:00");
+      expect(doc.basePriceTolerancePct).toBeNull();
+      expect(doc.quoteReminderDays).toEqual([1]);
+      expect(doc.paymentReminderLeadDays).toBe(1);
+    });
+
+    it("2. UserModel minimal create gives expected status default 'active'", () => {
+      const doc = new Models.UserModel({
+        tenantId: tId,
+        role: "admin",
+        name: "Admin User",
+        email: "admin@test.local",
+        passwordHash: "secret_hash",
+        processAreas: ["weaving"],
+      });
+      expect(doc.validateSync()).toBeUndefined();
+      expect(doc.status).toBe("active");
+    });
+
+    it("3. ClientModel minimal create gives expected status default 'active'", () => {
+      const doc = new Models.ClientModel({
+        tenantId: tId,
+        clientName: "Acme Apparel",
+      });
+      expect(doc.validateSync()).toBeUndefined();
+      expect(doc.status).toBe("active");
+    });
+
+    it("4. SupplierModel minimal create gives expected status default 'active'", () => {
+      const doc = new Models.SupplierModel({
+        tenantId: tId,
+        supplierName: "Coimbatore Spinners",
+        email: "spin@test.local",
+        phone: "+919876543210",
+        city: "Coimbatore",
+      });
+      expect(doc.validateSync()).toBeUndefined();
+      expect(doc.status).toBe("active");
+    });
+
+    it("5. MaterialModel minimal create gives expected 0-defaults for accumulators", () => {
+      const doc = new Models.MaterialModel({
+        tenantId: tId,
+        materialName: "Cotton Combed 40s",
+        type: "yarn",
+        currentRatePaise: 28000,
+      });
+      expect(doc.validateSync()).toBeUndefined();
+      expect(doc.stockQty).toBe(0);
+      expect(doc.reservedQty).toBe(0);
+      expect(doc.reorderLevel).toBe(0);
+    });
+
+    it("6. MachineModel minimal create gives expected currentStatus default 'available'", () => {
+      const doc = new Models.MachineModel({
+        tenantId: tId,
+        machineCode: "L-101",
+        machineName: "Airjet Loom 1",
+        processArea: "weaving",
+        capacityUnitsPerDay: 500,
+      });
+      expect(doc.validateSync()).toBeUndefined();
+      expect(doc.currentStatus).toBe("available");
+    });
+
+    it("7. ProductModel minimal create gives expected active default true", () => {
+      const doc = new Models.ProductModel({
+        tenantId: tId,
+        productName: "Classic Oxford Shirt",
+        category: "shirts",
+        basePricePaise: 120000,
+        routing: [{ stage: "weaving", seq: 1, stdMinPerUnit: 12 }],
+        bom: [{ materialId: new mongoose.Types.ObjectId(), qtyPerUnit: 1.5 }],
+      });
+      expect(doc.validateSync()).toBeUndefined();
+      expect(doc.active).toBe(true);
+    });
+
+    it("8. MarketPriceModel minimal create passes validation", () => {
+      const doc = new Models.MarketPriceModel({
+        tenantId: tId,
+        materialId: new mongoose.Types.ObjectId(),
+        date: "2026-10-30",
+        consolidatedPricePaise: 27500,
+      });
+      expect(doc.validateSync()).toBeUndefined();
+    });
+
+    it("9. OrderModel minimal create gives expected status default 'submitted' and source 'admin_manual'", () => {
+      const doc = new Models.OrderModel({
+        tenantId: tId,
+        orderNumber: "ORD-DEF-001",
+        clientId: new mongoose.Types.ObjectId(),
+        productDescription: "Custom polo shirt run",
+        quantity: 250,
+        deliveryDeadline: "2026-12-15",
+        spec: { sizes: ["M", "L"] },
+      });
+      expect(doc.validateSync()).toBeUndefined();
+      expect(doc.status).toBe("submitted");
+      expect(doc.source).toBe("admin_manual");
+    });
+
+    it("10. SupervisorDailyReportModel minimal create gives expected resources.machinesDown default 0", () => {
+      const doc = new Models.SupervisorDailyReportModel({
+        tenantId: tId,
+        reportDate: "2026-10-30",
+        supervisorId: new mongoose.Types.ObjectId(),
+        processAreas: ["spinning"],
+        employeesPresentTotal: 15,
+        workforce: [{ area: "spinning", count: 15 }],
+        resources: { machinesAvail: 10 },
+      });
+      expect(doc.validateSync()).toBeUndefined();
+      expect(doc.resources?.machinesDown).toBe(0);
+    });
+
+    it("11. ConversationModel minimal create gives expected status default 'agent_handling'", () => {
+      const doc = new Models.ConversationModel({
+        tenantId: tId,
+        orderId: new mongoose.Types.ObjectId(),
+        clientId: new mongoose.Types.ObjectId(),
+      });
+      expect(doc.validateSync()).toBeUndefined();
+      expect(doc.status).toBe("agent_handling");
+    });
+
+    it("12. MaintenanceTicketModel minimal create gives expected status default 'open'", () => {
+      const doc = new Models.MaintenanceTicketModel({
+        tenantId: tId,
+        machineId: new mongoose.Types.ObjectId(),
+        issue: "Spindle bearing vibration",
+      });
+      expect(doc.validateSync()).toBeUndefined();
+      expect(doc.status).toBe("open");
+    });
+
+    it("13. StockMovementModel minimal create passes validation", () => {
+      const doc = new Models.StockMovementModel({
+        tenantId: tId,
+        materialId: new mongoose.Types.ObjectId(),
+        type: "receipt",
+        qty: 50,
+        qtyAfter: 150,
+      });
+      expect(doc.validateSync()).toBeUndefined();
+    });
+
+    it("14. AgentRunModel minimal create passes validation with required string status", () => {
+      const doc = new Models.AgentRunModel({
+        tenantId: tId,
+        agent: "feasibility",
+        trigger: "order_created",
+        status: "completed",
+      });
+      expect(doc.validateSync()).toBeUndefined();
+    });
+  });
 });

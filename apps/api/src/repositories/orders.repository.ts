@@ -93,6 +93,26 @@ export const CLIENT_SAFE_ORDER_PROJECTION = {
   createdAt: 1,
 } as const;
 
+export const SUPERVISOR_ORDER_PROJECTION = {
+  _id: 1,
+  tenantId: 1,
+  orderNumber: 1,
+  clientId: 1,
+  productId: 1,
+  productDescription: 1,
+  quantity: 1,
+  deliveryDeadline: 1,
+  status: 1,
+  spec: 1,
+  estimatedCompletionDate: 1,
+  statusHistory: 1,
+  production: 1,
+  deliveries: 1,
+  createdAt: 1,
+  updatedAt: 1,
+  version: 1,
+} as const;
+
 // Caps defined in Schema v4 specification
 export const ORDER_CAPS = {
   STATUS_HISTORY: 200,
@@ -226,7 +246,7 @@ export class OrdersRepository {
 
     const updated = await this.model
       .findOneAndUpdate(
-        { tenantId, _id: orderId },
+        { tenantId, _id: orderId, status: order.status },
         {
           $set: { status: toStatus },
           $push: { statusHistory: historyEntry },
@@ -237,7 +257,15 @@ export class OrdersRepository {
       .lean<IOrder>()
       .exec();
 
-    return updated!;
+    if (!updated) {
+      throw new AppError(
+        ErrorCode.VERSION_CONFLICT,
+        "Concurrent status update conflict: order status has changed",
+        409
+      );
+    }
+
+    return updated;
   }
 
   async setFeasibility(
@@ -266,12 +294,21 @@ export class OrdersRepository {
     tenantId: string,
     orderId: string | Types.ObjectId,
     quotation: NonNullable<IOrder["quotation"]>,
+    expected?: { version?: number; status?: OrderStatus | string },
     tx?: TxContext
   ): Promise<IOrder> {
     const session = this.getSession(tx);
+    const filter: Record<string, any> = { tenantId, _id: orderId };
+    if (expected?.version !== undefined) {
+      filter["quotation.version"] = expected.version;
+    }
+    if (expected?.status !== undefined) {
+      filter["status"] = expected.status;
+    }
+
     const updated = await this.model
       .findOneAndUpdate(
-        { tenantId, _id: orderId },
+        filter,
         { $set: { quotation }, $inc: { version: 1 } },
         { new: true, session: session ?? null }
       )
@@ -279,7 +316,15 @@ export class OrdersRepository {
       .exec();
 
     if (!updated) {
-      throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+      const exists = await this.model.exists({ tenantId, _id: orderId });
+      if (!exists) {
+        throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+      }
+      throw new AppError(
+        ErrorCode.VERSION_CONFLICT,
+        "Quotation update conflict: version or order status has changed",
+        409
+      );
     }
     return updated;
   }

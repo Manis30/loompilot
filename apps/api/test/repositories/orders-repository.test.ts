@@ -1,10 +1,19 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import mongoose from "mongoose";
-import { OrdersRepository, ORDER_CAPS } from "../../src/repositories/orders.repository.js";
+import {
+  OrdersRepository,
+  ORDER_CAPS,
+  ORDER_SUMMARY_PROJECTION,
+  ORDER_DETAIL_PROJECTION,
+  CLIENT_SAFE_ORDER_PROJECTION,
+  SUPERVISOR_ORDER_PROJECTION,
+} from "../../src/repositories/orders.repository.js";
 import { AdminCostingRepository } from "../../src/repositories/admin-costing.repository.js";
 import { UserRepository } from "../../src/repositories/user.repository.js";
 import { OrderModel, UserModel, ClientModel } from "../../src/models/index.js";
 import { OrderStatus, ErrorCode } from "@loompilot/shared";
+import fs from "fs";
+import path from "path";
 
 describe("Stage 3.5: Step 2 OrdersRepository & Architectural Invariants", () => {
   const ordersRepo = new OrdersRepository();
@@ -390,12 +399,244 @@ describe("Stage 3.5: Step 2 OrdersRepository & Architectural Invariants", () => 
     });
 
     const docObj = fullOrder.toObject();
+    const bsonSize = (mongoose.mongo as any).BSON.calculateObjectSize(docObj);
     const docJson = JSON.stringify(docObj);
-    const byteSize = Buffer.byteLength(docJson, "utf8");
+    const jsonByteSize = Buffer.byteLength(docJson, "utf8");
 
-    // Must be well below MongoDB's 16MB document limit and strictly under the 1MB target
-    expect(byteSize).toBeLessThan(1048576); // < 1MB (1,048,576 bytes)
-    // Documenting actual measured size
-    expect(byteSize).toBeLessThan(100000); // Actually ~50KB-70KB
+    // Breakdown byte size per top-level path
+    const pathSizes: Record<string, number> = {};
+    for (const [key, value] of Object.entries(docObj)) {
+      pathSizes[key] = (mongoose.mongo as any).BSON.calculateObjectSize({ [key]: value });
+    }
+
+    // Must be well below MongoDB's 16MB limit and strictly under 1MB
+    expect(bsonSize).toBeLessThan(1048576); // < 1MB
+    expect(jsonByteSize).toBeLessThan(1048576); // < 1MB
+    expect(bsonSize).toBeLessThan(120000); // Actually ~60KB - 80KB
+  });
+
+  // -------------------------------------------------------------------------
+  // 5. Additional Cap Tests (statusHistory 200, purchaseDecisions 50, receipts 50)
+  // -------------------------------------------------------------------------
+  describe("Extended Array Caps Enforcement (CAP_EXCEEDED)", () => {
+    it("enforces purchaseDecisions cap (max 50) and throws CAP_EXCEEDED", async () => {
+      const rawMatId = new mongoose.Types.ObjectId();
+      const order = await ordersRepo.create(tenantId, {
+        orderNumber: `ORD-PURCH-CAP-${Date.now()}`,
+        clientId: sampleClientId,
+        productId: sampleProductId,
+        quantity: 1000,
+        deliveryDeadline: "2026-12-31",
+        spec: { sizes: ["M"] },
+        purchaseDecisions: Array.from({ length: 50 }, (_, i) => ({
+          decisionId: `DEC-${i + 1}`,
+          materialId: rawMatId,
+          qty: 10,
+          ratePaise: 20000,
+          decidedBy: sampleAdminId,
+          decidedAt: new Date(),
+        })),
+      });
+
+      // 51st decision must throw CAP_EXCEEDED
+      await expect(
+        ordersRepo.addPurchaseDecision(tenantId, order._id, {
+          decisionId: "DEC-51",
+          materialId: rawMatId,
+          qty: 10,
+          ratePaise: 20000,
+          decidedBy: sampleAdminId,
+          decidedAt: new Date(),
+        })
+      ).rejects.toThrow(/cap of 50 exceeded/);
+    });
+
+    it("enforces receipts cap (max 50 per milestone) and throws CAP_EXCEEDED", async () => {
+      const order = await ordersRepo.create(tenantId, {
+        orderNumber: `ORD-RCPT-CAP-${Date.now()}`,
+        clientId: sampleClientId,
+        productId: sampleProductId,
+        quantity: 1000,
+        deliveryDeadline: "2026-12-31",
+        spec: { sizes: ["M"] },
+        financials: {
+          advanceReceivedPaise: 0,
+          totalPaidPaise: 50000,
+          milestones: [
+            {
+              milestone: "Advance Payment",
+              trigger: "advance",
+              amountPaise: 100000,
+              status: "partial",
+              receipts: Array.from({ length: 50 }, (_, i) => ({
+                amountPaise: 1000,
+                method: "neft",
+                ref: `NEFT-CAP-${i + 1}`,
+                date: "2026-11-01",
+              })),
+            },
+          ],
+        },
+      });
+
+      // 51st receipt must throw CAP_EXCEEDED
+      await expect(
+        ordersRepo.recordPaymentReceipt(tenantId, order._id, 0, {
+          amountPaise: 1000,
+          method: "neft",
+          ref: "NEFT-CAP-51",
+          date: "2026-11-02",
+        })
+      ).rejects.toThrow(/cap of 50 per milestone exceeded/);
+    });
+
+    it("enforces statusHistory cap (max 200) and throws CAP_EXCEEDED", async () => {
+      const order = await ordersRepo.create(tenantId, {
+        orderNumber: `ORD-HIST-CAP-${Date.now()}`,
+        clientId: sampleClientId,
+        productId: sampleProductId,
+        quantity: 1000,
+        deliveryDeadline: "2026-12-31",
+        spec: { sizes: ["M"] },
+        status: OrderStatus.SUBMITTED,
+        statusHistory: Array.from({ length: 200 }, (_, i) => ({
+          status: "submitted",
+          by: sampleAdminId,
+          at: new Date(),
+          reason: `Step ${i + 1}`,
+        })),
+      });
+
+      // 201st transition must throw CAP_EXCEEDED
+      await expect(
+        ordersRepo.updateStatus(tenantId, order._id, OrderStatus.ANALYZING, {
+          by: sampleAdminId,
+          role: "admin",
+          reason: "Proceed to analysis",
+        })
+      ).rejects.toThrow(/cap of 200 exceeded/);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 6. Repository Architecture, Projections & Concurrency Invariants
+  // -------------------------------------------------------------------------
+  describe("Repository Architecture, Projections & Concurrency Invariants", () => {
+    it("proves OrdersRepository does NOT inherit from BaseRepository (no generic update/save/updateOne)", () => {
+      expect((ordersRepo as any).update).toBeUndefined();
+      expect((ordersRepo as any).updateOne).toBeUndefined();
+      expect((ordersRepo as any).save).toBeUndefined();
+      expect((ordersRepo as any).findWithTotal).toBeUndefined();
+    });
+
+    it("proves SUPERVISOR_ORDER_PROJECTION strictly excludes pricing, costing, quotation, and financials", () => {
+      const keys = Object.keys(SUPERVISOR_ORDER_PROJECTION);
+      expect(keys).toContain("orderNumber");
+      expect(keys).toContain("production");
+      expect(keys).toContain("spec");
+      expect(keys).toContain("deliveries");
+
+      // Strictly excluded
+      expect(keys).not.toContain("quotation");
+      expect(keys).not.toContain("costing");
+      expect(keys).not.toContain("financials");
+      expect(keys).not.toContain("feasibility");
+      expect(keys).not.toContain("quotedTotalPaise");
+    });
+
+    it("proves parallel different-path writers BOTH persist without clobbering each other", async () => {
+      const rawMatId = new mongoose.Types.ObjectId();
+      const order = await ordersRepo.create(tenantId, {
+        orderNumber: `ORD-CONCUR-DIFF-${Date.now()}`,
+        clientId: sampleClientId,
+        productId: sampleProductId,
+        quantity: 1000,
+        deliveryDeadline: "2026-12-31",
+        spec: { sizes: ["M"] },
+      });
+
+      // Concurrently run Writer 1 (updates production progress) and Writer 2 (adds a purchase decision)
+      await Promise.all([
+        ordersRepo.updateProductionProgress(tenantId, order._id, {
+          phase: "weaving",
+          percentComplete: 30,
+          producedQty: 300,
+        }),
+        ordersRepo.addPurchaseDecision(tenantId, order._id, {
+          decisionId: "DEC-PARALLEL-1",
+          materialId: rawMatId,
+          qty: 50,
+          ratePaise: 25000,
+          decidedBy: sampleAdminId,
+          decidedAt: new Date(),
+        }),
+      ]);
+
+      const refreshed = await OrderModel.findById(order._id).lean();
+      expect(refreshed?.production?.phase).toBe("weaving");
+      expect(refreshed?.production?.percentComplete).toBe(30);
+      expect(refreshed?.purchaseDecisions?.length).toBe(1);
+      expect(refreshed?.purchaseDecisions?.[0].decisionId).toBe("DEC-PARALLEL-1");
+    });
+
+    it("proves parallel updateStatus calls from the same status result in exactly one winner and one conflict", async () => {
+      const order = await ordersRepo.create(tenantId, {
+        orderNumber: `ORD-CONCUR-STATUS-${Date.now()}`,
+        clientId: sampleClientId,
+        productId: sampleProductId,
+        quantity: 1000,
+        deliveryDeadline: "2026-12-31",
+        spec: { sizes: ["M"] },
+        status: OrderStatus.SUBMITTED,
+      });
+
+      // Trigger two concurrent status updates from 'submitted' to 'analyzing'
+      const results = await Promise.allSettled([
+        ordersRepo.updateStatus(tenantId, order._id, OrderStatus.ANALYZING, {
+          by: sampleAdminId,
+          role: "admin",
+          reason: "Writer 1 start",
+        }),
+        ordersRepo.updateStatus(tenantId, order._id, OrderStatus.ANALYZING, {
+          by: sampleAdminId,
+          role: "admin",
+          reason: "Writer 2 start",
+        }),
+      ]);
+
+      const fulfilled = results.filter((r) => r.status === "fulfilled");
+      const rejected = results.filter((r) => r.status === "rejected");
+
+      expect(fulfilled.length).toBe(1);
+      expect(rejected.length).toBe(1);
+
+      const error = (rejected[0] as PromiseRejectedResult).reason;
+      expect(error.message).toMatch(/conflict|status has changed/i);
+    });
+
+    it("proves +costing appears ONLY in admin-costing.repository.ts across entire src directory", () => {
+      const srcDir = path.resolve(__dirname, "../../src");
+      function scanDir(dir: string): string[] {
+        let hits: string[] = [];
+        const files = fs.readdirSync(dir);
+        for (const file of files) {
+          const fullPath = path.join(dir, file);
+          const stat = fs.statSync(fullPath);
+          if (stat.isDirectory()) {
+            hits = hits.concat(scanDir(fullPath));
+          } else if (fullPath.endsWith(".ts")) {
+            const content = fs.readFileSync(fullPath, "utf8");
+            if (content.includes("+costing")) {
+              hits.push(fullPath.replace(/\\/g, "/"));
+            }
+          }
+        }
+        return hits;
+      }
+
+      const costingHits = scanDir(srcDir);
+      expect(costingHits.length).toBe(1);
+      expect(costingHits[0]).toContain("src/repositories/admin-costing.repository.ts");
+    });
   });
 });

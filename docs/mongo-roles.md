@@ -13,7 +13,7 @@ This document provides step-by-step instructions to configure the read-only data
 
 | Role / User | Database Scope | Allowed Resources (Strict Allowlist) | Denied / Excluded Resources |
 |---|---|---|---|
-| **`agents_ro`** | `loompilot` only | **Explicit Collection Allowlist**:<br>• `machines`<br>• `materials`<br>• `products`<br>• `marketSources`<br>• `priceObservations`<br>• `priceHistory`<br>• `priceAlerts`<br>• `orders`<br>• `feasibilityReports`<br>• `quotations`<br>• `quotationRevisions`<br>• `purchaseDecisions`<br>• `orderAssignments`<br>• `deliveries`<br>• `payments`<br>• `supervisorDailyReports`<br>• `dailyOutputs`<br>• `machineStatusLogs`<br>• `monitoringSnapshots`<br>• `stockMovements`<br>• `reservations`<br>• `alerts`<br>• `clientInteractions`<br>• `conversations`<br>• `messages`<br>• `escalations`<br>• `agentRuns`<br>• `settings`<br>• `clients`<br>• `suppliers`<br>• **`agentSafeUsers`** (read-only view exposing id, name, role, processAreas, status) | **Strictly Forbidden** (never granted):<br>❌ `users`<br>❌ `clientAccounts`<br>❌ `auditLogs`<br>❌ `refreshTokens`<br>❌ `idempotencyKeys`<br>❌ `outboxMessages`<br>❌ `notifications`<br>❌ `files`<br>❌ `importJobs`<br>❌ `quotationCostings` |
+| **`agents_ro`** | `loompilot` only | **Explicit Collection Allowlist (Schema v4 Domain Collections)**:<br>• `machines`<br>• `materials`<br>• `products`<br>• `marketPrices`<br>• `orders`<br>• `supervisorDailyReports`<br>• `conversations`<br>• `maintenanceTickets`<br>• `stockMovements`<br>• `agentRuns`<br>• `settings`<br>• `clients`<br>• `suppliers`<br>• **`agentSafeUsers`** (read-only view exposing id, name, role, processAreas, status) | **Strictly Forbidden** (never granted):<br>❌ `users`<br>❌ `auditLogs`<br>❌ `refreshTokens`<br>❌ `idempotencyKeys`<br>❌ `outboxMessages`<br>❌ `notifications`<br>❌ `files`<br>❌ `importJobs` |
 | **`chat_ro`** | `loompilot` only | **Views only**:<br>• `clientSafeOrders`<br>• `clientSafeQuotations`<br>• `clientSafeRevisions` | All base collections and administrative costing/job collections. |
 
 > [!IMPORTANT]
@@ -30,7 +30,7 @@ This document provides step-by-step instructions to configure the read-only data
 2. Click **Add Custom Role**:
    - **Role Name**: `LoomPilotAgentsAllowlistReadOnly`
      - **Database**: `loompilot`
-     - **Actions**: `find` on the exact allowlist collections: `machines`, `materials`, `products`, `marketSources`, `priceObservations`, `priceHistory`, `priceAlerts`, `orders`, `feasibilityReports`, `quotations`, `quotationRevisions`, `purchaseDecisions`, `orderAssignments`, `deliveries`, `payments`, `supervisorDailyReports`, `dailyOutputs`, `machineStatusLogs`, `monitoringSnapshots`, `stockMovements`, `reservations`, `alerts`, `clientInteractions`, `conversations`, `messages`, `escalations`, `agentRuns`, `settings`, `clients`, `suppliers`, and `agentSafeUsers`.
+     - **Actions**: `find` on the exact Schema v4 domain collections: `machines`, `materials`, `products`, `marketPrices`, `orders`, `supervisorDailyReports`, `stockMovements`, `conversations`, `maintenanceTickets`, `agentRuns`, `settings`, `clients`, `suppliers`, and `agentSafeUsers`.
    - **Role Name**: `LoomPilotChatReadOnly`
      - **Database**: `loompilot`
      - **Actions**: `find` on views: `clientSafeOrders`, `clientSafeQuotations`, `clientSafeRevisions`.
@@ -67,29 +67,12 @@ atlas customDbRoles create LoomPilotAgentsAllowlistReadOnly \
   --privilege find@loompilot.machines \
   --privilege find@loompilot.materials \
   --privilege find@loompilot.products \
-  --privilege find@loompilot.marketSources \
-  --privilege find@loompilot.priceObservations \
-  --privilege find@loompilot.priceHistory \
-  --privilege find@loompilot.priceAlerts \
+  --privilege find@loompilot.marketPrices \
   --privilege find@loompilot.orders \
-  --privilege find@loompilot.feasibilityReports \
-  --privilege find@loompilot.quotations \
-  --privilege find@loompilot.quotationRevisions \
-  --privilege find@loompilot.purchaseDecisions \
-  --privilege find@loompilot.orderAssignments \
-  --privilege find@loompilot.deliveries \
-  --privilege find@loompilot.payments \
   --privilege find@loompilot.supervisorDailyReports \
-  --privilege find@loompilot.dailyOutputs \
-  --privilege find@loompilot.machineStatusLogs \
-  --privilege find@loompilot.monitoringSnapshots \
-  --privilege find@loompilot.stockMovements \
-  --privilege find@loompilot.reservations \
-  --privilege find@loompilot.alerts \
-  --privilege find@loompilot.clientInteractions \
   --privilege find@loompilot.conversations \
-  --privilege find@loompilot.messages \
-  --privilege find@loompilot.escalations \
+  --privilege find@loompilot.maintenanceTickets \
+  --privilege find@loompilot.stockMovements \
   --privilege find@loompilot.agentRuns \
   --privilege find@loompilot.settings \
   --privilege find@loompilot.clients \

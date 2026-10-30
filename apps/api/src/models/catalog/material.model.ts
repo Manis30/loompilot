@@ -45,7 +45,7 @@ const MaterialSchema = new Schema<IMaterial>(
     currentRatePaise: paiseField({ required: true }),
     preferredSupplierId: { type: Schema.Types.ObjectId, ref: "Supplier" },
     supplierOffers: { type: [SupplierOfferSchema] },
-    unit: { type: String, required: true, trim: true },
+    unit: { type: String, trim: true },
     watchlist: { type: Boolean },
     version: { type: Number, default: 1 },
   },

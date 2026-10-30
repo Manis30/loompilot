@@ -108,7 +108,7 @@ const SettingsSchema = new Schema<ISettings>(
     holidays: { type: [String], required: true }, // 'YYYY-MM-DD'
     marketRuntime: { type: String, default: "06:00", required: true },
     reportCutoff: { type: String, default: "19:00", required: true },
-    weeklyOffs: { type: [Number], default: [0], required: true },
+    weeklyOffs: { type: [Number], required: true },
     safetyDays: { type: Number },
     quoteValidityDays: { type: Number },
     riskBuffer: { type: RiskBufferSchema },
@@ -117,7 +117,7 @@ const SettingsSchema = new Schema<ISettings>(
     priceThresholds: { type: PriceThresholdsSchema },
     quoteReminderDays: { type: [Number], default: [1] },
     paymentReminderLeadDays: { type: Number, default: 1 },
-    basePriceTolerancePct: { type: Number },
+    basePriceTolerancePct: { type: Number, default: null },
     marketSources: { type: [MarketSourceSchema] },
     version: { type: Number, default: 1 },
   },

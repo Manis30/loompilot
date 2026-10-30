@@ -109,7 +109,6 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
         type: "Array",
         items: { type: "Number" }, // 0-6 ints
         required: true,
-        default: [0],
       },
       safetyDays: { type: "Number" },
       quoteValidityDays: { type: "Number" },
@@ -138,7 +137,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
         default: [1],
       },
       paymentReminderLeadDays: { type: "Number", default: 1 },
-      basePriceTolerancePct: { type: "Number" },
+      basePriceTolerancePct: { type: "Number", default: null },
       marketSources: {
         type: "Array",
         items: {
@@ -295,7 +294,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
           },
         },
       },
-      unit: { type: "String", required: true },
+      unit: { type: "String" },
       watchlist: { type: "Boolean" },
     },
     indexes: [
@@ -360,7 +359,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
         type: "Array",
         items: { type: "ObjectId", ref: "File" },
       },
-      active: { type: "Boolean" },
+      active: { type: "Boolean", default: true },
     },
     indexes: [{ fields: { tenantId: 1, productName: 1 } }],
   },

@@ -51,7 +51,7 @@ const ProductSchema = new Schema<IProduct>(
     routing: { type: [RoutingStepSchema], required: true },
     bom: { type: [BomItemSchema], required: true },
     imageFileIds: [{ type: Schema.Types.ObjectId, ref: "File" }],
-    active: { type: Boolean },
+    active: { type: Boolean, default: true },
     version: { type: Number, default: 1 },
   },
   { timestamps: true }
