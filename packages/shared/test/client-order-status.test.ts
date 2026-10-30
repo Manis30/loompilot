@@ -15,14 +15,14 @@ describe("Stage 3.5: toClientOrderStatus mapping (all 19 states)", () => {
     [OrderStatus.ASSIGNED]: "confirmed",
     [OrderStatus.IN_PRODUCTION]: "in_production",
     [OrderStatus.READY_FOR_DELIVERY]: "ready",
-    [OrderStatus.PARTIALLY_DELIVERED]: "in_production",
+    [OrderStatus.PARTIALLY_DELIVERED]: "ready",
     [OrderStatus.DELIVERED]: "delivered",
     [OrderStatus.COMPLETED]: "closed",
     [OrderStatus.DECLINED_BY_CLIENT]: "declined",
     [OrderStatus.REJECTED_BY_ADMIN]: "declined",
     [OrderStatus.EXPIRED]: "declined",
     [OrderStatus.CANCELLED]: "declined",
-    [OrderStatus.ON_HOLD]: "under_review",
+    [OrderStatus.ON_HOLD]: "in_production",
   };
 
   test("Verifies all 19 OrderStatus enum values map to the exact 9 client-safe statuses", () => {

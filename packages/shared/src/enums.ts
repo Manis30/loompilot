@@ -73,8 +73,6 @@ export function toClientOrderStatus(status: OrderStatus | string): ClientOrderSt
     case "quotation_drafting":
     case OrderStatus.QUOTATION_PENDING_APPROVAL:
     case "quotation_pending_approval":
-    case OrderStatus.ON_HOLD:
-    case "on_hold":
       return "under_review";
 
     case OrderStatus.QUOTATION_SENT:
@@ -89,12 +87,14 @@ export function toClientOrderStatus(status: OrderStatus | string): ClientOrderSt
 
     case OrderStatus.IN_PRODUCTION:
     case "in_production":
-    case OrderStatus.PARTIALLY_DELIVERED:
-    case "partially_delivered":
+    case OrderStatus.ON_HOLD:
+    case "on_hold":
       return "in_production";
 
     case OrderStatus.READY_FOR_DELIVERY:
     case "ready_for_delivery":
+    case OrderStatus.PARTIALLY_DELIVERED:
+    case "partially_delivered":
       return "ready";
 
     case OrderStatus.DELIVERED:

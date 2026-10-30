@@ -22,6 +22,7 @@ export interface ManifestField {
   required?: boolean;
   select?: boolean;
   cap?: number;
+  maxBytes?: number;
   default?: any;
   embedded?: Record<string, ManifestField>;
   items?: ManifestField;
@@ -32,6 +33,7 @@ export interface ManifestIndex {
   unique?: boolean;
   sparse?: boolean;
   expireAfterSeconds?: number;
+  partialFilterExpression?: Record<string, any>;
 }
 
 export interface CollectionManifest {
@@ -100,7 +102,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
         items: { type: "String" }, // 'YYYY-MM-DD'
         required: true,
       },
-      marketRuntime: { type: "String", default: "08:00", required: true },
+      marketRuntime: { type: "String", default: "06:00", required: true },
       reportCutoff: { type: "String", default: "19:00", required: true },
       weeklyOffs: {
         type: "Array",
@@ -108,25 +110,25 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
         required: true,
         default: [0],
       },
-      safetyDays: { type: "Number", default: 2 },
-      quoteValidityDays: { type: "Number", default: 7 },
+      safetyDays: { type: "Number" },
+      quoteValidityDays: { type: "Number" },
       riskBuffer: {
         type: "Mixed",
         embedded: {
-          k: { type: "Number", default: 1.5 },
-          minPct: { type: "Number", default: 2.0 },
-          maxPct: { type: "Number", default: 10.0 },
-          windowDays: { type: "Number", default: 30 },
+          k: { type: "Number" },
+          minPct: { type: "Number" },
+          maxPct: { type: "Number" },
+          windowDays: { type: "Number" },
         },
       },
-      behindThresholdPct: { type: "Number", default: 15 },
-      maxBackdateDays: { type: "Number", default: 2 },
+      behindThresholdPct: { type: "Number" },
+      maxBackdateDays: { type: "Number" },
       priceThresholds: {
         type: "Mixed",
         embedded: {
-          daily: { type: "Number", default: 5.0 },
-          sevenday: { type: "Number", default: 10.0 },
-          vol: { type: "Number", default: 0.15 },
+          daily: { type: "Number" },
+          sevenday: { type: "Number" },
+          vol: { type: "Number" },
         },
       },
       quoteReminderDays: {
@@ -135,7 +137,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
         default: [1],
       },
       paymentReminderLeadDays: { type: "Number", default: 1 },
-      basePriceTolerancePct: { type: "Number", default: null }, // null = off
+      basePriceTolerancePct: { type: "Number" },
       marketSources: {
         type: "Array",
         items: {
@@ -163,7 +165,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
       role: { type: "String", enum: ["admin", "supervisor"], required: true },
       name: { type: "String", required: true },
       email: { type: "String", required: true },
-      phone: { type: "String", required: true },
+      phone: { type: "String" },
       passwordHash: { type: "String", required: true, select: false },
       processAreas: {
         type: "Array",
@@ -197,14 +199,14 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
     isDomain: true,
     fields: {
       clientName: { type: "String", required: true },
-      contactPerson: { type: "String", required: true },
+      contactPerson: { type: "String" },
       email: { type: "String", required: true },
-      phone: { type: "String", required: true },
-      city: { type: "String", required: true },
-      address: { type: "String", required: true },
-      customerType: { type: "String", default: "regular", required: true },
-      paymentTermsDays: { type: "Number", default: 15, required: true },
-      country: { type: "String", default: "India", required: true },
+      phone: { type: "String" },
+      city: { type: "String" },
+      address: { type: "String" },
+      customerType: { type: "String" },
+      paymentTermsDays: { type: "Number" },
+      country: { type: "String" },
       status: { type: "String", enum: ["active", "inactive"], default: "active", required: true },
       portalAccess: {
         type: "Mixed",
@@ -235,7 +237,11 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
       },
     },
     indexes: [
-      { fields: { tenantId: 1, "portalAccess.email": 1 }, unique: true, sparse: true },
+      {
+        fields: { tenantId: 1, "portalAccess.email": 1 },
+        unique: true,
+        partialFilterExpression: { "portalAccess.email": { $type: "string" } },
+      },
       { fields: { tenantId: 1, clientName: 1 } },
     ],
   },
@@ -250,12 +256,12 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
     isDomain: true,
     fields: {
       supplierName: { type: "String", required: true },
-      contactPerson: { type: "String", required: true },
+      contactPerson: { type: "String" },
       email: { type: "String", required: true },
       phone: { type: "String", required: true },
       city: { type: "String", required: true },
-      country: { type: "String", default: "India", required: true },
-      defaultLeadTimeDays: { type: "Number", default: 3, required: true },
+      country: { type: "String" },
+      defaultLeadTimeDays: { type: "Number" },
       status: { type: "String", enum: ["active", "inactive"], default: "active", required: true },
     },
     indexes: [{ fields: { tenantId: 1, supplierName: 1 } }],
@@ -288,8 +294,8 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
           },
         },
       },
-      unit: { type: "String", default: "kg", required: true },
-      watchlist: { type: "Boolean", default: false },
+      unit: { type: "String", required: true },
+      watchlist: { type: "Boolean" },
     },
     indexes: [
       { fields: { tenantId: 1, type: 1 } },
@@ -312,9 +318,9 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
         default: "available",
         required: true,
       },
-      machineType: { type: "String", default: "standard" },
+      machineType: { type: "String" },
     },
-    indexes: [{ fields: { tenantId: 1, machineCode: 1 } }],
+    indexes: [{ fields: { tenantId: 1, machineCode: 1 }, unique: true }],
   },
 
   ProductModel: {
@@ -353,7 +359,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
         type: "Array",
         items: { type: "ObjectId", ref: "File" },
       },
-      active: { type: "Boolean", default: true },
+      active: { type: "Boolean" },
     },
     indexes: [{ fields: { tenantId: 1, productName: 1 } }],
   },
@@ -366,12 +372,12 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
       materialId: { type: "ObjectId", ref: "Material", required: true },
       date: { type: "String", required: true }, // YYYY-MM-DD
       consolidatedPricePaise: { type: "Number", paise: true, required: true },
-      change1dPct: { type: "Number", default: 0 },
-      change7dPct: { type: "Number", default: 0 },
-      volatility: { type: "Number", default: 0 },
-      method: { type: "String", enum: ["baseline", "median"], default: "median" },
-      sourceCount: { type: "Number", default: 1 },
-      hasUnverifiedMove: { type: "Boolean", default: false },
+      change1dPct: { type: "Number" },
+      change7dPct: { type: "Number" },
+      volatility: { type: "Number" },
+      method: { type: "String", enum: ["baseline", "median"] },
+      sourceCount: { type: "Number" },
+      hasUnverifiedMove: { type: "Boolean" },
       observations: {
         type: "Array",
         cap: 20,
@@ -459,7 +465,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
         required: true,
         embedded: {
           sizes: { type: "Array", items: { type: "String" }, required: true },
-          gsm: { type: "Number", required: true },
+          gsm: { type: "Number" },
           colours: { type: "Array", items: { type: "String" } },
           fabric: { type: "String" },
           print: { type: "String" },
@@ -1000,8 +1006,16 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
       { fields: { tenantId: 1, clientId: 1, createdAt: 1 } },
       { fields: { tenantId: 1, "production.assignedSupervisors.supervisorId": 1, status: 1 } },
       { fields: { tenantId: 1, "financials.milestones.status": 1, "financials.milestones.dueDate": 1 } },
-      { fields: { tenantId: 1, "financials.milestones.receipts.razorpayPaymentId": 1 }, unique: true, sparse: true },
-      { fields: { tenantId: 1, idempotencyKey: 1 }, unique: true, sparse: true },
+      {
+        fields: { tenantId: 1, "financials.milestones.receipts.razorpayPaymentId": 1 },
+        unique: true,
+        partialFilterExpression: { "financials.milestones.receipts.razorpayPaymentId": { $type: "string" } },
+      },
+      {
+        fields: { tenantId: 1, idempotencyKey: 1 },
+        unique: true,
+        partialFilterExpression: { idempotencyKey: { $type: "string" } },
+      },
     ],
   },
 
@@ -1104,7 +1118,11 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
     indexes: [
       { fields: { tenantId: 1, supervisorId: 1, reportDate: 1 }, unique: true },
       { fields: { tenantId: 1, "outputs.orderId": 1, reportDate: 1 } },
-      { fields: { tenantId: 1, clientGeneratedId: 1 }, unique: true, sparse: true },
+      {
+        fields: { tenantId: 1, clientGeneratedId: 1 },
+        unique: true,
+        partialFilterExpression: { clientGeneratedId: { $type: "string" } },
+      },
     ],
   },
 
@@ -1201,8 +1219,8 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
       machineId: { type: "ObjectId", ref: "Machine", required: true },
       sourceReportId: { type: "ObjectId", ref: "SupervisorDailyReport" },
       issue: { type: "String", required: true },
-      technicianName: { type: "String", required: true }, // External contractor, not User
-      technicianContact: { type: "String", required: true },
+      technicianName: { type: "String" }, // External contractor, not User (required on open->assigned)
+      technicianContact: { type: "String" },
       status: {
         type: "String",
         enum: ["open", "assigned", "resolved"],
@@ -1259,7 +1277,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
       timings: { type: "Mixed" },
       decision: { type: "Mixed" },
       guardrails: { type: "Mixed" },
-      model: { type: "String", required: true },
+      model: { type: "String" },
       tokens: { type: "Mixed" },
       costPaise: { type: "Number", paise: true, default: 0 },
       requestId: { type: "String" },
@@ -1274,7 +1292,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
           details: { type: "Mixed" },
         },
       },
-      outputSnapshot: { type: "String" }, // cap <= 64KB
+      outputSnapshot: { type: "String", maxBytes: 65536 }, // cap <= 64KB
     },
     indexes: [
       { fields: { tenantId: 1, agent: 1, createdAt: 1 } },
@@ -1354,13 +1372,8 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
           id: { type: "String", required: true },
         },
       },
-      diff: {
-        type: "Mixed",
-        embedded: {
-          before: { type: "Mixed" },
-          after: { type: "Mixed" },
-        },
-      },
+      before: { type: "Mixed" },
+      after: { type: "Mixed" },
       ip: { type: "String" },
       requestId: { type: "String" },
     },
@@ -1422,8 +1435,14 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
       resolvedAt: { type: "Date" },
     },
     indexes: [
+      { fields: { tenantId: 1, "recipient.userId": 1, createdAt: -1 } },
+      { fields: { tenantId: 1, "recipient.clientId": 1, createdAt: -1 } },
       { fields: { tenantId: 1, status: 1 } },
-      { fields: { tenantId: 1, dedupeKey: 1 }, unique: true, sparse: true },
+      {
+        fields: { tenantId: 1, dedupeKey: 1 },
+        unique: true,
+        partialFilterExpression: { dedupeKey: { $type: "string" } },
+      },
     ],
   },
 

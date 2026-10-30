@@ -1,6 +1,6 @@
 # LoomPilot Backend Status Report (Generated)
 
-**Generated At:** `2026-10-30T10:53:52.311Z`  
+**Generated At:** `2026-10-30T11:13:27.353Z`  
 **Monorepo:** pnpm workspace (`apps/api`, `packages/shared`, `packages/agents-client`, `apps/web`)  
 **TypeScript Typecheck:** Passing (0 errors)  
 **Architectural Decoupling (`depcruise`):** Passing (0 violations across 122 modules, 346 dependencies)  
@@ -134,9 +134,9 @@ Total Test Declarations: **118**
 | `middleware/request-id.test.ts` | 2 |
 | `models/client-safe-security.test.ts` | 6 |
 | `models/paise-validation.test.ts` | 4 |
+| `models/partial-indexes.test.ts` | 2 |
 | `models/ref-types.test.ts` | 2 |
 | `models/schema-indexes.test.ts` | 11 |
-| `models/schema-paths.test.ts` | 2 |
 | `repositories/base-repository.test.ts` | 7 |
 | `repositories/unit-of-work.test.ts` | 7 |
 | `routes/health.test.ts` | 6 |

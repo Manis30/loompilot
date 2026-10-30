@@ -158,5 +158,23 @@ export function assertTransition(
       );
     }
   }
+
+  // Safeguard: ticket open -> assigned requires technicianName and technicianContact
+  if (entity === "ticket" && fromStatus === "open" && toStatus === "assigned") {
+    if (!context?.technicianName || typeof context.technicianName !== "string" || context.technicianName.trim() === "") {
+      throw new TransitionError(
+        "technicianName is required when assigning a maintenance ticket",
+        ErrorCode.VALIDATION_FAILED,
+        400
+      );
+    }
+    if (!context?.technicianContact || typeof context.technicianContact !== "string" || context.technicianContact.trim() === "") {
+      throw new TransitionError(
+        "technicianContact is required when assigning a maintenance ticket",
+        ErrorCode.VALIDATION_FAILED,
+        400
+      );
+    }
+  }
 }
 

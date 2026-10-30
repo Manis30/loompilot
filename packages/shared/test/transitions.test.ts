@@ -7,11 +7,13 @@ describe("Stage 3.5: State Transitions (S4 Safeguards)", () => {
     for (const [entityName, table] of Object.entries(TRANSITION_TABLES)) {
       for (const [fromStatus, targets] of Object.entries(table)) {
         for (const toStatus of targets as readonly string[]) {
-          // Provide context for order on_hold to pass its specific guard
-          const context =
-            entityName === "order" && toStatus === "on_hold"
-              ? { role: "admin" as const, reason: "Machine breakdown" }
-              : undefined;
+          // Provide context for order on_hold or ticket assigned to pass specific guards
+          let context: any;
+          if (entityName === "order" && toStatus === "on_hold") {
+            context = { role: "admin", reason: "Machine breakdown" };
+          } else if (entityName === "ticket" && fromStatus === "open" && toStatus === "assigned") {
+            context = { technicianName: "Ramesh Tech", technicianContact: "9876543210" };
+          }
 
           assert.doesNotThrow(
             () => assertTransition(entityName as any, fromStatus, toStatus, context),
@@ -101,8 +103,61 @@ describe("Stage 3.5: State Transitions (S4 Safeguards)", () => {
     assert.throws(() => assertTransition("revision", "proposed", "sent"), TransitionError);
   });
 
-  test("Maintenance ticket transitions", () => {
-    assert.doesNotThrow(() => assertTransition("ticket", "open", "assigned"));
+  test("Feasibility transitions", () => {
+    assert.doesNotThrow(() => assertTransition("feasibility", "running", "ready"));
+    assert.doesNotThrow(() => assertTransition("feasibility", "running", "failed"));
+    assert.doesNotThrow(() => assertTransition("feasibility", "ready", "superseded"));
+    assert.throws(() => assertTransition("feasibility", "superseded", "ready"), TransitionError);
+  });
+
+  test("Escalation transitions", () => {
+    assert.doesNotThrow(() => assertTransition("escalation", "open", "in_progress"));
+    assert.doesNotThrow(() => assertTransition("escalation", "in_progress", "resolved"));
+    assert.throws(() => assertTransition("escalation", "resolved", "open"), TransitionError);
+  });
+
+  test("Conversation transitions", () => {
+    assert.doesNotThrow(() => assertTransition("conversation", "agent_handling", "escalated"));
+    assert.doesNotThrow(() => assertTransition("conversation", "escalated", "admin_handling"));
+    assert.doesNotThrow(() => assertTransition("conversation", "admin_handling", "resolved"));
+    assert.doesNotThrow(() => assertTransition("conversation", "resolved", "agent_handling"));
+  });
+
+  test("Milestone transitions", () => {
+    assert.doesNotThrow(() => assertTransition("milestone", "pending", "partial"));
+    assert.doesNotThrow(() => assertTransition("milestone", "partial", "received"));
+    assert.doesNotThrow(() => assertTransition("milestone", "pending", "overdue"));
+    assert.doesNotThrow(() => assertTransition("milestone", "overdue", "received"));
+    assert.throws(() => assertTransition("milestone", "received", "pending"), TransitionError);
+  });
+
+  test("Maintenance ticket transitions: requires technician details on open->assigned", () => {
+    // Succeeded with technician details
+    assert.doesNotThrow(() =>
+      assertTransition("ticket", "open", "assigned", {
+        technicianName: "Ramesh Tech",
+        technicianContact: "9876543210",
+      })
+    );
+
+    // Failed without technicianName
+    assert.throws(
+      () =>
+        assertTransition("ticket", "open", "assigned", {
+          technicianContact: "9876543210",
+        }),
+      (err: any) => err.code === ErrorCode.VALIDATION_FAILED
+    );
+
+    // Failed without technicianContact
+    assert.throws(
+      () =>
+        assertTransition("ticket", "open", "assigned", {
+          technicianName: "Ramesh Tech",
+        }),
+      (err: any) => err.code === ErrorCode.VALIDATION_FAILED
+    );
+
     assert.doesNotThrow(() => assertTransition("ticket", "assigned", "resolved"));
     assert.throws(() => assertTransition("ticket", "resolved", "open"), TransitionError);
   });
