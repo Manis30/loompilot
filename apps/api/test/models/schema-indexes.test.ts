@@ -3,41 +3,65 @@ import {
   UserModel,
   ClientModel,
   OrderModel,
-  PriceObservationModel,
-  PriceHistoryModel,
-  MessageModel,
+  MachineModel,
+  MaterialModel,
+  ProductModel,
+  MarketPriceModel,
   NotificationModel,
   SupervisorDailyReportModel,
   IdempotencyKeyModel,
-  DailyOutputModel,
-  MachineStatusLogModel,
-  ReservationModel,
   ConversationModel,
-  QuotationCostingModel,
+  MaintenanceTicketModel,
+  StockMovementModel,
+  AgentRunModel,
+  RefreshTokenModel,
+  OutboxMessageModel,
+  CounterModel,
+  ImportJobModel,
+  FileRecordModel,
 } from "../../src/models/index.js";
 
-describe("Stage 2: Schema v3 Indexes & Constraints", () => {
+describe("Stage 3.5: Schema v4 Indexes & Constraints (All 22 Collections)", () => {
   beforeAll(async () => {
     // Ensure all indexes are built in MongoDB
     await Promise.all([
       UserModel.init(),
       ClientModel.init(),
+      MachineModel.init(),
+      MaterialModel.init(),
+      ProductModel.init(),
+      MarketPriceModel.init(),
       OrderModel.init(),
-      PriceObservationModel.init(),
-      PriceHistoryModel.init(),
-      MessageModel.init(),
-      NotificationModel.init(),
       SupervisorDailyReportModel.init(),
-      IdempotencyKeyModel.init(),
-      DailyOutputModel.init(),
-      MachineStatusLogModel.init(),
-      ReservationModel.init(),
       ConversationModel.init(),
-      QuotationCostingModel.init(),
+      MaintenanceTicketModel.init(),
+      StockMovementModel.init(),
+      AgentRunModel.init(),
+      RefreshTokenModel.init(),
+      IdempotencyKeyModel.init(),
+      NotificationModel.init(),
+      OutboxMessageModel.init(),
+      CounterModel.init(),
+      ImportJobModel.init(),
+      FileRecordModel.init(),
     ]);
   }, 30000);
 
-  it("verifies Order key indexes (status, deliveryDeadline), (clientId), (orderNumber)", async () => {
+  it("verifies UserModel unique index (email)", async () => {
+    const indexes = await UserModel.collection.indexes();
+    const emailIdx = indexes.find((i) => i.name === "tenantId_1_email_1");
+    expect(emailIdx).toBeDefined();
+    expect(emailIdx?.unique).toBe(true);
+  });
+
+  it("verifies MachineModel unique index (machineCode)", async () => {
+    const indexes = await MachineModel.collection.indexes();
+    const codeIdx = indexes.find((i) => i.name === "tenantId_1_machineCode_1");
+    expect(codeIdx).toBeDefined();
+    expect(codeIdx?.unique).toBe(true);
+  });
+
+  it("verifies Order key indexes and partial unique constraints", async () => {
     const indexes = await OrderModel.collection.indexes();
     const indexNames = indexes.map((idx) => idx.name);
 
@@ -49,36 +73,46 @@ describe("Stage 2: Schema v3 Indexes & Constraints", () => {
     // (status, deliveryDeadline)
     expect(indexNames).toContain("tenantId_1_status_1_deliveryDeadline_1");
 
-    // (clientId)
-    expect(indexNames).toContain("tenantId_1_clientId_1");
+    // (clientId, createdAt)
+    expect(indexNames).toContain("tenantId_1_clientId_1_createdAt_1");
+
+    // Supervisor assignment compound
+    expect(indexNames).toContain("tenantId_1_production.assignedSupervisors.supervisorId_1_status_1");
+
+    // Financial milestone compound
+    expect(indexNames).toContain("tenantId_1_financials.milestones.status_1_financials.milestones.dueDate_1");
+
+    // Partial unique idempotencyKey
+    const idempIdx = indexes.find((i) => i.name === "tenantId_1_idempotencyKey_1");
+    expect(idempIdx?.unique).toBe(true);
+    expect(idempIdx?.partialFilterExpression).toEqual({ idempotencyKey: { $type: "string" } });
   });
 
-  it("verifies PriceObservation key index (material, observationDate, source) unique", async () => {
-    const indexes = await PriceObservationModel.collection.indexes();
-    const obsIdx = indexes.find(
-      (i) => i.name === "tenantId_1_materialId_1_observationDate_1_sourceId_1"
-    );
-    expect(obsIdx).toBeDefined();
-    expect(obsIdx?.unique).toBe(true);
+  it("verifies MarketPrice unique index (material, date)", async () => {
+    const indexes = await MarketPriceModel.collection.indexes();
+    const priceIdx = indexes.find((i) => i.name === "tenantId_1_materialId_1_date_1");
+    expect(priceIdx).toBeDefined();
+    expect(priceIdx?.unique).toBe(true);
   });
 
-  it("verifies PriceHistory key index (material, date) unique", async () => {
-    const indexes = await PriceHistoryModel.collection.indexes();
-    const historyIdx = indexes.find((i) => i.name === "tenantId_1_materialId_1_date_1");
-    expect(historyIdx).toBeDefined();
-    expect(historyIdx?.unique).toBe(true);
+  it("verifies Conversation unique index (orderId)", async () => {
+    const indexes = await ConversationModel.collection.indexes();
+    const convIdx = indexes.find((i) => i.name === "tenantId_1_orderId_1");
+    expect(convIdx).toBeDefined();
+    expect(convIdx?.unique).toBe(true);
   });
 
-  it("verifies Message key index (conversationId, createdAt)", async () => {
-    const indexes = await MessageModel.collection.indexes();
-    const indexNames = indexes.map((idx) => idx.name);
-    expect(indexNames).toContain("tenantId_1_conversationId_1_createdAt_1");
-  });
-
-  it("verifies Notification key index (userId, readAt)", async () => {
+  it("verifies Notification inbox indexes and dedupeKey partial index", async () => {
     const indexes = await NotificationModel.collection.indexes();
     const indexNames = indexes.map((idx) => idx.name);
-    expect(indexNames).toContain("tenantId_1_userId_1_readAt_1");
+
+    expect(indexNames).toContain("tenantId_1_recipient.userId_1_createdAt_-1");
+    expect(indexNames).toContain("tenantId_1_recipient.clientId_1_createdAt_-1");
+    expect(indexNames).toContain("tenantId_1_status_1");
+
+    const dedupeIdx = indexes.find((i) => i.name === "tenantId_1_dedupeKey_1");
+    expect(dedupeIdx?.unique).toBe(true);
+    expect(dedupeIdx?.partialFilterExpression).toEqual({ dedupeKey: { $type: "string" } });
   });
 
   it("verifies SupervisorDailyReport unique constraint (supervisorId, reportDate)", async () => {
@@ -88,27 +122,16 @@ describe("Stage 2: Schema v3 Indexes & Constraints", () => {
     expect(supIdx?.unique).toBe(true);
   });
 
-  it("verifies DailyOutput unique constraint (order, stage, date, supervisor)", async () => {
-    const indexes = await DailyOutputModel.collection.indexes();
-    const outputIdx = indexes.find(
-      (i) => i.name === "tenantId_1_orderId_1_processStage_1_outputDate_1_supervisorId_1"
-    );
-    expect(outputIdx).toBeDefined();
-    expect(outputIdx?.unique).toBe(true);
+  it("verifies MaintenanceTicket compound index (machineId, status)", async () => {
+    const indexes = await MaintenanceTicketModel.collection.indexes();
+    const ticketIdx = indexes.find((i) => i.name === "tenantId_1_machineId_1_status_1");
+    expect(ticketIdx).toBeDefined();
   });
 
-  it("verifies MachineStatusLog unique constraint (machineId, statusDate)", async () => {
-    const indexes = await MachineStatusLogModel.collection.indexes();
-    const machineIdx = indexes.find((i) => i.name === "tenantId_1_machineId_1_statusDate_1");
-    expect(machineIdx).toBeDefined();
-    expect(machineIdx?.unique).toBe(true);
-  });
-
-  it("verifies Reservation unique constraint (orderId, materialId)", async () => {
-    const indexes = await ReservationModel.collection.indexes();
-    const resIdx = indexes.find((i) => i.name === "tenantId_1_orderId_1_materialId_1");
-    expect(resIdx).toBeDefined();
-    expect(resIdx?.unique).toBe(true);
+  it("verifies StockMovement compound index (materialId, createdAt)", async () => {
+    const indexes = await StockMovementModel.collection.indexes();
+    const smIdx = indexes.find((i) => i.name === "tenantId_1_materialId_1_createdAt_1");
+    expect(smIdx).toBeDefined();
   });
 
   it("verifies IdempotencyKey unique (key, route) and TTL index on expiresAt", async () => {
@@ -122,10 +145,14 @@ describe("Stage 2: Schema v3 Indexes & Constraints", () => {
     expect(ttlIdx?.expireAfterSeconds).toBe(0);
   });
 
-  it("verifies QuotationCosting unique index (quotationId) for admin-only isolation", async () => {
-    const indexes = await QuotationCostingModel.collection.indexes();
-    const costingIdx = indexes.find((i) => i.name === "tenantId_1_quotationId_1");
-    expect(costingIdx).toBeDefined();
-    expect(costingIdx?.unique).toBe(true);
+  it("verifies RefreshToken unique (tokenHash) and TTL index on expiresAt", async () => {
+    const indexes = await RefreshTokenModel.collection.indexes();
+    const tokenIdx = indexes.find((i) => i.name === "tokenHash_1");
+    expect(tokenIdx).toBeDefined();
+    expect(tokenIdx?.unique).toBe(true);
+
+    const ttlIdx = indexes.find((i) => i.name === "expiresAt_1");
+    expect(ttlIdx).toBeDefined();
+    expect(ttlIdx?.expireAfterSeconds).toBe(0);
   });
 });

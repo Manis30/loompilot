@@ -1,6 +1,5 @@
 import mongoose from "mongoose";
 import { logger } from "../../utils/logger.js";
-import { QuotationRevisionModel } from "../../models/orders/quotation-revision.model.js";
 
 /**
  * Migration: Create Client-Safe and Agent-Safe Read Views in MongoDB
@@ -171,7 +170,7 @@ export async function createClientSafeViews(
     await db.collection("clientSafeRevisions").drop();
   }
 
-  const revisionsCollectionName = QuotationRevisionModel.collection?.name || "quotationrevisions";
+  const revisionsCollectionName = "quotationrevisions";
   logger.info(`Creating clientSafeRevisions view on '${revisionsCollectionName}' collection...`);
   await db.createCollection("clientSafeRevisions", {
     viewOn: revisionsCollectionName,

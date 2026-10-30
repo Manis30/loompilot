@@ -45,7 +45,7 @@ const AuditLogSchema = new Schema<IAuditLog>(
     requestId: { type: String },
     version: { type: Number, default: 1 },
   },
-  { timestamps: true }
+  { timestamps: true, suppressReservedKeysWarning: true }
 );
 
 AuditLogSchema.index({ tenantId: 1, "entity.collection": 1, "entity.id": 1 });

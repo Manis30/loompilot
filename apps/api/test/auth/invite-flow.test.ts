@@ -3,7 +3,7 @@ import request from "supertest";
 import mongoose from "mongoose";
 import { createApp } from "../../src/app.js";
 import { createContainer } from "../../src/container.js";
-import { ClientAccountModel } from "../../src/models/identity/client-account.model.js";
+import { ClientAccountModel } from "../../src/repositories/client-account.repository.js";
 import { ClientModel } from "../../src/models/identity/client.model.js";
 import { createTestUser, generateTestAuthHeader } from "../helpers/auth-helper.js";
 

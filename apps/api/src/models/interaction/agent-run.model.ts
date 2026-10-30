@@ -2,91 +2,86 @@ import mongoose, { Schema, Types } from "mongoose";
 import { BaseEntity } from "../../interfaces/base-repository.interface.js";
 import { paiseField } from "../common/paise-schema.js";
 
-export interface IAgentRunRef {
-  collectionName: string;
-  id: string;
-}
-
-export interface IAgentRunDecision {
-  outcome: string;
-  summary: string;
+export interface IAgentError {
+  code?: string;
+  message?: string;
+  details?: any;
 }
 
 export interface IAgentRun extends BaseEntity {
-  agent: "feasibility" | "quotation" | "market" | "chat" | "monitoring";
+  agent:
+    | "feasibility"
+    | "quotation"
+    | "market"
+    | "chat"
+    | "monitoring"
+    | "admin_assistant";
   trigger: string;
   orderId?: Types.ObjectId;
-  clientId?: Types.ObjectId;
-  materialId?: Types.ObjectId;
-  status: "running" | "ok" | "failed";
-  startedAt: Date;
-  finishedAt?: Date;
-  durationMs?: number;
-  retryOfRunId?: Types.ObjectId;
-  error?: string;
-  inputRef?: IAgentRunRef;
-  outputRef?: IAgentRunRef;
-  decision?: IAgentRunDecision;
+  status: string;
+  timings?: any;
+  decision?: any;
   guardrails?: any;
-  promptVersion?: string;
   model?: string;
-  tokensIn?: number;
-  tokensOut?: number;
+  tokens?: any;
   costPaise?: number;
   requestId?: string;
-  schemaVersion?: number;
+  promptVersion?: string;
+  schemaVersion?: string;
+  retryOfRunId?: Types.ObjectId;
+  error?: IAgentError;
+  outputSnapshot?: string;
 }
+
+const AgentErrorSchema = new Schema<IAgentError>(
+  {
+    code: { type: String },
+    message: { type: String },
+    details: { type: Schema.Types.Mixed },
+  },
+  { _id: false, strict: true }
+);
 
 const AgentRunSchema = new Schema<IAgentRun>(
   {
     tenantId: { type: String, required: true, index: true },
     agent: {
       type: String,
-      enum: ["feasibility", "quotation", "market", "chat", "monitoring"],
+      enum: ["feasibility", "quotation", "market", "chat", "monitoring", "admin_assistant"],
       required: true,
     },
     trigger: { type: String, required: true },
     orderId: { type: Schema.Types.ObjectId, ref: "Order" },
-    clientId: { type: Schema.Types.ObjectId, ref: "Client" },
-    materialId: { type: Schema.Types.ObjectId, ref: "Material" },
-    status: {
-      type: String,
-      enum: ["running", "ok", "failed"],
-      default: "running",
-      required: true,
-    },
-    startedAt: { type: Date, default: Date.now },
-    finishedAt: { type: Date },
-    durationMs: { type: Number },
-    retryOfRunId: { type: Schema.Types.ObjectId, ref: "AgentRun" },
-    error: { type: String },
-    inputRef: {
-      collectionName: { type: String },
-      id: { type: String },
-    },
-    outputRef: {
-      collectionName: { type: String },
-      id: { type: String },
-    },
-    decision: {
-      outcome: { type: String },
-      summary: { type: String },
-    },
+    status: { type: String, required: true },
+    timings: { type: Schema.Types.Mixed },
+    decision: { type: Schema.Types.Mixed },
     guardrails: { type: Schema.Types.Mixed },
-    promptVersion: { type: String },
     model: { type: String },
-    tokensIn: { type: Number },
-    tokensOut: { type: Number },
-    costPaise: paiseField(),
+    tokens: { type: Schema.Types.Mixed },
+    costPaise: paiseField({ default: 0 }),
     requestId: { type: String },
-    schemaVersion: { type: Number, default: 3 },
+    promptVersion: { type: String },
+    schemaVersion: { type: String },
+    retryOfRunId: { type: Schema.Types.ObjectId, ref: "AgentRun" },
+    error: { type: AgentErrorSchema },
+    outputSnapshot: {
+      type: String,
+      validate: {
+        validator: function (val: string) {
+          if (!val) return true;
+          return Buffer.byteLength(val, "utf8") <= 65536;
+        },
+        message: "outputSnapshot exceeds maximum size of 64KB (CAP_EXCEEDED)",
+      },
+    },
     version: { type: Number, default: 1 },
   },
   { timestamps: true }
 );
 
-AgentRunSchema.index({ tenantId: 1, agent: 1, status: 1 });
-AgentRunSchema.index({ tenantId: 1, orderId: 1 });
+AgentRunSchema.index({ tenantId: 1, agent: 1, createdAt: 1 });
+AgentRunSchema.index({ tenantId: 1, orderId: 1, createdAt: 1 });
 
-export const AgentRunModel =
-  mongoose.models.AgentRun || mongoose.model<IAgentRun>("AgentRun", AgentRunSchema);
+export const AgentRunModel: mongoose.Model<IAgentRun> =
+  (mongoose.models.AgentRun as mongoose.Model<IAgentRun>) ||
+  mongoose.model<IAgentRun>("AgentRun", AgentRunSchema);

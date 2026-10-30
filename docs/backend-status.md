@@ -1,6 +1,6 @@
 # LoomPilot Backend Status Report (Generated)
 
-**Generated At:** `2026-10-30T11:13:27.353Z`  
+**Generated At:** `2026-10-30T11:43:56.425Z`  
 **Monorepo:** pnpm workspace (`apps/api`, `packages/shared`, `packages/agents-client`, `apps/web`)  
 **TypeScript Typecheck:** Passing (0 errors)  
 **Architectural Decoupling (`depcruise`):** Passing (0 violations across 122 modules, 346 dependencies)  
@@ -9,51 +9,32 @@
 
 ## 1. Domain & Platform Models (`apps/api/src/models`)
 
-Total Model Files: **41**
+Total Model Files: **22**
 
 | # | Model File Path |
 | :---: | :--- |
-| 1 | `admin/delivery.model.ts` |
-| 2 | `admin/order-assignment.model.ts` |
-| 3 | `admin/payment.model.ts` |
-| 4 | `admin/purchase-decision.model.ts` |
-| 5 | `admin/quotation-costing.model.ts` |
-| 6 | `catalog/machine.model.ts` |
-| 7 | `catalog/market-source.model.ts` |
-| 8 | `catalog/material.model.ts` |
-| 9 | `catalog/price-alert.model.ts` |
-| 10 | `catalog/price-history.model.ts` |
-| 11 | `catalog/price-observation.model.ts` |
-| 12 | `catalog/product.model.ts` |
-| 13 | `identity/client-account.model.ts` |
-| 14 | `identity/client.model.ts` |
-| 15 | `identity/settings.model.ts` |
-| 16 | `identity/supplier.model.ts` |
-| 17 | `identity/user.model.ts` |
-| 18 | `interaction/agent-run.model.ts` |
-| 19 | `interaction/client-interaction.model.ts` |
-| 20 | `interaction/conversation.model.ts` |
-| 21 | `interaction/escalation.model.ts` |
-| 22 | `interaction/message.model.ts` |
-| 23 | `orders/feasibility-report.model.ts` |
-| 24 | `orders/order.model.ts` |
-| 25 | `orders/quotation-revision.model.ts` |
-| 26 | `orders/quotation.model.ts` |
-| 27 | `platform/audit-log.model.ts` |
-| 28 | `platform/counter.model.ts` |
-| 29 | `platform/file.model.ts` |
-| 30 | `platform/idempotency-key.model.ts` |
-| 31 | `platform/import-job.model.ts` |
-| 32 | `platform/notification.model.ts` |
-| 33 | `platform/outbox-message.model.ts` |
-| 34 | `platform/refresh-token.model.ts` |
-| 35 | `production/alert.model.ts` |
-| 36 | `production/daily-output.model.ts` |
-| 37 | `production/machine-status-log.model.ts` |
-| 38 | `production/monitoring-snapshot.model.ts` |
-| 39 | `production/reservation.model.ts` |
-| 40 | `production/stock-movement.model.ts` |
-| 41 | `production/supervisor-daily-report.model.ts` |
+| 1 | `catalog/machine.model.ts` |
+| 2 | `catalog/market-price.model.ts` |
+| 3 | `catalog/material.model.ts` |
+| 4 | `catalog/product.model.ts` |
+| 5 | `identity/client.model.ts` |
+| 6 | `identity/settings.model.ts` |
+| 7 | `identity/supplier.model.ts` |
+| 8 | `identity/user.model.ts` |
+| 9 | `interaction/agent-run.model.ts` |
+| 10 | `interaction/conversation.model.ts` |
+| 11 | `orders/order.model.ts` |
+| 12 | `platform/audit-log.model.ts` |
+| 13 | `platform/counter.model.ts` |
+| 14 | `platform/file.model.ts` |
+| 15 | `platform/idempotency-key.model.ts` |
+| 16 | `platform/import-job.model.ts` |
+| 17 | `platform/notification.model.ts` |
+| 18 | `platform/outbox-message.model.ts` |
+| 19 | `platform/refresh-token.model.ts` |
+| 20 | `production/maintenance-ticket.model.ts` |
+| 21 | `production/stock-movement.model.ts` |
+| 22 | `production/supervisor-daily-report.model.ts` |
 
 ---
 
@@ -113,8 +94,8 @@ Total Repositories: **8**
 
 ## 4. Test Suite Summary (`apps/api/test`)
 
-Total Test Files: **27**  
-Total Test Declarations: **118**
+Total Test Files: **28**  
+Total Test Declarations: **134**
 
 | Test File | Test Count |
 | :--- | :---: |
@@ -137,6 +118,7 @@ Total Test Declarations: **118**
 | `models/partial-indexes.test.ts` | 2 |
 | `models/ref-types.test.ts` | 2 |
 | `models/schema-indexes.test.ts` | 11 |
+| `models/schema-v4-rules.test.ts` | 16 |
 | `repositories/base-repository.test.ts` | 7 |
 | `repositories/unit-of-work.test.ts` | 7 |
 | `routes/health.test.ts` | 6 |

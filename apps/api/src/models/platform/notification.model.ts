@@ -1,58 +1,99 @@
 import mongoose, { Schema, Types } from "mongoose";
 import { BaseEntity } from "../../interfaces/base-repository.interface.js";
 
-export interface INotification extends BaseEntity {
+export interface INotificationRecipient {
   userId?: Types.ObjectId;
-  clientAccountId?: Types.ObjectId;
-  channel: "inApp" | "email" | "wa" | "sms" | string;
-  status: "pending" | "sent" | "failed";
+  clientId?: Types.ObjectId;
+}
+
+export interface INotificationEntity {
+  collection: string;
+  id: string;
+}
+
+export interface INotification extends BaseEntity {
+  recipient: INotificationRecipient;
+  kind: "notification" | "alert";
+  type: string;
+  channel: "in_app" | "email" | "whatsapp" | "sms";
+  status: "pending" | "sent" | "failed" | "delivered";
   attempts: number;
   title: string;
   body: string;
-  type: string;
+  entity?: INotificationEntity;
+  dedupeKey?: string;
   readAt?: Date | null;
+  resolvedAt?: Date | null;
 }
+
+const RecipientSchema = new Schema<INotificationRecipient>(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User" },
+    clientId: { type: Schema.Types.ObjectId, ref: "Client" },
+  },
+  { _id: false, strict: true }
+);
+
+const EntitySchema = new Schema<INotificationEntity>(
+  {
+    collection: { type: String, required: true },
+    id: { type: String, required: true },
+  },
+  { _id: false, strict: true }
+);
 
 const NotificationSchema = new Schema<INotification>(
   {
     tenantId: { type: String, required: true, index: true },
-    userId: { type: Schema.Types.ObjectId, ref: "User" },
-    clientAccountId: { type: Schema.Types.ObjectId, ref: "ClientAccount" },
+    recipient: { type: RecipientSchema, required: true },
+    kind: {
+      type: String,
+      enum: ["notification", "alert"],
+      default: "notification",
+      required: true,
+    },
+    type: { type: String, required: true },
     channel: {
       type: String,
-      enum: ["inApp", "email", "wa", "sms"],
-      default: "inApp",
+      enum: ["in_app", "email", "whatsapp", "sms"],
       required: true,
     },
     status: {
       type: String,
-      enum: ["pending", "sent", "failed"],
+      enum: ["pending", "sent", "failed", "delivered"],
       default: "pending",
       required: true,
     },
     attempts: { type: Number, default: 0 },
     title: { type: String, required: true },
     body: { type: String, required: true },
-    type: { type: String, required: true },
+    entity: { type: EntitySchema },
+    dedupeKey: { type: String },
     readAt: { type: Date, default: null },
+    resolvedAt: { type: Date, default: null },
     version: { type: Number, default: 1 },
   },
   { timestamps: true }
 );
 
-// Exactly one recipient (userId OR clientAccountId) required
-NotificationSchema.pre("validate", function (next) {
-  const hasUser = Boolean(this.userId);
-  const hasClient = Boolean(this.clientAccountId);
-  if ((hasUser && hasClient) || (!hasUser && !hasClient)) {
-    next(new Error("Notification must specify exactly one recipient: userId OR clientAccountId"));
-  } else {
-    next();
+// Rule 10: Notification recipient XOR check
+NotificationSchema.path("recipient").validate(function (recipient: any) {
+  const hasUser = Boolean(recipient?.userId);
+  const hasClient = Boolean(recipient?.clientId);
+  return (hasUser && !hasClient) || (!hasUser && hasClient);
+}, "Notification must specify exactly one recipient: userId OR clientId (XOR)");
+
+NotificationSchema.index({ tenantId: 1, "recipient.userId": 1, createdAt: -1 });
+NotificationSchema.index({ tenantId: 1, "recipient.clientId": 1, createdAt: -1 });
+NotificationSchema.index({ tenantId: 1, status: 1 });
+NotificationSchema.index(
+  { tenantId: 1, dedupeKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { dedupeKey: { $type: "string" } },
   }
-});
+);
 
-NotificationSchema.index({ tenantId: 1, userId: 1, readAt: 1 });
-
-export const NotificationModel =
-  mongoose.models.Notification ||
+export const NotificationModel: mongoose.Model<INotification> =
+  (mongoose.models.Notification as mongoose.Model<INotification>) ||
   mongoose.model<INotification>("Notification", NotificationSchema);

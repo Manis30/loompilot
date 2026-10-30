@@ -1,6 +1,6 @@
 import mongoose, { Types } from "mongoose";
 import { UserModel, IUser } from "../../src/models/identity/user.model.js";
-import { ClientAccountModel, IClientAccount } from "../../src/models/identity/client-account.model.js";
+import { ClientAccountModel, IClientAccount } from "../../src/repositories/client-account.repository.js";
 import { ClientModel } from "../../src/models/identity/client.model.js";
 import { SettingsModel } from "../../src/models/identity/settings.model.js";
 import { TokenService } from "../../src/services/token.service.js";

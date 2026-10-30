@@ -1,25 +1,56 @@
 import mongoose, { Schema } from "mongoose";
 import { BaseEntity } from "../../interfaces/base-repository.interface.js";
 
+export interface IUserNotificationPrefs {
+  inApp: boolean;
+  email: boolean;
+  wa: boolean;
+  sms: boolean;
+}
+
+export interface IUserLockout {
+  failedCount: number;
+  lockedUntil?: Date | null;
+}
+
 export interface IUser extends BaseEntity {
   role: "admin" | "supervisor";
   name: string;
   email: string;
   phone?: string;
   passwordHash: string;
-  status: "active" | "locked";
   processAreas: string[];
-  lockout?: {
-    failedCount: number;
-    lockedUntil?: Date | null;
-  };
-  notificationPrefs?: {
-    inApp: boolean;
-    email: boolean;
-    wa: boolean;
-    sms: boolean;
-  };
+  status: "active" | "locked";
+  notificationPrefs?: IUserNotificationPrefs;
+  lockout?: IUserLockout;
 }
+
+export function validateUserProcessAreas(
+  userAreas: string[],
+  configAreas: string[]
+): boolean {
+  if (!userAreas || userAreas.length === 0) return true;
+  const validSet = new Set(configAreas);
+  return userAreas.every((area) => validSet.has(area));
+}
+
+const UserNotificationPrefsSchema = new Schema<IUserNotificationPrefs>(
+  {
+    inApp: { type: Boolean, default: true },
+    email: { type: Boolean, default: true },
+    wa: { type: Boolean, default: false },
+    sms: { type: Boolean, default: false },
+  },
+  { _id: false, strict: true }
+);
+
+const UserLockoutSchema = new Schema<IUserLockout>(
+  {
+    failedCount: { type: Number, default: 0 },
+    lockedUntil: { type: Date, default: null },
+  },
+  { _id: false, strict: true }
+);
 
 const UserSchema = new Schema<IUser>(
   {
@@ -33,23 +64,15 @@ const UserSchema = new Schema<IUser>(
     email: { type: String, required: true, lowercase: true, trim: true },
     phone: { type: String, trim: true },
     passwordHash: { type: String, required: true },
+    processAreas: { type: [String], required: true },
     status: {
       type: String,
       enum: ["active", "locked"],
       default: "active",
       required: true,
     },
-    processAreas: [{ type: String, trim: true }],
-    lockout: {
-      failedCount: { type: Number, default: 0 },
-      lockedUntil: { type: Date, default: null },
-    },
-    notificationPrefs: {
-      inApp: { type: Boolean, default: true },
-      email: { type: Boolean, default: true },
-      wa: { type: Boolean, default: false },
-      sms: { type: Boolean, default: false },
-    },
+    notificationPrefs: { type: UserNotificationPrefsSchema },
+    lockout: { type: UserLockoutSchema },
     version: { type: Number, default: 1 },
   },
   { timestamps: true }

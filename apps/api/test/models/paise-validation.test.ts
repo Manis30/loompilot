@@ -36,19 +36,21 @@ describe("Strict Integer Paise Validation (Floats Prohibited)", () => {
     );
   });
 
-  it("fails Mongoose validation when saving an Order with float quotedTotalPaise (100.50)", async () => {
+  it("fails Mongoose validation when saving an Order with float quotation.totalPaise (100.50)", async () => {
     const invalidOrder = new OrderModel({
       tenantId: "test_tenant",
       orderNumber: "ORD-INVALID-PAISE",
       clientId: "60c72b2f9b1d8b2bad000001",
       quantity: 100,
       deliveryDeadline: "2026-12-31",
-      quotedTotalPaise: 100.5, // Invalid float!
+      quotation: {
+        totalPaise: 100.5, // Invalid float!
+      },
     });
 
     const err = invalidOrder.validateSync();
     expect(err).toBeDefined();
-    expect(err?.errors["quotedTotalPaise"]).toBeDefined();
+    expect(err?.errors["quotation.totalPaise"]).toBeDefined();
   });
 });
 

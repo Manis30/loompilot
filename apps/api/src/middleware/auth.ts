@@ -2,7 +2,8 @@ import { Request, Response, NextFunction } from "express";
 import { TokenService } from "../services/token.service.js";
 import { StatusCacheService } from "../services/status-cache.service.js";
 import { UserModel } from "../models/identity/user.model.js";
-import { ClientAccountModel } from "../models/identity/client-account.model.js";
+import { ClientModel } from "../models/identity/client.model.js";
+import { ClientAccountModel } from "../repositories/client-account.repository.js";
 import { AppError } from "../errors/app-error.js";
 import { ErrorCode } from "@loompilot/shared";
 
@@ -75,24 +76,34 @@ export async function authenticate(
         status = user.status;
         processAreas = user.processAreas;
       } else {
-        const account = await ClientAccountModel.findOne({
+        const client = await ClientModel.findOne({
           tenantId: claims.tenantId,
           _id: claims.sub,
         }).lean();
 
-        if (!account) {
-          throw new AppError(ErrorCode.UNAUTHENTICATED, "Authenticated client account no longer exists", 401);
+        if (client) {
+          status = client.portalAccess?.status || client.status;
+        } else {
+          const account = await ClientAccountModel.findOne({
+            tenantId: claims.tenantId,
+            _id: claims.sub,
+          }).lean();
+          if (!account) {
+            throw new AppError(ErrorCode.UNAUTHENTICATED, "Authenticated client no longer exists", 401);
+          }
+          status = account.status;
         }
-        status = account.status;
       }
 
-      await StatusCacheService.setStatus(
-        claims.realm,
-        claims.tenantId,
-        claims.sub,
-        status,
-        60
-      );
+      if (status) {
+        await StatusCacheService.setStatus(
+          claims.realm,
+          claims.tenantId,
+          claims.sub,
+          status,
+          60
+        );
+      }
     }
 
     if (status !== "active") {
