@@ -3,7 +3,6 @@ import { TokenService } from "../services/token.service.js";
 import { StatusCacheService } from "../services/status-cache.service.js";
 import { UserModel } from "../models/identity/user.model.js";
 import { ClientModel } from "../models/identity/client.model.js";
-import { ClientAccountModel } from "../repositories/client-account.repository.js";
 import { AppError } from "../errors/app-error.js";
 import { ErrorCode } from "@loompilot/shared";
 
@@ -81,18 +80,10 @@ export async function authenticate(
           _id: claims.sub,
         }).lean();
 
-        if (client) {
-          status = client.portalAccess?.status || client.status;
-        } else {
-          const account = await ClientAccountModel.findOne({
-            tenantId: claims.tenantId,
-            _id: claims.sub,
-          }).lean();
-          if (!account) {
-            throw new AppError(ErrorCode.UNAUTHENTICATED, "Authenticated client no longer exists", 401);
-          }
-          status = account.status;
+        if (!client) {
+          throw new AppError(ErrorCode.UNAUTHENTICATED, "Authenticated client no longer exists", 401);
         }
+        status = client.portalAccess?.status || client.status;
       }
 
       if (status) {

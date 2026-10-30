@@ -3,7 +3,7 @@ import { AppError } from "../errors/app-error.js";
 import { ErrorCode } from "@loompilot/shared";
 import { TokenService } from "./token.service.js";
 import { UserRepository } from "../repositories/user.repository.js";
-import { ClientAccountRepository } from "../repositories/client-account.repository.js";
+import { ClientRepository } from "../repositories/client.repository.js";
 import { RefreshTokenRepository } from "../repositories/refresh-token.repository.js";
 import { AuditService } from "./audit.service.js";
 import { StatusCacheService } from "./status-cache.service.js";
@@ -17,7 +17,7 @@ import {
 export class AuthService {
   constructor(
     private readonly userRepo = new UserRepository(),
-    private readonly clientAccountRepo = new ClientAccountRepository(),
+    private readonly clientRepo = new ClientRepository(),
     private readonly refreshTokenRepo = new RefreshTokenRepository(),
     private readonly auditService = new AuditService()
   ) {}
@@ -69,7 +69,7 @@ export class AuthService {
     // Check account lockout status
     if (user.status === "locked") {
       const lockedUntil = user.lockout?.lockedUntil;
-      if (lockedUntil && lockedUntil > new Date()) {
+      if (!lockedUntil || lockedUntil > new Date()) {
         await this.auditService.log({
           tenantId,
           actor: { id: userId, type: "user", email },
@@ -190,22 +190,22 @@ export class AuthService {
     requestId?: string;
   }) {
     const { tenantId, email, password, ip, requestId } = params;
-    const account = await this.clientAccountRepo.findByEmail(tenantId, email);
+    const client = await this.clientRepo.findByPortalEmail(tenantId, email, true);
 
-    if (!account) {
+    if (!client || !client.portalAccess?.email) {
       await runDummyHash(password);
       await this.auditService.log({
         tenantId,
         actor: { id: null, type: "system", email },
         action: "CLIENT_LOGIN_FAILED",
-        entity: { collection: "clientAccounts", id: "unknown" },
+        entity: { collection: "clients", id: "unknown" },
         ip,
         requestId,
       });
       throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Invalid email or password", 401);
     }
 
-    if (account.status === "invited") {
+    if (client.portalAccess.status === "invited") {
       throw new AppError(
         ErrorCode.FORBIDDEN,
         "Account invitation has not been accepted yet. Please use the invitation link sent to your email.",
@@ -213,16 +213,16 @@ export class AuthService {
       );
     }
 
-    const accountId = String(account._id);
+    const clientId = String(client._id);
 
-    if (account.status === "locked") {
-      const lockedUntil = account.lockout?.lockedUntil;
-      if (lockedUntil && lockedUntil > new Date()) {
+    if (client.portalAccess.status === "locked") {
+      const lockedUntil = client.portalAccess.lockout?.lockedUntil;
+      if (!lockedUntil || lockedUntil > new Date()) {
         await this.auditService.log({
           tenantId,
-          actor: { id: accountId, type: "client", email },
+          actor: { id: clientId, type: "client", email },
           action: "CLIENT_LOGIN_LOCKED_ATTEMPT",
-          entity: { collection: "clientAccounts", id: accountId },
+          entity: { collection: "clients", id: clientId },
           ip,
           requestId,
         });
@@ -233,36 +233,36 @@ export class AuthService {
         );
       }
       // Lockout expired, auto-unlock
-      await this.clientAccountRepo.resetLockout(tenantId, accountId);
+      await this.clientRepo.resetLockout(tenantId, clientId);
     }
 
-    if (!account.passwordHash) {
+    if (!client.portalAccess.passwordHash) {
       throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Invalid email or password", 401);
     }
 
-    const isMatch = await comparePassword(password, account.passwordHash);
+    const isMatch = await comparePassword(password, client.portalAccess.passwordHash);
 
     if (!isMatch) {
       const env = getEnv();
-      const { lockedNow } = await this.clientAccountRepo.incrementFailedLogin(
+      const { lockedNow } = await this.clientRepo.incrementFailedLogin(
         tenantId,
-        accountId,
+        clientId,
         env.LOCKOUT_THRESHOLD,
         env.LOCKOUT_DURATION_MINUTES
       );
 
       if (lockedNow) {
-        await StatusCacheService.invalidate("client", tenantId, accountId);
+        await StatusCacheService.invalidate("client", tenantId, clientId);
         await this.refreshTokenRepo.revokeAllForSubject(
           tenantId,
           "client",
-          accountId
+          clientId
         );
         await this.auditService.log({
           tenantId,
-          actor: { id: accountId, type: "client", email },
+          actor: { id: clientId, type: "client", email },
           action: "CLIENT_ACCOUNT_LOCKED",
-          entity: { collection: "clientAccounts", id: accountId },
+          entity: { collection: "clients", id: clientId },
           ip,
           requestId,
         });
@@ -270,9 +270,9 @@ export class AuthService {
 
       await this.auditService.log({
         tenantId,
-        actor: { id: accountId, type: "client", email },
+        actor: { id: clientId, type: "client", email },
         action: "CLIENT_LOGIN_FAILED",
-        entity: { collection: "clientAccounts", id: accountId },
+        entity: { collection: "clients", id: clientId },
         ip,
         requestId,
       });
@@ -281,14 +281,14 @@ export class AuthService {
     }
 
     // Reset failed login count
-    await this.clientAccountRepo.resetLockout(tenantId, accountId);
+    await this.clientRepo.resetLockout(tenantId, clientId);
 
     const { token: accessToken, expiresIn } = TokenService.generateAccessToken({
-      subjectId: accountId,
+      subjectId: clientId,
       realm: "client",
       tenantId,
-      clientId: String(account.clientId),
-      clientAccountId: accountId,
+      clientId,
+      clientAccountId: clientId,
     });
 
     const rawRefreshToken = TokenService.generateRefreshToken();
@@ -299,19 +299,19 @@ export class AuthService {
     await this.refreshTokenRepo.createToken({
       tenantId,
       realm: "client",
-      subjectId: accountId,
+      subjectId: clientId,
       familyId,
       tokenHash,
       expiresAt: refreshExpiresAt,
     });
 
-    await StatusCacheService.setStatus("client", tenantId, accountId, "active", 60);
+    await StatusCacheService.setStatus("client", tenantId, clientId, "active", 60);
 
     await this.auditService.log({
       tenantId,
-      actor: { id: accountId, type: "client", email },
+      actor: { id: clientId, type: "client", email },
       action: "CLIENT_LOGIN_SUCCESS",
-      entity: { collection: "clientAccounts", id: accountId },
+      entity: { collection: "clients", id: clientId },
       ip,
       requestId,
     });
@@ -321,10 +321,10 @@ export class AuthService {
       expiresIn,
       rawRefreshToken,
       clientAccount: {
-        id: accountId,
-        email: account.email,
-        name: account.name,
-        clientId: String(account.clientId),
+        id: clientId,
+        email: client.portalAccess.email,
+        name: client.contactPerson || client.clientName,
+        clientId,
       },
     };
   }
@@ -419,14 +419,14 @@ export class AuthService {
       }
       role = user.role;
     } else {
-      const account = await this.clientAccountRepo.findById(
+      const client = await this.clientRepo.findById(
         existing.tenantId,
         String(existing.subjectId)
       );
-      if (!account || account.status !== "active") {
+      if (!client || client.portalAccess?.status !== "active") {
         throw new AppError(ErrorCode.ACCOUNT_LOCKED, "Account is inactive or locked", 403);
       }
-      clientId = String(account.clientId);
+      clientId = String(client._id);
     }
 
     // Rotate: Issue new refresh token in the same family and revoke previous one
@@ -566,18 +566,20 @@ export class AuthService {
       const newHash = await hashPassword(newPassword);
       await this.userRepo.update(tenantId, subjectId, { passwordHash: newHash });
     } else {
-      const account = await this.clientAccountRepo.findById(tenantId, subjectId);
-      if (!account || !account.passwordHash) {
+      const client = await this.clientRepo.findById(tenantId, subjectId, true);
+      if (!client || !client.portalAccess?.passwordHash) {
         throw new AppError(ErrorCode.NOT_FOUND, "Account not found", 404);
       }
 
-      const matches = await comparePassword(currentPassword, account.passwordHash);
+      const matches = await comparePassword(currentPassword, client.portalAccess.passwordHash);
       if (!matches) {
         throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Current password does not match", 400);
       }
 
       const newHash = await hashPassword(newPassword);
-      await this.clientAccountRepo.update(tenantId, subjectId, { passwordHash: newHash });
+      await this.clientRepo.update(tenantId, subjectId, {
+        "portalAccess.passwordHash": newHash,
+      } as any);
     }
 
     // Revoke all existing sessions across all devices
@@ -588,7 +590,7 @@ export class AuthService {
       tenantId,
       actor: { id: subjectId, type: realm === "user" ? "user" : "client" },
       action: "PASSWORD_CHANGED",
-      entity: { collection: realm === "user" ? "users" : "clientAccounts", id: subjectId },
+      entity: { collection: realm === "user" ? "users" : "clients", id: subjectId },
       ip,
       requestId,
     });
@@ -606,33 +608,13 @@ export class AuthService {
     const { token, password, ip, requestId } = params;
     const claims = TokenService.verifyInviteToken(token);
 
-    const account = await this.clientAccountRepo.findById(
-      claims.tenantId,
-      claims.sub
-    );
-
-    if (!account) {
-      throw new AppError(ErrorCode.NOT_FOUND, "Invited account does not exist", 404);
-    }
-
-    if (account.status !== "invited") {
-      throw new AppError(
-        ErrorCode.INVITE_ALREADY_ACCEPTED,
-        "Invitation has already been accepted or is no longer valid",
-        400
-      );
-    }
-
     validatePasswordPolicy(password);
     const passwordHash = await hashPassword(password);
 
-    const updated = await this.clientAccountRepo.update(
+    const updated = await this.clientRepo.acceptInvite(
       claims.tenantId,
       claims.sub,
-      {
-        passwordHash,
-        status: "active",
-      }
+      passwordHash
     );
 
     await StatusCacheService.setStatus(
@@ -645,9 +627,13 @@ export class AuthService {
 
     await this.auditService.log({
       tenantId: claims.tenantId,
-      actor: { id: String(account._id), type: "client", email: account.email },
+      actor: {
+        id: String(updated._id),
+        type: "client",
+        email: updated.portalAccess?.email,
+      },
       action: "CLIENT_INVITE_ACCEPTED",
-      entity: { collection: "clientAccounts", id: String(account._id) },
+      entity: { collection: "clients", id: String(updated._id) },
       ip,
       requestId,
     });
@@ -655,10 +641,10 @@ export class AuthService {
     return {
       success: true,
       account: {
-        id: String(updated?._id),
-        email: updated?.email,
-        name: updated?.name,
-        clientId: String(updated?.clientId),
+        id: String(updated._id),
+        email: updated.portalAccess?.email,
+        name: updated.contactPerson || updated.clientName,
+        clientId: String(updated._id),
       },
     };
   }

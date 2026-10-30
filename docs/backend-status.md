@@ -1,6 +1,6 @@
 # LoomPilot Backend Status Report (Generated)
 
-**Generated At:** `2026-10-30T12:15:23.830Z`  
+**Generated At:** `2026-10-30T13:05:25.908Z`  
 **Monorepo:** pnpm workspace (`apps/api`, `packages/shared`, `packages/agents-client`, `apps/web`)  
 **TypeScript Typecheck:** Passing (0 errors)  
 **Architectural Decoupling (`depcruise`):** Passing (0 violations across 122 modules, 346 dependencies)  
@@ -40,7 +40,7 @@ Total Model Files: **22**
 
 ## 2. API Routes & RBAC Matrix
 
-Total Registered Route Endpoints: **28**
+Total Registered Route Endpoints: **34**
 
 | Method | Route Path | Allowed Realms | Allowed Roles | Idempotent |
 | :--- | :--- | :--- | :--- | :---: |
@@ -66,6 +66,12 @@ Total Registered Route Endpoints: **28**
 | `POST` | `/api/v1/client-accounts/:id/reinvite` | `user` | `admin` | No |
 | `POST` | `/api/v1/client-accounts/:id/lock` | `user` | `admin` | No |
 | `POST` | `/api/v1/client-accounts/:id/unlock` | `user` | `admin` | No |
+| `POST` | `/api/v1/clients/:id/portal/invite` | `user` | `admin` | No |
+| `POST` | `/api/v1/clients/:id/portal/re-invite` | `user` | `admin` | No |
+| `POST` | `/api/v1/clients/:id/portal/reinvite` | `user` | `admin` | No |
+| `POST` | `/api/v1/clients/:id/portal/accept` | `user` | `admin` | Yes |
+| `POST` | `/api/v1/clients/:id/portal/lock` | `user` | `admin` | No |
+| `POST` | `/api/v1/clients/:id/portal/unlock` | `user` | `admin` | No |
 | `GET` | `/api/v1/audit` | `user` | `admin` | No |
 | `GET` | `/health` | `Public` | `-` | No |
 | `GET` | `/ready` | `Public` | `-` | No |
@@ -84,7 +90,7 @@ Total Repositories: **10**
 | 1 | `admin-costing.repository.ts` |
 | 2 | `audit-log.repository.ts` |
 | 3 | `base.repository.ts` |
-| 4 | `client-account.repository.ts` |
+| 4 | `client.repository.ts` |
 | 5 | `idempotency.repository.ts` |
 | 6 | `orders.repository.ts` |
 | 7 | `refresh-token.repository.ts` |
@@ -96,13 +102,14 @@ Total Repositories: **10**
 
 ## 4. Test Suite Summary (`apps/api/test`)
 
-Total Test Files: **28**  
-Total Test Declarations: **141**
+Total Test Files: **29**  
+Total Test Declarations: **165**
 
 | Test File | Test Count |
 | :--- | :---: |
 | `audit/audit-logging.test.ts` | 2 |
 | `auth/auth-login.test.ts` | 6 |
+| `auth/client-portal-security.test.ts` | 1 |
 | `auth/invite-flow.test.ts` | 1 |
 | `auth/last-admin.test.ts` | 3 |
 | `auth/realm-separation.test.ts` | 3 |
@@ -119,9 +126,9 @@ Total Test Declarations: **141**
 | `models/partial-indexes.test.ts` | 6 |
 | `models/ref-types.test.ts` | 2 |
 | `models/schema-indexes.test.ts` | 11 |
-| `models/schema-v4-rules.test.ts` | 17 |
+| `models/schema-v4-rules.test.ts` | 32 |
 | `repositories/base-repository.test.ts` | 7 |
-| `repositories/orders-repository.test.ts` | 8 |
+| `repositories/orders-repository.test.ts` | 16 |
 | `repositories/unit-of-work.test.ts` | 7 |
 | `routes/health.test.ts` | 6 |
 | `scripts/create-admin.test.ts` | 1 |

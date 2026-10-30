@@ -124,6 +124,7 @@ describe("Stage 3: RBAC Route Permission Matrix", () => {
       { method: "post", path: "/api/v1/users", body: { name: "X", email: "x@x.com", password: "p", role: "supervisor" } },
       { method: "get", path: "/api/v1/client-accounts" },
       { method: "post", path: "/api/v1/client-accounts/invite", body: { clientId: "c", email: "c@c.com", name: "C" } },
+      { method: "post", path: "/api/v1/clients/c/portal/invite", body: { email: "c@c.com" } },
       { method: "get", path: "/api/v1/audit" },
     ];
 

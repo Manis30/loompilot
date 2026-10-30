@@ -35,7 +35,6 @@ export class AuthController {
         accessToken: result.accessToken,
         expiresIn: result.expiresIn,
         user: result.user,
-        refreshToken: result.rawRefreshToken,
       });
     } catch (err) {
       next(err);
@@ -61,7 +60,6 @@ export class AuthController {
         accessToken: result.accessToken,
         expiresIn: result.expiresIn,
         clientAccount: result.clientAccount,
-        refreshToken: result.rawRefreshToken,
       });
     } catch (err) {
       next(err);
@@ -85,7 +83,6 @@ export class AuthController {
       res.status(200).json({
         accessToken: result.accessToken,
         expiresIn: result.expiresIn,
-        refreshToken: result.newRawRefreshToken,
       });
     } catch (err) {
       next(err);
@@ -109,7 +106,6 @@ export class AuthController {
       res.status(200).json({
         accessToken: result.accessToken,
         expiresIn: result.expiresIn,
-        refreshToken: result.newRawRefreshToken,
       });
     } catch (err) {
       next(err);

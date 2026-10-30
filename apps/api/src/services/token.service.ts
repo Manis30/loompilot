@@ -17,9 +17,11 @@ export interface AccessTokenClaims {
 }
 
 export interface InviteTokenClaims {
-  sub: string; // accountId
+  sub: string; // clientId
   purpose: "invite";
   tenantId: string;
+  email?: string;
+  jti: string;
   iss: string;
 }
 
@@ -116,14 +118,27 @@ export class TokenService {
    * Generates a signed one-time client invite token (7-day validity).
    */
   static generateInviteToken(params: {
-    accountId: string;
+    clientId?: string;
+    accountId?: string;
     tenantId: string;
+    email?: string;
   }): string {
+    const clientId = params.clientId || params.accountId;
+    if (!clientId) {
+      throw new AppError(
+        ErrorCode.VALIDATION_FAILED,
+        "clientId is required for invite token",
+        400
+      );
+    }
     const env = getEnv();
+    const jti = crypto.randomUUID();
     const payload = {
-      sub: params.accountId,
+      sub: clientId,
       purpose: "invite",
       tenantId: params.tenantId,
+      ...(params.email ? { email: params.email } : {}),
+      jti,
     };
 
     return jwt.sign(payload, env.JWT_ACCESS_SECRET, {

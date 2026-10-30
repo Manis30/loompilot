@@ -1,7 +1,6 @@
 import mongoose, { Types } from "mongoose";
 import { UserModel, IUser } from "../../src/models/identity/user.model.js";
-import { ClientAccountModel, IClientAccount } from "../../src/repositories/client-account.repository.js";
-import { ClientModel } from "../../src/models/identity/client.model.js";
+import { ClientModel, IClient } from "../../src/models/identity/client.model.js";
 import { SettingsModel } from "../../src/models/identity/settings.model.js";
 import { TokenService } from "../../src/services/token.service.js";
 import { hashPassword } from "../../src/utils/password.js";
@@ -76,15 +75,37 @@ export async function createTestClientAccount(params?: {
   email?: string;
   password?: string;
   status?: "invited" | "active" | "locked";
-}): Promise<{ account: IClientAccount; plainPassword: string; clientId: Types.ObjectId }> {
+}): Promise<{ account: any; plainPassword: string; clientId: Types.ObjectId }> {
   const tenantId = params?.tenantId || "test_tenant";
   const email = params?.email || `client_${Date.now()}_${Math.random().toString(36).substring(7)}@client.local`;
   const plainPassword = params?.password || "ClientPass123!";
   const status = params?.status || "active";
 
-  let clientId = params?.clientId;
-  if (!clientId) {
-    const client = await ClientModel.create({
+  const passwordHash = status !== "invited" ? await hashPassword(plainPassword) : undefined;
+  const adminId = new mongoose.Types.ObjectId();
+
+  let clientDoc: any;
+  if (params?.clientId) {
+    clientDoc = await ClientModel.findOneAndUpdate(
+      { tenantId, _id: params.clientId },
+      {
+        $set: {
+          portalAccess: {
+            email,
+            passwordHash,
+            status,
+            invitedBy: adminId,
+            invitedAt: new Date(),
+            acceptedAt: status === "active" ? new Date() : undefined,
+            lockout: { failedCount: 0, lockedUntil: null },
+            notificationPrefs: { inApp: true, email: true, wa: false, sms: false },
+          },
+        },
+      },
+      { new: true }
+    );
+  } else {
+    clientDoc = await ClientModel.create({
       tenantId,
       clientName: `Acme Fabrics ${Math.floor(Math.random() * 9000 + 1000)}`,
       contactPerson: "Acme Representative",
@@ -95,29 +116,33 @@ export async function createTestClientAccount(params?: {
       address: "123 Textile Park, Ring Road",
       status: "active",
       paymentTermsDays: 30,
+      portalAccess: {
+        email,
+        passwordHash,
+        status,
+        invitedBy: adminId,
+        invitedAt: new Date(),
+        acceptedAt: status === "active" ? new Date() : undefined,
+        lockout: { failedCount: 0, lockedUntil: null },
+        notificationPrefs: { inApp: true, email: true, wa: false, sms: false },
+      },
       version: 1,
     });
-    clientId = client._id as Types.ObjectId;
   }
 
-  const passwordHash = status !== "invited" ? await hashPassword(plainPassword) : undefined;
-  const adminId = new mongoose.Types.ObjectId();
-
-  const account = await ClientAccountModel.create({
-    tenantId,
+  const clientId = clientDoc._id as Types.ObjectId;
+  const account = {
+    _id: clientId,
+    id: String(clientId),
     clientId,
     email,
-    name: "Acme Contact",
-    passwordHash,
+    name: clientDoc.contactPerson || clientDoc.clientName,
     status,
-    invitedBy: adminId,
-    invitedAt: new Date(),
-    lockout: { failedCount: 0, lockedUntil: null },
-    notificationPrefs: { inApp: true, email: true, wa: false, sms: false },
-    version: 1,
-  });
+    tenantId,
+    portalAccess: clientDoc.portalAccess,
+  };
 
-  return { account: account.toObject(), plainPassword, clientId };
+  return { account, plainPassword, clientId };
 }
 
 export function generateTestAuthHeader(params: {

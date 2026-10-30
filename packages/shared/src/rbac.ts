@@ -208,6 +208,62 @@ export const ROUTE_PERMISSION_MATRIX: Record<string, RoutePermission> = {
     idempotent: false,
   },
 
+  // Client Portal Access Management (Admin Only, /api/v1/clients/:id/portal/...)
+  "POST /api/v1/clients/:id/portal/invite": {
+    routeKey: "POST /api/v1/clients/:id/portal/invite",
+    method: "POST",
+    path: "/api/v1/clients/:id/portal/invite",
+    description: "Invite client contact with one-time invite token",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin"],
+    idempotent: false,
+  },
+  "POST /api/v1/clients/:id/portal/re-invite": {
+    routeKey: "POST /api/v1/clients/:id/portal/re-invite",
+    method: "POST",
+    path: "/api/v1/clients/:id/portal/re-invite",
+    description: "Re-issue invitation for client portal and revoke active sessions",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin"],
+    idempotent: false,
+  },
+  "POST /api/v1/clients/:id/portal/reinvite": {
+    routeKey: "POST /api/v1/clients/:id/portal/reinvite",
+    method: "POST",
+    path: "/api/v1/clients/:id/portal/reinvite",
+    description: "Re-issue invitation for client portal and revoke active sessions",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin"],
+    idempotent: false,
+  },
+  "POST /api/v1/clients/:id/portal/accept": {
+    routeKey: "POST /api/v1/clients/:id/portal/accept",
+    method: "POST",
+    path: "/api/v1/clients/:id/portal/accept",
+    description: "Admin or portal activation of client portal access",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin"],
+    idempotent: true,
+  },
+  "POST /api/v1/clients/:id/portal/lock": {
+    routeKey: "POST /api/v1/clients/:id/portal/lock",
+    method: "POST",
+    path: "/api/v1/clients/:id/portal/lock",
+    description: "Lock client portal access and revoke sessions",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin"],
+    idempotent: false,
+  },
+  "POST /api/v1/clients/:id/portal/unlock": {
+    routeKey: "POST /api/v1/clients/:id/portal/unlock",
+    method: "POST",
+    path: "/api/v1/clients/:id/portal/unlock",
+    description: "Unlock client portal access",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin"],
+    idempotent: false,
+  },
+
   // Audit Logs (Admin Only)
   "GET /api/v1/audit": {
     routeKey: "GET /api/v1/audit",

@@ -3,7 +3,6 @@ import request from "supertest";
 import { createApp } from "../../src/app.js";
 import { createContainer } from "../../src/container.js";
 import { UserModel } from "../../src/models/identity/user.model.js";
-import { ClientAccountModel } from "../../src/models/identity/client-account.model.js";
 import { createTestUser, createTestClientAccount, generateTestAuthHeader } from "../helpers/auth-helper.js";
 
 describe("Stage 3: Authentication & Login Flow", () => {

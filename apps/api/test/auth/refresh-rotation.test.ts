@@ -6,6 +6,17 @@ import { RefreshTokenModel } from "../../src/models/platform/refresh-token.model
 import { AuditLogModel } from "../../src/models/platform/audit-log.model.js";
 import { createTestUser } from "../helpers/auth-helper.js";
 
+function extractRefreshToken(res: request.Response): string {
+  const cookies = res.headers["set-cookie"];
+  if (!cookies) return "";
+  const cookieList = Array.isArray(cookies) ? cookies : [cookies];
+  for (const c of cookieList) {
+    const match = c.match(/refreshToken=([^;]+)/);
+    if (match && match[1]) return decodeURIComponent(match[1]);
+  }
+  return "";
+}
+
 describe("Stage 3: Refresh Token Rotation & Family Reuse Detection", () => {
   const container = createContainer();
   const app = createApp(container);
@@ -23,20 +34,26 @@ describe("Stage 3: Refresh Token Rotation & Family Reuse Detection", () => {
       });
 
     expect(loginRes.status).toBe(200);
-    const loginCookies = loginRes.headers["set-cookie"] as unknown as string[];
-    const firstRefreshToken = loginRes.body.refreshToken;
-    expect(firstRefreshToken).toBeDefined();
+    // Strict requirement: refresh token is NOT in JSON body
+    expect(loginRes.body.refreshToken).toBeUndefined();
 
-    // Use refresh token
+    const loginCookies = loginRes.headers["set-cookie"] as unknown as string[];
+    expect(loginCookies).toBeDefined();
+    const firstRefreshToken = extractRefreshToken(loginRes);
+    expect(firstRefreshToken).toBeTruthy();
+
+    // Use refresh token via Cookie header
     const refreshRes = await request(app)
       .post("/api/v1/auth/refresh")
-      .set("Cookie", loginCookies)
-      .send({ refreshToken: firstRefreshToken });
+      .set("Cookie", loginCookies);
 
     expect(refreshRes.status).toBe(200);
     expect(refreshRes.body.accessToken).toBeDefined();
-    const secondRefreshToken = refreshRes.body.refreshToken;
-    expect(secondRefreshToken).toBeDefined();
+    // Strict requirement: refresh token is NOT in JSON body
+    expect(refreshRes.body.refreshToken).toBeUndefined();
+
+    const secondRefreshToken = extractRefreshToken(refreshRes);
+    expect(secondRefreshToken).toBeTruthy();
     expect(secondRefreshToken).not.toBe(firstRefreshToken);
 
     // Verify first token is marked as revoked in MongoDB
@@ -59,12 +76,13 @@ describe("Stage 3: Refresh Token Rotation & Family Reuse Detection", () => {
         password: plainPassword,
       });
 
-    const firstToken = loginRes.body.refreshToken;
+    const loginCookies = loginRes.headers["set-cookie"] as unknown as string[];
+    const firstToken = extractRefreshToken(loginRes);
 
     // Normal rotation
     const refreshRes = await request(app)
       .post("/api/v1/auth/refresh")
-      .send({ refreshToken: firstToken });
+      .set("Cookie", loginCookies);
 
     expect(refreshRes.status).toBe(200);
 
@@ -77,6 +95,7 @@ describe("Stage 3: Refresh Token Rotation & Family Reuse Detection", () => {
     // Malicious attacker reuses firstToken
     const reuseRes = await request(app)
       .post("/api/v1/auth/refresh")
+      .set("Cookie", [`refreshToken=${firstToken}`])
       .send({ refreshToken: firstToken });
 
     expect(reuseRes.status).toBe(401);
@@ -109,18 +128,20 @@ describe("Stage 3: Refresh Token Rotation & Family Reuse Detection", () => {
         password: plainPassword,
       });
 
-    const firstToken = loginRes.body.refreshToken;
+    const loginCookies = loginRes.headers["set-cookie"] as unknown as string[];
+    const firstToken = extractRefreshToken(loginRes);
 
     // First tab rotates token
     const firstTabRes = await request(app)
       .post("/api/v1/auth/refresh")
-      .send({ refreshToken: firstToken });
+      .set("Cookie", loginCookies);
 
     expect(firstTabRes.status).toBe(200);
 
     // Second parallel tab sends request with the same firstToken within 10s
     const secondTabRes = await request(app)
       .post("/api/v1/auth/refresh")
+      .set("Cookie", [`refreshToken=${firstToken}`])
       .send({ refreshToken: firstToken });
 
     expect(secondTabRes.status).toBe(409);

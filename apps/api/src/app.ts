@@ -16,6 +16,7 @@ import { authRouter } from "./routes/auth.routes.js";
 import { meRouter } from "./routes/me.routes.js";
 import { userRouter } from "./routes/user.routes.js";
 import { clientAccountRouter } from "./routes/client-account.routes.js";
+import { clientPortalRouter } from "./routes/client-portal.routes.js";
 import { auditRouter } from "./routes/audit.routes.js";
 import { AppContainer, getContainer } from "./container.js";
 
@@ -96,6 +97,7 @@ export function createApp(container: AppContainer = getContainer()): Express {
   app.use("/api/v1", authRouter);
   app.use("/api/v1/me", meRouter);
   app.use("/api/v1/users", userRouter);
+  app.use("/api/v1/clients", clientPortalRouter);
   app.use("/api/v1/client-accounts", clientAccountRouter);
   app.use("/api/v1/audit", auditRouter);
 
