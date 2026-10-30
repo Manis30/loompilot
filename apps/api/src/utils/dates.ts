@@ -1,135 +1,198 @@
-export const DEFAULT_TIMEZONE = "Asia/Kolkata";
+import { getEnv } from "../config/env.js";
+
+const DEFAULT_TIMEZONE = "Asia/Kolkata";
 
 /**
- * Returns the current date in YYYY-MM-DD format within the given timezone (default Asia/Kolkata).
+ * Validates weeklyOffs configuration:
+ * - Must be an array of integers between 0 and 6 (0=Sunday, ..., 6=Saturday).
+ * - Maximum of 6 distinct days.
+ * - Throws if all 7 days are configured as weekly offs.
  */
-export function todayInTz(tz: string = DEFAULT_TIMEZONE, date: Date = new Date()): string {
+export function validateWeeklyOffs(weeklyOffs: number[]): void {
+  if (!Array.isArray(weeklyOffs)) {
+    throw new Error("weeklyOffs must be an array of integers between 0 and 6");
+  }
+
+  const distinctDays = new Set<number>();
+  for (const day of weeklyOffs) {
+    if (!Number.isInteger(day) || day < 0 || day > 6) {
+      throw new Error(
+        `Invalid weekly off day '${day}'. Each day must be an integer between 0 (Sunday) and 6 (Saturday).`
+      );
+    }
+    distinctDays.add(day);
+  }
+
+  if (distinctDays.size >= 7) {
+    throw new Error(
+      "Cannot configure all 7 days as weekly offs; at least one working day is required."
+    );
+  }
+}
+
+/**
+ * Checks if a string is in strictly valid 'YYYY-MM-DD' format.
+ */
+export function isBusinessDateString(val: unknown): val is string {
+  if (typeof val !== "string") return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(val);
+  if (!match) return false;
+  const [, y, m, d] = match;
+  const year = Number(y);
+  const month = Number(m);
+  const day = Number(d);
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+/**
+ * Formats a Date or timestamp to 'YYYY-MM-DD' in the given timezone (defaults to tenant timezone).
+ */
+export function toBusinessDateString(
+  dateInput: Date | string | number = new Date(),
+  tz?: string
+): string {
+  const timezone = tz ?? getEnv().TENANT_TIMEZONE ?? DEFAULT_TIMEZONE;
+  const date = typeof dateInput === "string" && isBusinessDateString(dateInput)
+    ? parseBusinessDate(dateInput)
+    : new Date(dateInput);
+
+  if (isNaN(date.getTime())) {
+    throw new Error(`Invalid date input: ${String(dateInput)}`);
+  }
+
+  // Use Intl.DateTimeFormat to reliably extract year, month, day in target timezone
   const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: tz,
+    timeZone: timezone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   });
-  return formatter.format(date);
+
+  return formatter.format(date); // en-CA formats as YYYY-MM-DD
 }
 
 /**
- * Returns formatted YYYY-MM-DD string for any given Date object in the specified timezone.
+ * Returns today's date in 'YYYY-MM-DD' string in tenant timezone.
  */
-export function formatDateInTz(date: Date, tz: string = DEFAULT_TIMEZONE): string {
-  return todayInTz(tz, date);
+export function getTodayBusinessDate(tz?: string): string {
+  return toBusinessDateString(new Date(), tz);
 }
 
 /**
- * Checks whether the current time in the given timezone is past a cutoff time (e.g. "18:00").
+ * Parses a 'YYYY-MM-DD' string into a UTC midnight Date object.
  */
-export function isPastCutoff(
-  cutoffTime: string = "18:00",
-  tz: string = DEFAULT_TIMEZONE,
-  now: Date = new Date()
-): boolean {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz,
-    hour: "numeric",
-    minute: "numeric",
-    hourCycle: "h23",
-  }).formatToParts(now);
-
-  const currentHour = parseInt(parts.find((p) => p.type === "hour")?.value || "0", 10);
-  const currentMinute = parseInt(parts.find((p) => p.type === "minute")?.value || "0", 10);
-  const currentMinutes = currentHour * 60 + currentMinute;
-
-  const [cutoffH = 18, cutoffM = 0] = cutoffTime.split(":").map((v) => parseInt(v, 10));
-  const cutoffMinutes = cutoffH * 60 + cutoffM;
-
-  return currentMinutes >= cutoffMinutes;
+export function parseBusinessDate(dateStr: string): Date {
+  if (!isBusinessDateString(dateStr)) {
+    throw new Error(`Invalid business date string: '${dateStr}'. Expected format 'YYYY-MM-DD'`);
+  }
+  const [yearStr, monthStr, dayStr] = dateStr.split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
 }
 
 /**
- * Checks whether a given YYYY-MM-DD date is a working day (not in holidays list and not a weekly off day).
- * Weekly offs default to [0] (Sunday).
+ * Checks if a given date or 'YYYY-MM-DD' string is a working day.
+ * Days in weeklyOffs (0=Sunday, 1=Monday, ..., 6=Saturday) and dates present in holidays are non-working.
+ * weeklyOffs and holidays are REQUIRED parameters matching settings in schema v3.
  */
 export function isWorkingDay(
-  dateStr: string,
-  holidays: string[] = [],
-  weeklyOffs: number[] = [0]
+  dateInput: Date | string,
+  weeklyOffs: number[],
+  holidays: string[],
+  tz?: string
 ): boolean {
+  validateWeeklyOffs(weeklyOffs);
+
+  const dateStr = typeof dateInput === "string" && isBusinessDateString(dateInput)
+    ? dateInput
+    : toBusinessDateString(dateInput, tz);
+
   if (holidays.includes(dateStr)) {
     return false;
   }
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  const dayOfWeek = d.getUTCDay();
+
+  const date = parseBusinessDate(dateStr);
+  const dayOfWeek = date.getUTCDay(); // 0 is Sunday, 1 is Monday ... 6 is Saturday
   return !weeklyOffs.includes(dayOfWeek);
 }
 
 /**
- * Adds a number of working days to a starting YYYY-MM-DD date, skipping holidays and weekly offs.
+ * Adds N working days to a start business date, skipping days matching weeklyOffs and holidays.
+ * weeklyOffs and holidays are REQUIRED parameters matching settings in schema v3.
  */
 export function addWorkingDays(
-  startDateStr: string,
-  days: number,
-  holidays: string[] = [],
-  weeklyOffs: number[] = [0]
+  startDateInput: Date | string,
+  workingDaysToAdd: number,
+  weeklyOffs: number[],
+  holidays: string[],
+  tz?: string
 ): string {
-  let count = 0;
-  let current = new Date(`${startDateStr}T00:00:00Z`);
+  validateWeeklyOffs(weeklyOffs);
 
-  while (count < days) {
-    current.setUTCDate(current.getUTCDate() + 1);
-    const dateStr = current.toISOString().slice(0, 10);
-    if (isWorkingDay(dateStr, holidays, weeklyOffs)) {
-      count++;
+  if (workingDaysToAdd < 0) {
+    throw new Error(`Cannot add negative working days: ${workingDaysToAdd}`);
+  }
+
+  let currentDateStr = typeof startDateInput === "string" && isBusinessDateString(startDateInput)
+    ? startDateInput
+    : toBusinessDateString(startDateInput, tz);
+
+  let daysRemaining = workingDaysToAdd;
+
+  while (daysRemaining > 0) {
+    const nextDate = parseBusinessDate(currentDateStr);
+    nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+    currentDateStr = toBusinessDateString(nextDate, "UTC");
+
+    if (isWorkingDay(currentDateStr, weeklyOffs, holidays, "UTC")) {
+      daysRemaining--;
     }
   }
 
-  return current.toISOString().slice(0, 10);
+  return currentDateStr;
 }
 
 /**
- * Adds calendar days to a YYYY-MM-DD date string.
+ * Calculates the number of working days between two business dates (inclusive of both start and end if working).
+ * weeklyOffs and holidays are REQUIRED parameters matching settings in schema v3.
  */
-export function addDays(dateStr: string, days: number): string {
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
+export function countWorkingDaysBetween(
+  startDateStr: string,
+  endDateStr: string,
+  weeklyOffs: number[],
+  holidays: string[]
+): number {
+  validateWeeklyOffs(weeklyOffs);
 
-/**
- * Checks if a date string is strictly in the past relative to today in the given timezone.
- */
-export function isPast(dateStr: string, tz: string = DEFAULT_TIMEZONE): boolean {
-  return dateStr < todayInTz(tz);
-}
-
-/**
- * In-memory holiday cache per tenant with 5-minute TTL to optimize hot loops.
- */
-const holidayCache = new Map<string, { holidays: string[]; expiresAt: number }>();
-
-export function invalidateHolidayCache(tenantId: string): void {
-  holidayCache.delete(tenantId);
-}
-
-export async function getCachedTenantHolidays(
-  tenantId: string,
-  fetchFn?: (tenantId: string) => Promise<string[]>
-): Promise<string[]> {
-  const cached = holidayCache.get(tenantId);
-  const now = Date.now();
-  if (cached && cached.expiresAt > now) {
-    return cached.holidays;
+  if (!isBusinessDateString(startDateStr) || !isBusinessDateString(endDateStr)) {
+    throw new Error("Both start and end dates must be valid 'YYYY-MM-DD' business date strings");
   }
-  if (!fetchFn) {
-    return cached?.holidays || [];
-  }
-  const holidays = await fetchFn(tenantId);
-  holidayCache.set(tenantId, { holidays, expiresAt: now + 5 * 60 * 1000 });
-  return holidays;
-}
 
-/**
- * Returns today's ISO date string in tenant timezone (alias for backward compatibility).
- */
-export function todayISO(tz: string = DEFAULT_TIMEZONE): string {
-  return todayInTz(tz);
+  if (startDateStr > endDateStr) {
+    return 0;
+  }
+
+  let count = 0;
+  let current = parseBusinessDate(startDateStr);
+  const end = parseBusinessDate(endDateStr);
+
+  while (current <= end) {
+    const currentStr = toBusinessDateString(current, "UTC");
+    if (isWorkingDay(currentStr, weeklyOffs, holidays, "UTC")) {
+      count++;
+    }
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  return count;
 }

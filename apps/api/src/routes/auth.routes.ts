@@ -1,34 +1,79 @@
 import { Router } from "express";
 import { AuthController } from "../controllers/auth.controller.js";
-import { authMiddleware } from "../middleware/auth.js";
-import { requireRole } from "../middleware/rbac.js";
-import { validate } from "../middleware/validate.js";
-import { authLoginLimiter } from "../middleware/rateLimiter.js";
-import {
-  LoginSchema,
-  RegisterUserSchema,
-  ChangePasswordSchema,
-} from "../validators/auth.validator.js";
-import { UserRole } from "@loompilot/shared";
+import { authRateLimiter } from "../middleware/auth-rate-limiter.js";
+import { authenticate } from "../middleware/auth.js";
+import { authorize } from "../middleware/rbac.js";
+import { idempotencyMiddleware } from "../middleware/idempotency.js";
 
-export function createAuthRoutes(controller: AuthController): Router {
-  const router = Router();
+export const authRouter: Router = Router();
 
-  router.post("/login", authLoginLimiter, validate(LoginSchema), controller.login);
-  router.post("/refresh", controller.refresh);
-  router.post("/logout", authMiddleware, controller.logout);
-  router.post("/logout-all", authMiddleware, controller.logoutAll);
-  router.post("/change-password", authMiddleware, validate(ChangePasswordSchema), controller.changePassword);
-  router.get("/me", authMiddleware, controller.me);
+// 1. Staff Authentication
+authRouter.post(
+  "/auth/login",
+  authRateLimiter,
+  authorize("POST /api/v1/auth/login"),
+  AuthController.loginUser
+);
 
-  // User registration: strictly authenticated OWNER-only within caller's tenant
-  router.post(
-    "/register",
-    authMiddleware,
-    requireRole(UserRole.OWNER),
-    validate(RegisterUserSchema),
-    controller.register
-  );
+authRouter.post(
+  "/auth/refresh",
+  authRateLimiter,
+  authorize("POST /api/v1/auth/refresh"),
+  AuthController.refreshUser
+);
 
-  return router;
-}
+authRouter.post(
+  "/auth/logout",
+  authorize("POST /api/v1/auth/logout"),
+  AuthController.logoutUser
+);
+
+authRouter.post(
+  "/auth/logout-all",
+  authenticate,
+  authorize("POST /api/v1/auth/logout-all"),
+  AuthController.logoutAll
+);
+
+authRouter.post(
+  "/auth/change-password",
+  authenticate,
+  authorize("POST /api/v1/auth/change-password"),
+  AuthController.changePassword
+);
+
+// 2. Client Authentication
+authRouter.post(
+  "/client/auth/login",
+  authRateLimiter,
+  authorize("POST /api/v1/client/auth/login"),
+  AuthController.loginClient
+);
+
+authRouter.post(
+  "/client/auth/refresh",
+  authRateLimiter,
+  authorize("POST /api/v1/client/auth/refresh"),
+  AuthController.refreshClient
+);
+
+authRouter.post(
+  "/client/auth/logout",
+  authorize("POST /api/v1/client/auth/logout"),
+  AuthController.logoutClient
+);
+
+authRouter.post(
+  "/client/auth/logout-all",
+  authenticate,
+  authorize("POST /api/v1/client/auth/logout-all"),
+  AuthController.logoutAll
+);
+
+authRouter.post(
+  "/client/auth/accept-invite",
+  authRateLimiter,
+  idempotencyMiddleware,
+  authorize("POST /api/v1/client/auth/accept-invite"),
+  AuthController.acceptInvite
+);

@@ -21,7 +21,7 @@ export const ProductionOrderSchema = z.object({
   productName: z.string().min(1),
   totalQuantity: z.number().positive(),
   unit: z.string(),
-  status: z.nativeEnum(OrderStatus).default(OrderStatus.PLANNED),
+  status: z.nativeEnum(OrderStatus).default(OrderStatus.SUBMITTED),
   startDate: z.string(),
   targetDeliveryDate: z.string(),
   actualDeliveryDate: z.string().optional(),

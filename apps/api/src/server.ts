@@ -1,68 +1,97 @@
-import http from "http";
-import mongoose from "mongoose";
-import { app } from "./app.js";
-import { env } from "./config/env.js";
-import { logger } from "./config/logger.js";
-import { connectDB } from "./config/db.js";
-import { getRedisClient } from "./config/redis.js";
-import { initSocketServer } from "./realtime/socket.js";
-import { jobScheduler } from "./jobs/scheduler.js";
+import http from "node:http";
+import { getEnv } from "./config/env.js";
+import { connectMongo, disconnectMongo } from "./config/database.js";
+import { connectRedis, disconnectRedis } from "./config/redis.js";
+import { logger } from "./utils/logger.js";
+import { createApp } from "./app.js";
+import { createContainer } from "./container.js";
 
 async function bootstrap() {
+  const env = getEnv();
+  logger.info({ nodeEnv: env.NODE_ENV, port: env.PORT }, "Initializing LoomPilot API server...");
+
+  // Initialize dependency container
+  const container = createContainer();
+
+  // Connect to persistent storage
   try {
-    await connectDB();
-
-    // Connect to Redis if configured
-    if (env.REDIS_HOST) {
-      try {
-        const redis = getRedisClient();
-        await redis.connect();
-      } catch (redisErr) {
-        logger.warn({ redisErr }, "Redis not available, operating in standalone memory mode");
-      }
-    }
-
-    const server = http.createServer(app);
-    initSocketServer(server);
-
-    server.listen(env.API_PORT, env.API_HOST, () => {
-      logger.info(
-        { port: env.API_PORT, host: env.API_HOST, env: env.NODE_ENV },
-        `${env.APP_NAME} API server running`
-      );
-    });
-
-    // Graceful shutdown handling
-    const shutdown = async (signal: string) => {
-      logger.info({ signal }, "Initiating graceful shutdown...");
-      jobScheduler.stop();
-
-      server.close(async () => {
-        logger.info("HTTP server closed");
-        try {
-          await mongoose.disconnect();
-          logger.info("MongoDB disconnected");
-          const redis = getRedisClient();
-          if (redis.status === "ready") {
-            await redis.quit();
-            logger.info("Redis connection closed");
-          }
-        } catch (cleanupErr) {
-          logger.error({ cleanupErr }, "Error during cleanup");
-        } finally {
-          process.exit(0);
-        }
-      });
-    };
-
-    process.on("SIGTERM", () => shutdown("SIGTERM"));
-    process.on("SIGINT", () => shutdown("SIGINT"));
+    await connectMongo();
+    await connectRedis();
   } catch (err) {
-    logger.fatal({ err }, "Failed to bootstrap server");
+    logger.fatal({ err }, "Fatal: Failed to connect to backing services during startup");
     process.exit(1);
   }
+
+  const app = createApp(container);
+  const server = http.createServer(app);
+
+  server.listen(env.PORT, () => {
+    logger.info(
+      {
+        port: env.PORT,
+        docs: `http://localhost:${env.PORT}/docs`,
+        health: `http://localhost:${env.PORT}/health`,
+        ready: `http://localhost:${env.PORT}/ready`,
+      },
+      "LoomPilot API Server listening"
+    );
+  });
+
+  // Graceful shutdown handling
+  let isShuttingDown = false;
+
+  async function gracefulShutdown(signal: string) {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    logger.info({ signal }, "Received shutdown signal. Commencing graceful shutdown...");
+
+    // Force exit timeout after 10 seconds
+    const forceExitTimer = setTimeout(() => {
+      logger.error("Graceful shutdown timed out. Forcing process exit.");
+      process.exit(1);
+    }, 10000);
+    forceExitTimer.unref();
+
+    server.close(async (err) => {
+      if (err) {
+        logger.error({ err }, "Error while closing HTTP server");
+      } else {
+        logger.info("HTTP server closed");
+      }
+
+      try {
+        await disconnectRedis();
+        await disconnectMongo();
+        logger.info("Backing service connections closed gracefully");
+        process.exit(0);
+      } catch (shutdownError) {
+        logger.error({ err: shutdownError }, "Error during database/redis shutdown");
+        process.exit(1);
+      }
+    });
+  }
+
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("unhandledRejection", (reason) => {
+    logger.error(
+      { err: reason instanceof Error ? reason : new Error(String(reason)) },
+      "Unhandled promise rejection"
+    );
+  });
+  process.on("uncaughtException", (error) => {
+    logger.fatal({ err: error }, "Uncaught exception. Shutting down.");
+    process.exit(1);
+  });
 }
 
-if (process.env.NODE_ENV !== "test") {
-  bootstrap();
+// Start server if this is the entry point
+if (process.argv[1]?.endsWith("server.ts") || process.argv[1]?.endsWith("server.js")) {
+  bootstrap().catch((err) => {
+    logger.fatal({ err }, "Bootstrap error");
+    process.exit(1);
+  });
 }
+
+export { bootstrap };
+

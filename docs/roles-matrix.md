@@ -1,57 +1,35 @@
-# LoomPilot Role-Permission Matrix
+# LoomPilot Role-Based Access Control (RBAC) Matrix
 
-## 1. Roles Definition
-LoomPilot defines five distinct operational roles across textile manufacturing operations:
-- **`owner`**: Business executive / proprietor. Full visibility and configuration authority.
-- **`manager`**: Factory / operations manager. Manages workforce, oversees production orders, and handles recovery recommendations.
-- **`sales`**: Sales executive. Handles customer enquiries, quotation creation, quotation dispatch, and customer communications.
-- **`store`**: Warehouse / inventory clerk. Handles stock levels, material receipts, and issues.
-- **`accounts`**: Finance officer. Manages invoices, payment terms, collections, and approves reminder notifications.
+Generated from `ROUTE_PERMISSION_MATRIX` in `@loompilot/shared`.
+Enforced strictly at the API gateway layer via `authenticate` and `authorize` middleware. Default policy: **DENY ALL**.
 
----
-
-## 2. Permission Matrix
-
-| Resource / Action | Owner | Manager | Sales | Store | Accounts | Notes / Enforced Guards |
-|---|:---:|:---:|:---:|:---:|:---:|---|
-| **Auth & Users** | | | | | | |
-| View Users | ✅ | ✅ | ❌ | ❌ | ❌ | |
-| Manage Users / Roles | ✅ | ❌ | ❌ | ❌ | ❌ | Owner only |
-| **Enquiries & Quotations** | | | | | | |
-| Create / View Enquiries | ✅ | ✅ | ✅ | ❌ | ❌ | |
-| Generate Draft Quotation | ✅ | ✅ | ✅ | ❌ | ❌ | Triggers AI Quotation Agent |
-| View Quotation Details | ✅ | ✅ | ✅ | ❌ | ✅ | |
-| View Cost Breakdown & Margin | ✅ | ✅ | ✅ | ❌ | ✅ | **`store` strictly blocked from cost & margin** |
-| Approve Quotation | ✅ | ✅ | ❌ | ❌ | ❌ | Requires management authorization |
-| Send Quotation to Customer | ✅ | ✅ | ✅ | ❌ | ❌ | Generates PDF and logs dispatch |
-| Confirm Order (Transactional) | ✅ | ✅ | ❌ | ❌ | ❌ | Reserves stock & creates production plan |
-| **Materials & Inventory** | | | | | | |
-| View Stock Levels | ✅ | ✅ | ✅ | ✅ | ✅ | All operational roles |
-| View Raw Material Cost / Rates | ✅ | ✅ | ❌ | ❌ | ✅ | **`store` and `sales` blocked from purchase costs** |
-| Record Stock Movement (In/Out) | ✅ | ✅ | ❌ | ✅ | ❌ | Store & plant management |
-| Manage Suppliers & Lead Times | ✅ | ✅ | ❌ | ✅ | ❌ | |
-| **Workforce & Production** | | | | | | |
-| Manage Workers & Attendance | ✅ | ✅ | ❌ | ❌ | ❌ | |
-| Record Daily Output | ✅ | ✅ | ❌ | ❌ | ❌ | Shop-floor entry; idempotent |
-| View Production Orders | ✅ | ✅ | ✅ | ✅ | ✅ | Overall progress visibility |
-| View Output Variance Chart | ✅ | ✅ | ✅ | ❌ | ❌ | |
-| **Alerts & Recovery** | | | | | | |
-| View Production Alerts | ✅ | ✅ | ❌ | ❌ | ❌ | Alert feed & push notifications |
-| Accept / Reject Recommendations| ✅ | ✅ | ❌ | ❌ | ❌ | Pure advisory proposals |
-| **Deliveries & Payments** | | | | | | |
-| Record Delivery | ✅ | ✅ | ❌ | ✅ | ❌ | Marks order fulfilled & triggers payment flow |
-| View Payments & Deliveries | ✅ | ✅ | ❌ | ❌ | ✅ | |
-| Draft Payment Reminders | ✅ | ❌ | ❌ | ❌ | ✅ | AI creates drafts |
-| **Approve Payment Reminders** | ❌ | ❌ | ❌ | ❌ | ✅ | **Strictly exclusive to `accounts`** |
-| **Reports & Analytics** | | | | | | |
-| View Margin Report | ✅ | ❌ | ❌ | ❌ | ✅ | Sensitive financial metrics |
-| View On-Time Delivery Rate | ✅ | ✅ | ✅ | ❌ | ❌ | Operational efficiency |
-| View Collections Report | ✅ | ❌ | ❌ | ❌ | ✅ | Receivables status |
-
----
-
-## 3. Explicit Security Rules & Tests
-1. **Rule 1 (Store Cost Masking)**: Whenever a user with the `store` role queries materials, quotations, or orders, all cost fields (`unitCostPaise`, `totalCostPaise`, `marginPct`, `riskBufferPct`, `profitPaise`) must be stripped or blocked with a 403 Forbidden.
-2. **Rule 2 (Accounts Exclusive Approval)**: Only users possessing the `accounts` role can call `POST /api/payments/:id/reminders/:reminderId/approve`. Attempting to call this endpoint as `owner`, `manager`, `sales`, or `store` results in a 403 Forbidden.
-3. **Rule 3 (Service Token Bypass Immunity)**: The `/internal/*` routes accept exclusively valid `x-service-token` headers matching `INTERNAL_SERVICE_TOKEN`. User JWTs are rejected.
-
+| Method | Route Path | Access Level | Allowed Realms | Allowed Roles | Idempotent | Description |
+|---|---|---|---|---|---|---|
+| **POST** | `/api/v1/auth/login` | Public | - | - | No | Staff portal user login (admin, supervisor) |
+| **POST** | `/api/v1/client/auth/login` | Public | - | - | No | Client portal login |
+| **POST** | `/api/v1/auth/refresh` | Public (Cookie) | - | - | No | Staff portal token rotation |
+| **POST** | `/api/v1/client/auth/refresh` | Public (Cookie) | - | - | No | Client portal token rotation |
+| **POST** | `/api/v1/auth/logout` | Public (Cookie/Token) | - | - | No | Staff portal session logout |
+| **POST** | `/api/v1/client/auth/logout` | Public (Cookie/Token) | - | - | No | Client portal session logout |
+| **POST** | `/api/v1/auth/logout-all` | Authenticated | `user` | `admin`, `supervisor` | No | Staff user logout from all devices |
+| **POST** | `/api/v1/client/auth/logout-all` | Authenticated | `client` | - | No | Client account logout from all devices |
+| **POST** | `/api/v1/client/auth/accept-invite` | Public (One-time token) | - | - | Yes | Accept client invitation and activate account |
+| **GET** | `/api/v1/me` | Authenticated | `user`, `client` | `admin`, `supervisor` | No | Get authenticated profile and permissions |
+| **PATCH** | `/api/v1/me` | Authenticated | `user`, `client` | `admin`, `supervisor` | No | Update own profile settings |
+| **POST** | `/api/v1/auth/change-password` | Authenticated | `user`, `client` | `admin`, `supervisor` | No | Change password and revoke other sessions |
+| **GET** | `/api/v1/users` | Authenticated | `user` | `admin` | No | List staff users |
+| **POST** | `/api/v1/users` | Authenticated | `user` | `admin` | No | Create staff user |
+| **PATCH** | `/api/v1/users/:id` | Authenticated | `user` | `admin` | No | Update staff user |
+| **POST** | `/api/v1/users/:id/lock` | Authenticated | `user` | `admin` | No | Lock staff user and revoke sessions |
+| **POST** | `/api/v1/users/:id/unlock` | Authenticated | `user` | `admin` | No | Unlock staff user |
+| **GET** | `/api/v1/client-accounts` | Authenticated | `user` | `admin` | No | List client accounts |
+| **POST** | `/api/v1/client-accounts/invite` | Authenticated | `user` | `admin` | No | Invite client contact with one-time invite token |
+| **POST** | `/api/v1/client-accounts/:id/reinvite` | Authenticated | `user` | `admin` | No | Re-issue invitation for client account and revoke sessions |
+| **POST** | `/api/v1/client-accounts/:id/lock` | Authenticated | `user` | `admin` | No | Lock client account and revoke sessions |
+| **POST** | `/api/v1/client-accounts/:id/unlock` | Authenticated | `user` | `admin` | No | Unlock client account |
+| **GET** | `/api/v1/audit` | Authenticated | `user` | `admin` | No | Query immutable audit logs |
+| **GET** | `/health` | Public | - | - | No | Service health probe |
+| **GET** | `/ready` | Public | - | - | No | Service readiness probe (MongoDB, Redis) |
+| **GET** | `/api/v1/health` | Public | - | - | No | API v1 service health probe |
+| **GET** | `/api/v1/ready` | Public | - | - | No | API v1 service readiness probe |
+| **GET** | `/docs.json` | Public | - | - | No | OpenAPI JSON specification |

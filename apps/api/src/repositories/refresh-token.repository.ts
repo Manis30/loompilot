@@ -1,58 +1,91 @@
+import { Types } from "mongoose";
+import { BaseRepository } from "./base.repository.js";
 import {
-  IRefreshTokenRepository,
-  RefreshTokenRecord,
-  NewRefreshToken,
-} from "../interfaces/refresh-token.repository.js";
-import { RefreshTokenModel } from "../models/refresh-token.model.js";
+  IRefreshToken,
+  RefreshTokenModel,
+} from "../models/platform/refresh-token.model.js";
 
-export class MongoRefreshTokenRepository implements IRefreshTokenRepository {
-  private toEntity(doc: any): RefreshTokenRecord {
-    return {
-      id: doc._id.toString(),
-      tenantId: doc.tenantId,
-      userId: doc.userId,
-      tokenHash: doc.tokenHash,
-      familyId: doc.familyId,
-      revoked: doc.revoked,
-      ip: doc.ip,
-      userAgent: doc.userAgent,
-      expiresAt: doc.expiresAt,
-      createdAt: doc.createdAt,
-    };
+export class RefreshTokenRepository extends BaseRepository<IRefreshToken> {
+  constructor() {
+    super(RefreshTokenModel);
   }
 
-  async create(data: NewRefreshToken): Promise<RefreshTokenRecord> {
-    const doc = await RefreshTokenModel.create({
-      tenantId: data.tenantId,
-      userId: data.userId,
-      tokenHash: data.tokenHash,
-      familyId: data.familyId,
-      revoked: false,
-      ip: data.ip,
-      userAgent: data.userAgent,
-      expiresAt: data.expiresAt,
-    });
-    return this.toEntity(doc);
+  async findByTokenHash(tokenHash: string): Promise<IRefreshToken | null> {
+    return this.model.findOne({ tokenHash });
   }
 
-  async findByTokenHash(tokenHash: string): Promise<RefreshTokenRecord | null> {
-    const doc = await RefreshTokenModel.findOne({ tokenHash }).lean();
-    return doc ? this.toEntity(doc) : null;
+  async createToken(data: {
+    tenantId: string;
+    realm: "user" | "client";
+    subjectId: Types.ObjectId | string;
+    familyId: string;
+    tokenHash: string;
+    expiresAt: Date;
+  }): Promise<IRefreshToken> {
+    const subjectId =
+      typeof data.subjectId === "string"
+        ? new Types.ObjectId(data.subjectId)
+        : data.subjectId;
+    return this.model.create({ ...data, subjectId });
   }
 
-  async revoke(id: string): Promise<void> {
-    await RefreshTokenModel.updateOne({ _id: id }, { $set: { revoked: true } });
-  }
-
-  async revokeFamily(familyId: string): Promise<void> {
-    await RefreshTokenModel.updateMany({ familyId }, { $set: { revoked: true } });
-  }
-
-  async revokeAllForUser(tenantId: string, userId: string): Promise<void> {
-    await RefreshTokenModel.updateMany(
-      { tenantId, userId, revoked: false },
-      { $set: { revoked: true } }
+  /**
+   * Atomically marks old token as revoked and rotated, and creates the replacement token.
+   */
+  async rotateToken(
+    oldTokenHash: string,
+    newTokenData: {
+      tenantId: string;
+      realm: "user" | "client";
+      subjectId: Types.ObjectId | string;
+      familyId: string;
+      tokenHash: string;
+      expiresAt: Date;
+    }
+  ): Promise<IRefreshToken> {
+    await this.model.updateOne(
+      { tokenHash: oldTokenHash },
+      {
+        $set: {
+          revokedAt: new Date(),
+          replacedByTokenHash: newTokenData.tokenHash,
+        },
+      }
     );
+
+    const subjectId =
+      typeof newTokenData.subjectId === "string"
+        ? new Types.ObjectId(newTokenData.subjectId)
+        : newTokenData.subjectId;
+
+    return this.model.create({ ...newTokenData, subjectId });
+  }
+
+  /**
+   * Revokes all tokens belonging to a family when reuse is detected.
+   */
+  async revokeFamily(familyId: string): Promise<number> {
+    const result = await this.model.updateMany(
+      { familyId, revokedAt: { $exists: false } },
+      { $set: { revokedAt: new Date() } }
+    );
+    return result.modifiedCount;
+  }
+
+  /**
+   * Revokes all tokens for a subject (e.g. on lockout, password change, or logout-all).
+   */
+  async revokeAllForSubject(
+    tenantId: string,
+    realm: "user" | "client",
+    subjectId: Types.ObjectId | string
+  ): Promise<number> {
+    const objId =
+      typeof subjectId === "string" ? new Types.ObjectId(subjectId) : subjectId;
+    const result = await this.model.updateMany(
+      { tenantId, realm, subjectId: objId, revokedAt: { $exists: false } },
+      { $set: { revokedAt: new Date() } }
+    );
+    return result.modifiedCount;
   }
 }
-

@@ -48,7 +48,7 @@ export const QuotationRecalculateRequestSchema = z.object({
 
 export const QuotationSchema = QuotationProposalSchema.extend({
   id: z.string().optional(),
-  status: z.nativeEnum(QuotationStatus).default(QuotationStatus.DRAFT),
+  status: z.nativeEnum(QuotationStatus).default(QuotationStatus.PENDING_APPROVAL),
   generationError: z.string().optional(),
   approvedBy: z.string().optional(),
   approvedAt: z.date().optional(),

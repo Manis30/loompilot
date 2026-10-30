@@ -6,6 +6,7 @@
   "packageManager": "pnpm@12.15.0",
   "scripts": {
     "build": "pnpm -r --filter=!./agents build",
+    "dev": "pnpm --filter @loompilot/api dev",
     "lint": "pnpm -r --filter=!./agents lint",
     "typecheck": "pnpm -r --filter=!./agents typecheck",
     "test": "pnpm -r --filter=!./agents test",
@@ -15,10 +16,12 @@
     "dev:web": "pnpm --filter @loompilot/web dev",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
-    "clean": "pnpm -r exec rm -rf dist build node_modules"
+    "clean": "pnpm -r exec rm -rf dist build node_modules",
+    "docs:status": "tsx scripts/generate-status.ts"
   },
   "devDependencies": {
-    "typescript": "^5.7.3",
-    "prettier": "^3.5.0"
+    "prettier": "^3.5.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.7.3"
   }
 }

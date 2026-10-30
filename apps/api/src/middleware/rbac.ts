@@ -1,101 +1,84 @@
 import { Request, Response, NextFunction } from "express";
-import { UserRole, ErrorCode } from "@loompilot/shared";
+import { ROUTE_PERMISSION_MATRIX, RoutePermission } from "@loompilot/shared";
+import { AppError } from "../errors/app-error.js";
+import { ErrorCode } from "@loompilot/shared";
 
-export function requireRole(...allowedRoles: UserRole[]) {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    if (!req.user) {
-      res.status(401).json({
-        error: {
-          code: ErrorCode.UNAUTHENTICATED,
-          message: "User authentication required",
-          requestId: req.requestId,
-        },
-      });
-      return;
+/**
+ * Resolves the canonical route key for a request against ROUTE_PERMISSION_MATRIX.
+ */
+export function resolveRouteKey(req: Request): string {
+  const method = req.method.toUpperCase();
+  // If req.route exists (standard express handler), use its configured path
+  if (req.route && req.route.path) {
+    const basePath = req.baseUrl || "";
+    const routePath = req.route.path === "/" && basePath !== "" ? "" : req.route.path;
+    return `${method} ${basePath}${routePath}`;
+  }
+  // Fallback to baseUrl
+  return `${method} ${req.baseUrl || req.path}`;
+}
+
+/**
+ * RBAC Authorization Middleware:
+ * Validates caller's realm and role against the route-permission matrix constant.
+ * Default policy: STRICT DENY.
+ */
+export function authorize(explicitRouteKey?: string) {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    const routeKey = explicitRouteKey || resolveRouteKey(req);
+    const permission: RoutePermission | undefined = ROUTE_PERMISSION_MATRIX[routeKey];
+
+    if (!permission) {
+      // Default deny policy
+      return next(
+        new AppError(
+          ErrorCode.FORBIDDEN,
+          `Access Denied: Route '${routeKey}' has no registered permission entry in the RBAC matrix`,
+          403
+        )
+      );
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
-      res.status(403).json({
-        error: {
-          code: ErrorCode.FORBIDDEN,
-          message: `Role '${req.user.role}' is not authorized to access this resource`,
-          requestId: req.requestId,
-        },
-      });
-      return;
+    if (permission.isPublic) {
+      return next();
+    }
+
+    if (!req.actor) {
+      return next(
+        new AppError(
+          ErrorCode.UNAUTHENTICATED,
+          "Authentication required to access this resource",
+          401
+        )
+      );
+    }
+
+    const { realm, role } = req.actor;
+
+    // Check Realm separation
+    if (permission.allowedRealms && !permission.allowedRealms.includes(realm)) {
+      return next(
+        new AppError(
+          ErrorCode.FORBIDDEN,
+          `Realm '${realm}' is not authorized to access endpoint '${routeKey}'`,
+          403
+        )
+      );
+    }
+
+    // Check Role within User realm
+    if (realm === "user" && permission.allowedRoles) {
+      if (!role || !permission.allowedRoles.includes(role)) {
+        return next(
+          new AppError(
+            ErrorCode.FORBIDDEN,
+            `Role '${role || "none"}' does not have permission to execute '${routeKey}'`,
+            403
+          )
+        );
+      }
     }
 
     next();
   };
 }
-
-/**
- * Strips sensitive cost and margin fields when a store user reads items.
- * Enforces Rule 1 of the Role-Permission Matrix:
- * 'store cannot read cost or margin'
- */
-const SENSITIVE_FINANCIAL_FIELDS = new Set([
-  "unitCostPaise",
-  "totalCostPaise",
-  "materialCostPaise",
-  "processingCostPaise",
-  "overheadCostPaise",
-  "wastageCostPaise",
-  "riskBufferCostPaise",
-  "subtotalCostPaise",
-  "profitPaise",
-  "marginPct",
-  "riskBufferPct",
-  "currentRatePaise",
-  "avgCostPaise",
-]);
-
-export function sanitizeFinancialData(data: any, role: UserRole): any {
-  if (role !== UserRole.STORE) {
-    return data;
-  }
-
-  if (Array.isArray(data)) {
-    return data.map((item) => sanitizeFinancialData(item, role));
-  }
-
-  if (data !== null && typeof data === "object") {
-    // If it's a Mongoose document, convert to object
-    const obj = typeof data.toObject === "function" ? data.toObject() : { ...data };
-    const sanitized: Record<string, any> = {};
-
-    for (const [key, val] of Object.entries(obj)) {
-      if (SENSITIVE_FINANCIAL_FIELDS.has(key)) {
-        continue; // Strip sensitive field
-      }
-      if (key === "lineItems" && Array.isArray(val)) {
-        sanitized[key] = val.map((item) => sanitizeFinancialData(item, role));
-      } else if (typeof val === "object" && val !== null && !(val instanceof Date)) {
-        sanitized[key] = sanitizeFinancialData(val, role);
-      } else {
-        sanitized[key] = val;
-      }
-    }
-    return sanitized;
-  }
-
-  return data;
-}
-
-export function maskFinancialDataMiddleware(req: Request, res: Response, next: NextFunction): void {
-  const originalJson = res.json.bind(res);
-
-  res.json = function (body: any): Response {
-    if (req.user?.role === UserRole.STORE && body) {
-      if (body.data) {
-        body.data = sanitizeFinancialData(body.data, req.user.role);
-      } else {
-        body = sanitizeFinancialData(body, req.user.role);
-      }
-    }
-    return originalJson(body);
-  };
-
-  next();
-}
-

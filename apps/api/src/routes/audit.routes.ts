@@ -1,17 +1,14 @@
 import { Router } from "express";
 import { AuditController } from "../controllers/audit.controller.js";
-import { authMiddleware } from "../middleware/auth.js";
-import { requireRole } from "../middleware/rbac.js";
-import { UserRole } from "@loompilot/shared";
+import { authenticate } from "../middleware/auth.js";
+import { authorize } from "../middleware/rbac.js";
 
-export function createAuditRoutes(controller: AuditController): Router {
-  const router = Router();
+export const auditRouter: Router = Router();
 
-  router.use(authMiddleware);
+auditRouter.use(authenticate);
 
-  // List audit logs: OWNER only
-  router.get("/", requireRole(UserRole.OWNER), controller.list);
-
-  return router;
-}
-
+auditRouter.get(
+  "/",
+  authorize("GET /api/v1/audit"),
+  AuditController.list
+);

@@ -9,4 +9,8 @@ export * from "./schemas/alert.js";
 export * from "./schemas/delivery.js";
 export * from "./schemas/payment.js";
 export * from "./schemas/reports.js";
+export * from "./schema/schema-v4.manifest.js";
+export * from "./transitions.js";
+export * from "./payment-schedule.js";
+export * from "./rbac.js";
 

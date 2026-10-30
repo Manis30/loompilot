@@ -1,96 +1,96 @@
-import { IUserRepository, User, NewUser } from "../interfaces/user.repository.js";
-import { TxContext } from "../interfaces/unit-of-work.js";
-import { UserModel } from "../models/user.model.js";
+import { Types } from "mongoose";
+import { BaseRepository } from "./base.repository.js";
+import { IUser, UserModel } from "../models/identity/user.model.js";
 
-export class MongoUserRepository implements IUserRepository {
-  private toEntity(doc: any): User {
-    return {
-      id: doc._id.toString(),
-      tenantId: doc.tenantId,
-      email: doc.email,
-      name: doc.name,
-      passwordHash: doc.passwordHash,
-      role: doc.role,
-      isActive: doc.isActive,
-      refreshTokens: doc.refreshTokens || [],
-      createdAt: doc.createdAt,
-      updatedAt: doc.updatedAt,
-    };
+export class UserRepository extends BaseRepository<IUser> {
+  constructor() {
+    super(UserModel);
   }
 
-  async create(data: NewUser, tx?: TxContext): Promise<User> {
-    const docs = await UserModel.create([data], { session: tx?.session || null });
-    return this.toEntity(docs[0]!);
-  }
-
-  async findById(tenantId: string, id: string): Promise<User | null> {
-    const doc = await UserModel.findOne({ _id: id, tenantId }).lean();
-    return doc ? this.toEntity(doc) : null;
-  }
-
-  async findByEmail(tenantId: string, email: string): Promise<User | null> {
-    const doc = await UserModel.findOne({ tenantId, email: email.toLowerCase().trim() }).lean();
-    return doc ? this.toEntity(doc) : null;
-  }
-
-  async addRefreshToken(tenantId: string, userId: string, token: string, maxTokens = 5): Promise<void> {
-    const user = await UserModel.findOne({ _id: userId, tenantId });
-    if (user) {
-      user.refreshTokens.push(token);
-      if (user.refreshTokens.length > maxTokens) {
-        user.refreshTokens.shift();
-      }
-      await user.save();
-    }
-  }
-
-  async replaceRefreshToken(
-    tenantId: string,
-    userId: string,
-    oldToken: string,
-    newToken: string
-  ): Promise<boolean> {
-    const user = await UserModel.findOne({ _id: userId, tenantId, refreshTokens: oldToken });
-    if (!user) return false;
-
-    user.refreshTokens = user.refreshTokens.filter((t) => t !== oldToken);
-    user.refreshTokens.push(newToken);
-    await user.save();
-    return true;
-  }
-
-  async removeRefreshToken(tenantId: string, userId: string, token: string): Promise<void> {
-    await UserModel.updateOne({ _id: userId, tenantId }, { $pull: { refreshTokens: token } });
-  }
-
-  async list(tenantId: string): Promise<User[]> {
-    const docs = await UserModel.find({ tenantId }).sort({ name: 1 }).lean();
-    return docs.map((d) => this.toEntity(d));
-  }
-
-  async count(tenantId: string): Promise<number> {
-    return UserModel.countDocuments({ tenantId });
-  }
-
-  async countActiveOwners(tenantId: string): Promise<number> {
-    return UserModel.countDocuments({
+  async findByEmail(tenantId: string, email: string): Promise<IUser | null> {
+    return this.model.findOne({
       tenantId,
-      role: "owner",
-      isActive: true,
+      email: email.toLowerCase().trim(),
     });
   }
 
-  async update(
+  async countActiveAdmins(tenantId: string): Promise<number> {
+    return this.model.countDocuments({
+      tenantId,
+      role: "admin",
+      status: "active",
+    });
+  }
+
+  async incrementFailedLogin(
     tenantId: string,
-    id: string,
-    data: Partial<User>,
-    tx?: TxContext
-  ): Promise<User | null> {
-    const doc = await UserModel.findOneAndUpdate(
-      { _id: id, tenantId },
-      { $set: data },
-      { new: true, session: tx?.session || null }
-    ).lean();
-    return doc ? this.toEntity(doc) : null;
+    userId: Types.ObjectId | string,
+    maxAttempts = 5,
+    lockoutDurationMinutes = 15
+  ): Promise<{ user: IUser | null; lockedNow: boolean }> {
+    const objId = typeof userId === "string" ? new Types.ObjectId(userId) : userId;
+    const user = await this.model.findOne({ tenantId, _id: objId });
+    if (!user) return { user: null, lockedNow: false };
+
+    const newFailedCount = (user.lockout?.failedCount || 0) + 1;
+    let newStatus = user.status;
+    let lockedUntil = user.lockout?.lockedUntil;
+    let lockedNow = false;
+
+    if (newFailedCount >= maxAttempts) {
+      newStatus = "locked";
+      lockedUntil = new Date(Date.now() + lockoutDurationMinutes * 60 * 1000);
+      lockedNow = true;
+    }
+
+    const updated = await this.model.findOneAndUpdate(
+      { tenantId, _id: objId },
+      {
+        $set: {
+          status: newStatus,
+          "lockout.failedCount": newFailedCount,
+          "lockout.lockedUntil": lockedUntil,
+        },
+      },
+      { new: true }
+    );
+
+    return { user: updated, lockedNow };
+  }
+
+  async resetLockout(
+    tenantId: string,
+    userId: Types.ObjectId | string
+  ): Promise<IUser | null> {
+    const objId = typeof userId === "string" ? new Types.ObjectId(userId) : userId;
+    return this.model.findOneAndUpdate(
+      { tenantId, _id: objId },
+      {
+        $set: {
+          status: "active",
+          "lockout.failedCount": 0,
+          "lockout.lockedUntil": null,
+        },
+      },
+      { new: true }
+    );
+  }
+
+  async updateStatus(
+    tenantId: string,
+    userId: Types.ObjectId | string,
+    status: "active" | "locked"
+  ): Promise<IUser | null> {
+    const objId = typeof userId === "string" ? new Types.ObjectId(userId) : userId;
+    const update: any = { status };
+    if (status === "active") {
+      update["lockout.failedCount"] = 0;
+      update["lockout.lockedUntil"] = null;
+    }
+    return this.model.findOneAndUpdate(
+      { tenantId, _id: objId },
+      { $set: update },
+      { new: true }
+    );
   }
 }

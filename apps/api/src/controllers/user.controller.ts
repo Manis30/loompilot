@@ -1,60 +1,116 @@
-import { Request, Response } from "express";
+import { Request, Response, NextFunction } from "express";
 import { UserService } from "../services/user.service.js";
-import { asyncHandler } from "../utils/asyncHandler.js";
-import { toUserResponse } from "../mappers/user.mapper.js";
-import { Actor } from "../utils/actor.js";
+
+const userService = new UserService();
 
 export class UserController {
-  constructor(private readonly service: UserService) {}
-
-  private getActor(req: Request): Actor {
-    return {
-      tenantId: req.user!.tenantId,
-      userId: req.user!.userId,
-      role: req.user!.role,
-      email: req.user!.email,
-    };
+  static async list(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const users = await userService.listUsers(req.actor!.tenantId);
+      // Strip password hashes from response
+      const sanitized = users.map((u: any) => {
+        const obj = u.toObject ? u.toObject() : u;
+        delete (obj as any).passwordHash;
+        return obj;
+      });
+      res.status(200).json({ items: sanitized, total: sanitized.length });
+    } catch (err) {
+      next(err);
+    }
   }
 
-  list = asyncHandler(async (req: Request, res: Response) => {
-    const actor = this.getActor(req);
-    const users = await this.service.list(actor);
-    res.json({
-      data: users.map(toUserResponse),
-      requestId: req.requestId,
-    });
-  });
+  static async create(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const actor = req.actor!;
+      const { email, name, password, role, phone, processAreas } = req.body;
 
-  create = asyncHandler(async (req: Request, res: Response) => {
-    const actor = this.getActor(req);
-    const user = await this.service.create(actor, req.body);
-    res.status(201).json({
-      data: toUserResponse(user),
-      requestId: req.requestId,
-    });
-  });
+      const created = await userService.createUser({
+        tenantId: actor.tenantId,
+        actorUserId: actor.subjectId,
+        email,
+        name,
+        password,
+        role,
+        phone,
+        processAreas,
+        ip: req.ip,
+        requestId: (req as any).id,
+      });
 
-  update = asyncHandler(async (req: Request, res: Response) => {
-    const actor = this.getActor(req);
-    const updated = await this.service.update(actor, req.params.id as string, req.body);
-    res.json({
-      data: toUserResponse(updated),
-      requestId: req.requestId,
-    });
-  });
+      const obj = (created as any).toObject ? (created as any).toObject() : created;
+      delete (obj as any).passwordHash;
+      res.status(201).json(obj);
+    } catch (err) {
+      next(err);
+    }
+  }
 
-  resetPassword = asyncHandler(async (req: Request, res: Response) => {
-    const actor = this.getActor(req);
-    const result = await this.service.resetPassword(
-      actor,
-      req.params.id as string,
-      req.body
-    );
-    res.json({
-      data: result,
-      message: "Password reset successfully",
-      requestId: req.requestId,
-    });
-  });
+  static async update(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const actor = req.actor!;
+      const { id } = req.params;
+      const { name, phone, role, status, processAreas } = req.body;
+
+      const updated = await userService.updateUser({
+        tenantId: actor.tenantId,
+        actorUserId: actor.subjectId,
+        userId: id as string,
+        name,
+        phone,
+        role,
+        status,
+        processAreas,
+        ip: req.ip,
+        requestId: (req as any).id,
+      });
+
+      const obj = (updated as any)?.toObject ? (updated as any).toObject() : updated;
+      if (obj) delete (obj as any).passwordHash;
+      res.status(200).json(obj);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async lock(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const actor = req.actor!;
+      const { id } = req.params;
+
+      const updated = await userService.lockUser(
+        actor.tenantId,
+        actor.subjectId,
+        id as string,
+        req.ip,
+        (req as any).id
+      );
+
+      const obj = (updated as any)?.toObject ? (updated as any).toObject() : updated;
+      if (obj) delete (obj as any).passwordHash;
+      res.status(200).json(obj);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  static async unlock(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const actor = req.actor!;
+      const { id } = req.params;
+
+      const updated = await userService.unlockUser(
+        actor.tenantId,
+        actor.subjectId,
+        id as string,
+        req.ip,
+        (req as any).id
+      );
+
+      const obj = (updated as any)?.toObject ? (updated as any).toObject() : updated;
+      if (obj) delete (obj as any).passwordHash;
+      res.status(200).json(obj);
+    } catch (err) {
+      next(err);
+    }
+  }
 }
-

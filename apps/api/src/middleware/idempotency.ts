@@ -1,98 +1,163 @@
 import { Request, Response, NextFunction } from "express";
-import crypto from "crypto";
-import { IdempotencyKeyModel } from "../models/idempotency-key.model.js";
-import { IdempotencyConflictError } from "../errors/index.js";
+import crypto from "node:crypto";
+import { IdempotencyRepository } from "../repositories/idempotency.repository.js";
+import { resolveRouteKey } from "./rbac.js";
+import { IDEMPOTENT_FLAGGED_ROUTES } from "@loompilot/shared";
+import { AppError } from "../errors/app-error.js";
 import { ErrorCode } from "@loompilot/shared";
+import { logger } from "../utils/logger.js";
 
-export interface IdempotencyOptions {
-  allowBodyAlias?: boolean;
+const idempotencyRepo = new IdempotencyRepository();
+
+/**
+ * Computes a deterministic SHA-256 hash of the incoming request payload.
+ */
+function computeRequestHash(req: Request): string {
+  const payload = JSON.stringify({
+    method: req.method.toUpperCase(),
+    path: req.originalUrl || req.url,
+    body: req.body || {},
+  });
+  return crypto.createHash("sha256").update(payload).digest("hex");
 }
 
-export function idempotencyMiddleware(options: IdempotencyOptions = {}) {
-  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    let key = (req.headers["idempotency-key"] as string | undefined)?.trim();
+/**
+ * Idempotency Middleware:
+ * Provides transparent, database-backed idempotent execution for non-safe HTTP routes.
+ */
+export async function idempotencyMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const headerKey = req.headers["idempotency-key"];
+  const routeKey = resolveRouteKey(req);
+  const isFlagged = IDEMPOTENT_FLAGGED_ROUTES.has(routeKey);
 
-    if (!key && options.allowBodyAlias && req.body?.idempotencyKey) {
-      key = String(req.body.idempotencyKey).trim();
+  if (!headerKey) {
+    if (isFlagged && req.method !== "GET" && req.method !== "HEAD") {
+      return next(
+        new AppError(
+          ErrorCode.VALIDATION_FAILED,
+          `Idempotency-Key header is mandatory for route '${routeKey}'`,
+          400
+        )
+      );
     }
+    return next();
+  }
 
-    if (key && options.allowBodyAlias && req.body && !req.body.idempotencyKey) {
-      req.body.idempotencyKey = key;
-    }
+  const key = String(headerKey).trim();
+  if (key.length === 0 || key.length > 256) {
+    return next(
+      new AppError(
+        ErrorCode.VALIDATION_FAILED,
+        "Idempotency-Key must be a non-empty string of at most 256 characters",
+        400
+      )
+    );
+  }
 
-    if (!key) {
-      res.status(400).json({
-        error: {
-          code: ErrorCode.VALIDATION_FAILED,
-          message: "Idempotency-Key header is required for this operation",
-          requestId: req.requestId,
-        },
-      });
-      return;
-    }
+  const tenantId =
+    (req.headers["x-tenant-id"] as string) ||
+    req.tenantId ||
+    req.actor?.tenantId ||
+    (req.body && req.body.tenantId) ||
+    "default";
+  const route = `${req.method.toUpperCase()} ${req.baseUrl || ""}${req.path}`;
+  const requestHash = computeRequestHash(req);
 
-    const tenantId = req.user?.tenantId || (req.body?.tenantId as string) || "tenant_default";
-    const requestHash = crypto
-      .createHash("sha256")
-      .update(JSON.stringify(req.body || {}))
-      .digest("hex");
+  try {
+    const claim = await idempotencyRepo.claimKey({
+      tenantId,
+      key,
+      route,
+      requestHash,
+      ttlSeconds: 86400, // 24 hours
+    });
 
-    try {
-      const existing = await IdempotencyKeyModel.findOne({ tenantId, key });
+    if (!claim.claimed && claim.existingRecord) {
+      const existing = claim.existingRecord;
 
-      if (existing) {
-        if (existing.requestHash !== requestHash) {
-          throw new IdempotencyConflictError();
-        }
-
-        // Return cached response
-        res.setHeader("X-Idempotent-Replay", "true");
-        res.status(existing.statusCode).json(existing.responseBody);
-        return;
+      if (existing.state === "in_progress") {
+        return next(
+          new AppError(
+            ErrorCode.IDEMPOTENCY_IN_PROGRESS,
+            "An identical request is currently being processed with this Idempotency-Key",
+            409
+          )
+        );
       }
 
-      // Intercept response to store result
-      const originalSend = res.send;
-      let responseBodyCaptured: any;
-
-      res.send = function (body?: any): Response {
-        responseBodyCaptured = body;
-        return originalSend.call(this, body);
-      };
-
-      res.on("finish", async () => {
-        if (res.statusCode < 500 && responseBodyCaptured !== undefined) {
-          try {
-            let parsedBody = responseBodyCaptured;
-            if (typeof responseBodyCaptured === "string") {
-              try {
-                parsedBody = JSON.parse(responseBodyCaptured);
-              } catch {
-                // Raw text or non-json
-              }
-            }
-
-            await IdempotencyKeyModel.create({
-              tenantId,
-              key,
-              endpoint: `${req.method} ${req.baseUrl}${req.path}`,
-              requestHash,
-              statusCode: res.statusCode,
-              responseBody: parsedBody,
-              expiresAt: new Date(Date.now() + 24 * 3600 * 1000), // 24-hour TTL
-            });
-          } catch (saveErr: any) {
-            // If duplicate key was inserted concurrently
-            if (saveErr?.code !== 11000) {
-              // Log or ignore
-            }
-          }
+      if (existing.state === "completed") {
+        if (existing.requestHash !== requestHash) {
+          return next(
+            new AppError(
+              ErrorCode.IDEMPOTENCY_KEY_REUSED,
+              "This Idempotency-Key was already used with a different request payload",
+              422
+            )
+          );
         }
-      });
 
-      next();
-    } catch (err) {
-      next(err);
+        // Replay stored response
+        res.setHeader("Idempotent-Replay", "true");
+        const status = existing.responseStatus || 200;
+        res.status(status).json(existing.responseBody);
+        return;
+      }
     }
-  };
+
+    // Intercept response to record completion or release key on 5xx
+    const originalJson = res.json.bind(res);
+    const originalSend = res.send.bind(res);
+    let capturedBody: any = null;
+
+    res.json = (body: any): Response => {
+      capturedBody = body;
+      return originalJson(body);
+    };
+
+    res.send = (body: any): Response => {
+      if (!capturedBody) {
+        try {
+          capturedBody = JSON.parse(body);
+        } catch {
+          capturedBody = body;
+        }
+      }
+      return originalSend(body);
+    };
+
+    res.on("finish", async () => {
+      const statusCode = res.statusCode;
+
+      if (statusCode >= 500) {
+        // Release key on server fault so caller can safely retry
+        try {
+          await idempotencyRepo.releaseKey({ tenantId, key, route });
+          logger.warn({ key, route, statusCode }, "Released idempotency key due to 5xx error");
+        } catch (releaseErr: any) {
+          logger.error({ err: releaseErr.message, key }, "Failed to release idempotency key on error");
+        }
+      } else {
+        // Store completed response
+        try {
+          await idempotencyRepo.completeKey({
+            tenantId,
+            key,
+            route,
+            responseStatus: statusCode,
+            responseBody: capturedBody,
+          });
+        } catch (completeErr: any) {
+          logger.error({ err: completeErr.message, key }, "Failed to persist completed idempotency response");
+        }
+      }
+    });
+
+    next();
+  } catch (err) {
+    next(err);
+  }
 }

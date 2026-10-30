@@ -1,0 +1,39 @@
+import mongoose, { Schema } from "mongoose";
+import { BaseEntity } from "../../interfaces/base-repository.interface.js";
+
+export interface ISupplier extends BaseEntity {
+  supplierName: string;
+  contactPerson: string;
+  email: string;
+  phone: string;
+  city: string;
+  country: string;
+  defaultLeadTimeDays: number;
+  status: "active" | "inactive";
+}
+
+const SupplierSchema = new Schema<ISupplier>(
+  {
+    tenantId: { type: String, required: true, index: true },
+    supplierName: { type: String, required: true, trim: true },
+    contactPerson: { type: String, required: true, trim: true },
+    email: { type: String, required: true, lowercase: true, trim: true },
+    phone: { type: String, required: true, trim: true },
+    city: { type: String, required: true, trim: true },
+    country: { type: String, required: true, trim: true },
+    defaultLeadTimeDays: { type: Number, default: 7 },
+    status: {
+      type: String,
+      enum: ["active", "inactive"],
+      default: "active",
+      required: true,
+    },
+    version: { type: Number, default: 1 },
+  },
+  { timestamps: true }
+);
+
+SupplierSchema.index({ tenantId: 1, supplierName: 1 }, { unique: true });
+
+export const SupplierModel =
+  mongoose.models.Supplier || mongoose.model<ISupplier>("Supplier", SupplierSchema);

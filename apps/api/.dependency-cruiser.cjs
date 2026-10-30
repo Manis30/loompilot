@@ -2,39 +2,68 @@
 module.exports = {
   forbidden: [
     {
-      name: "controllers-no-models-or-repositories",
-      comment: "Controllers must only depend on services, interfaces, mappers, utils, errors, and express",
+      name: "no-circular",
       severity: "error",
-      from: { path: "^src/controllers" },
-      to: { path: "^src/(models|repositories)" },
+      comment: "Circular dependencies are forbidden",
+      from: {},
+      to: {
+        circular: true,
+      },
     },
     {
-      name: "services-no-express-or-mongoose",
-      comment: "Services must be pure business logic and never depend directly on express or mongoose",
+      name: "services-must-not-import-express-or-mongoose",
       severity: "error",
-      from: { path: "^src/services" },
-      to: { path: "(node_modules/(express|mongoose)|src/models)" },
+      comment: "Services must be decoupled from HTTP (Express) and Database driver (Mongoose)",
+      from: {
+        path: "^src/services",
+      },
+      to: {
+        path: "(express|mongoose)",
+      },
     },
     {
-      name: "services-no-controllers-or-routes",
-      comment: "Services must not depend on higher layers (controllers or routes)",
+      name: "controllers-must-not-import-models-or-repositories",
       severity: "error",
-      from: { path: "^src/services" },
-      to: { path: "^src/(controllers|routes)" },
+      comment: "Controllers must only invoke services and not access repositories or models directly",
+      from: {
+        path: "^src/controllers",
+      },
+      to: {
+        path: "^src/(models|repositories)",
+      },
     },
     {
-      name: "repositories-no-controllers-or-services",
-      comment: "Repositories must only interact with models, interfaces, config, and utils",
+      name: "repositories-must-not-import-services-or-controllers",
       severity: "error",
-      from: { path: "^src/repositories" },
-      to: { path: "^src/(controllers|services|routes)" },
+      comment: "Repositories must not depend on services, controllers or routes",
+      from: {
+        path: "^src/repositories",
+      },
+      to: {
+        path: "^src/(services|controllers|routes)",
+      },
     },
     {
-      name: "routes-no-models-or-repositories",
-      comment: "Routes must only map paths to controller methods and attach middleware",
+      name: "models-must-not-import-business-layers",
       severity: "error",
-      from: { path: "^src/routes" },
-      to: { path: "^src/(models|repositories|services)" },
+      comment: "Models should only define schemas/indexes and not import services, repositories, or controllers",
+      from: {
+        path: "^src/models",
+      },
+      to: {
+        path: "^src/(services|controllers|repositories|routes)",
+      },
+    },
+    {
+      name: "routes-must-not-bypass-controllers",
+      severity: "error",
+      comment: "Routes should map paths to controllers and not import repositories or models directly",
+      from: {
+        path: "^src/routes",
+      },
+      to: {
+        path: "^src/(models|repositories)",
+      },
     },
   ],
   options: {
@@ -44,6 +73,11 @@ module.exports = {
     tsPreCompilationDeps: true,
     tsConfig: {
       fileName: "./tsconfig.json",
+    },
+    reporterOptions: {
+      text: {
+        highlightFocused: true,
+      },
     },
   },
 };
