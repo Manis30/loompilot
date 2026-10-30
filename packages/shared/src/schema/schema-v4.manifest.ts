@@ -314,7 +314,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
       },
       machineType: { type: "String", default: "standard" },
     },
-    indexes: [{ fields: { tenantId: 1, machineCode: 1 }, unique: true }],
+    indexes: [{ fields: { tenantId: 1, machineCode: 1 } }],
   },
 
   ProductModel: {
@@ -1020,9 +1020,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
           type: "Mixed",
           embedded: {
             area: { type: "String", required: true },
-            present: { type: "Number", required: true },
-            absent: { type: "Number", required: true },
-            halfDay: { type: "Number", default: 0 },
+            count: { type: "Number", required: true },
           },
         },
       },
@@ -1257,37 +1255,12 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
       },
       trigger: { type: "String", required: true },
       orderId: { type: "ObjectId", ref: "Order" },
-      status: {
-        type: "String",
-        enum: ["running", "success", "failed", "fallback"],
-        default: "running",
-        required: true,
-      },
-      timings: {
-        type: "Mixed",
-        embedded: {
-          startedAt: { type: "Date", required: true },
-          completedAt: { type: "Date" },
-          durationMs: { type: "Number" },
-        },
-      },
-      decision: { type: "String" },
-      guardrails: {
-        type: "Mixed",
-        embedded: {
-          passed: { type: "Boolean", required: true },
-          checks: { type: "Mixed" },
-        },
-      },
+      status: { type: "String", required: true },
+      timings: { type: "Mixed" },
+      decision: { type: "Mixed" },
+      guardrails: { type: "Mixed" },
       model: { type: "String", required: true },
-      tokens: {
-        type: "Mixed",
-        embedded: {
-          prompt: { type: "Number", default: 0 },
-          completion: { type: "Number", default: 0 },
-          total: { type: "Number", default: 0 },
-        },
-      },
+      tokens: { type: "Mixed" },
       costPaise: { type: "Number", paise: true, default: 0 },
       requestId: { type: "String" },
       promptVersion: { type: "String" },
@@ -1527,3 +1500,4 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
     indexes: [{ fields: { tenantId: 1, ownerRealm: 1, ownerId: 1 } }],
   },
 };
+
