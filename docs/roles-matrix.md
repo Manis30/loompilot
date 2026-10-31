@@ -73,3 +73,25 @@ Enforced strictly at the API gateway layer via `authenticate` and `authorize` mi
 | **GET** | `/api/v1/health` | Public | - | - | No | API v1 service health probe |
 | **GET** | `/api/v1/ready` | Public | - | - | No | API v1 service readiness probe |
 | **GET** | `/docs.json` | Public | - | - | No | OpenAPI JSON specification |
+| **POST** | `/api/v1/client/orders` | Authenticated | `client` | - | Yes | Submit new manufacturing order from client portal |
+| **GET** | `/api/v1/client/orders` | Authenticated | `client` | - | No | List orders for authenticated client |
+| **GET** | `/api/v1/client/orders/:id` | Authenticated | `client` | - | No | Get client order details by ID |
+| **POST** | `/api/v1/client/orders/:id/quotation/accept` | Authenticated | `client` | - | Yes | Accept quotation and confirm order |
+| **POST** | `/api/v1/client/orders/:id/quotation/decline` | Authenticated | `client` | - | Yes | Decline quotation with feedback |
+| **GET** | `/api/v1/orders` | Authenticated | `user` | `admin` | No | List and filter all tenant orders (Admin inbox) |
+| **GET** | `/api/v1/orders/:id` | Authenticated | `user` | `admin` | No | Get complete order details (Admin only) |
+| **POST** | `/api/v1/orders` | Authenticated | `user` | `admin` | Yes | Manual order entry by administrator |
+| **POST** | `/api/v1/orders/:id/decide` | Authenticated | `user` | `admin` | No | Record administrative decision on infeasible or at-risk order |
+| **POST** | `/api/v1/orders/:id/quotation/approve` | Authenticated | `user` | `admin` | Yes | Approve draft quotation for sending |
+| **POST** | `/api/v1/orders/:id/quotation/send` | Authenticated | `user` | `admin` | Yes | Generate quotation PDF and dispatch to client |
+| **POST** | `/internal/v1/feasibility-reports` | Public | - | - | No | Ingest feasibility report from agents gateway |
+| **POST** | `/internal/v1/quotation-drafts` | Public | - | - | No | Ingest quotation draft and costing from agents gateway |
+| **POST** | `/internal/v1/quotation-revisions` | Public | - | - | No | Ingest revised quotation from agents gateway |
+| **POST** | `/api/v1/orders/:id/assign` | Authenticated | `user` | `admin` | Yes | Assign supervisors to production stages and reserve stock |
+| **POST** | `/api/v1/orders/:id/hold` | Authenticated | `user` | `admin` | Yes | Put active order on hold |
+| **POST** | `/api/v1/orders/:id/resume` | Authenticated | `user` | `admin` | Yes | Resume order from on_hold status |
+| **POST** | `/api/v1/orders/:id/cancel` | Authenticated | `user` | `admin` | Yes | Cancel order and release reserved stock |
+| **POST** | `/api/v1/orders/:id/payments/create-order` | Authenticated | `client`, `user` | `admin` | Yes | Create Razorpay payment order for milestone advance |
+| **POST** | `/api/v1/orders/:id/payments/manual-receipt` | Authenticated | `user` | `admin` | Yes | Record offline or manual payment receipt (cash, neft, cheque) |
+| **POST** | `/api/v1/orders/:id/deliveries` | Authenticated | `user` | `admin` | Yes | Record shipment dispatch and delivery completion |
+| **POST** | `/webhooks/razorpay` | Public | - | - | No | Receive and process Razorpay payment webhooks |

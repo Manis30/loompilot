@@ -10,6 +10,7 @@ export interface Actor {
   realm: "user" | "client";
   subjectId: string;
   tenantId: string;
+  email?: string;
   role?: "admin" | "supervisor";
   clientId?: string;
   processAreas?: string[];

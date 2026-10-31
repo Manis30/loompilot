@@ -41,14 +41,23 @@ export class AdminCostingRepository {
   async updateCosting(
     tenantId: string,
     orderId: string | Types.ObjectId,
-    costing: ICosting,
+    costing: any,
     tx?: TxContext
   ): Promise<ICosting> {
     const session = this.getSession(tx);
+    const totalCost = costing.totalCostPaise || (costing.subtotalCostPaise || 0) + (costing.overheadCostPaise || 0);
+    const mapped = {
+      ...costing,
+      totalCostPaise: totalCost,
+      materialCosts: costing.materialCosts?.map((m: any) => ({
+        ...m,
+        materialId: typeof m.materialId === "string" ? new Types.ObjectId(m.materialId) : m.materialId,
+      })),
+    };
     const updated = await this.model
       .findOneAndUpdate(
         { tenantId, _id: orderId },
-        { $set: { costing }, $inc: { version: 1 } },
+        { $set: { costing: mapped }, $inc: { version: 1 } },
         { new: true, session: session ?? null }
       )
       .select("+costing")

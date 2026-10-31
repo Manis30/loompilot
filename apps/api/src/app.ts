@@ -28,6 +28,9 @@ import { fileRouter } from "./routes/file.routes.js";
 import { stockRouter } from "./routes/stock.routes.js";
 import { importRouter } from "./routes/import.routes.js";
 import { auditRouter } from "./routes/audit.routes.js";
+import { clientOrderRouter } from "./routes/client-order.routes.js";
+import { orderRouter } from "./routes/order.routes.js";
+import { internalGatewayRouter } from "./routes/internal-gateway.routes.js";
 import { AppContainer, getContainer } from "./container.js";
 
 export function createApp(container: AppContainer = getContainer()): Express {
@@ -127,6 +130,11 @@ export function createApp(container: AppContainer = getContainer()): Express {
   app.use("/api/v1/files", fileRouter);
   app.use("/api/v1/stock", stockRouter);
   app.use("/api/v1/imports", importRouter);
+
+  // Phase C: Orders, Feasibility & Quotations
+  app.use("/api/v1/client/orders", clientOrderRouter);
+  app.use("/api/v1/orders", orderRouter);
+  app.use("/internal/v1", internalGatewayRouter);
 
   // 10. Unmatched routes -> 404
   app.use((req) => {

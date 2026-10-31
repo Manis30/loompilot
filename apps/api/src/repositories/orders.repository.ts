@@ -145,6 +145,50 @@ export class OrdersRepository {
     return doc.save({ session });
   }
 
+  async createOrder(
+    tenantId: string,
+    data: {
+      orderNumber: string;
+      clientId: string;
+      productId?: string;
+      productDescription: string;
+      quantity: number;
+      deliveryDeadline: string;
+      deliveryAddress?: string;
+      spec: any;
+      notes?: string;
+      referenceFiles?: string[];
+      actorId?: string;
+    },
+    tx?: TxContext
+  ): Promise<IOrder> {
+    const session = this.getSession(tx);
+    const doc = new this.model({
+      tenantId,
+      orderNumber: data.orderNumber,
+      clientId: new Types.ObjectId(data.clientId),
+      productId: data.productId ? new Types.ObjectId(data.productId) : undefined,
+      productDescription: data.productDescription,
+      quantity: data.quantity,
+      deliveryDeadline: data.deliveryDeadline,
+      deliveryAddress: data.deliveryAddress,
+      spec: data.spec,
+      notes: data.notes,
+      referenceFiles: data.referenceFiles?.map((id) => new Types.ObjectId(id)) || [],
+      status: OrderStatus.SUBMITTED,
+      statusHistory: [
+        {
+          status: OrderStatus.SUBMITTED,
+          at: new Date(),
+          by: data.actorId ? new Types.ObjectId(data.actorId) : undefined,
+          reason: "Order submitted",
+        },
+      ],
+      version: 1,
+    });
+    return doc.save({ session });
+  }
+
   async findById(
     tenantId: string,
     orderId: string | Types.ObjectId,
@@ -271,14 +315,21 @@ export class OrdersRepository {
   async setFeasibility(
     tenantId: string,
     orderId: string | Types.ObjectId,
-    feasibility: NonNullable<IOrder["feasibility"]>,
+    feasibility: any,
     tx?: TxContext
   ): Promise<IOrder> {
     const session = this.getSession(tx);
+    const feasibilityPayload = {
+      ...feasibility,
+      materialRequirements: feasibility.materialRequirements?.map((m: any) => ({
+        ...m,
+        materialId: typeof m.materialId === "string" ? new Types.ObjectId(m.materialId) : m.materialId,
+      })),
+    };
     const updated = await this.model
       .findOneAndUpdate(
         { tenantId, _id: orderId },
-        { $set: { feasibility }, $inc: { version: 1 } },
+        { $set: { feasibility: feasibilityPayload }, $inc: { version: 1 } },
         { new: true, session: session ?? null }
       )
       .lean<IOrder>()
@@ -327,6 +378,23 @@ export class OrdersRepository {
       );
     }
     return updated;
+  }
+
+  async setQuotationClientPdfFileId(
+    tenantId: string,
+    orderId: string | Types.ObjectId,
+    fileId: string,
+    tx?: TxContext
+  ): Promise<void> {
+    const session = this.getSession(tx);
+    await this.model.findOneAndUpdate(
+      { tenantId, _id: orderId },
+      {
+        $set: { "quotation.clientPdfFileId": new Types.ObjectId(fileId) },
+        $inc: { version: 1 },
+      },
+      { session: session ?? null }
+    );
   }
 
   async addQuotationRevision(

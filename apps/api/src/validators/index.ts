@@ -233,3 +233,39 @@ export const ImportCommitSchema = z.object({
   csvContent: z.string().optional(),
   fileId: z.string().optional(),
 });
+
+export const ClientSubmitOrderSchema = z.object({
+  productId: z.string().optional(),
+  productDescription: z.string().optional(),
+  quantity: z.number().int().positive(),
+  deliveryDeadline: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "deliveryDeadline must be YYYY-MM-DD"),
+  deliveryAddress: z.string().optional(),
+  spec: z
+    .object({
+      sizes: z.array(z.string()).optional(),
+      gsm: z.number().optional(),
+      colours: z.array(z.string()).optional(),
+      fabric: z.string().optional(),
+      print: z.string().optional(),
+    })
+    .optional()
+    .default({}),
+  notes: z.string().optional(),
+  referenceFiles: z.array(z.string()).optional(),
+});
+
+export const AdminCreateOrderSchema = ClientSubmitOrderSchema.extend({
+  clientId: z.string().min(1, "clientId is required for admin manual entry"),
+});
+
+export const OrderDecisionSchema = z.object({
+  decision: z.enum(["proceed", "reject", "alternative"]),
+  alternativeId: z.string().optional(),
+  purchaseDecision: z.record(z.any()).optional(),
+  notes: z.string().optional(),
+});
+
+export const ClientDeclineQuotationSchema = z.object({
+  reason: z.string().optional(),
+});
+
