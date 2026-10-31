@@ -17,7 +17,12 @@ export class OrderController {
         filter: {
           status: req.query.status as string | undefined,
           clientId: req.query.clientId as string | undefined,
+          productId: req.query.productId as string | undefined,
           search: req.query.search as string | undefined,
+          fromDate: (req.query.fromDate || req.query.createdFrom) as string | undefined,
+          toDate: (req.query.toDate || req.query.createdTo) as string | undefined,
+          deliveryFrom: (req.query.deliveryFrom || req.query.deadlineFrom) as string | undefined,
+          deliveryTo: (req.query.deliveryTo || req.query.deadlineTo) as string | undefined,
         },
       });
 
@@ -38,6 +43,29 @@ export class OrderController {
         clientId: actor.clientId,
         role: actor.role,
         supervisorId: actor.role === "supervisor" ? actor.subjectId : undefined,
+      });
+
+      res.json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  updateOrder = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const actor = req.actor!;
+
+      const result = await this.orderService.updateOrder({
+        tenantId: actor.tenantId,
+        orderId: req.params.id as string,
+        data: req.body,
+        actor: {
+          id: actor.subjectId,
+          email: actor.email,
+          ip: req.ip,
+          requestId: actor.requestId,
+          type: "user",
+        },
       });
 
       res.json({ data: result });
@@ -101,7 +129,16 @@ export class OrderController {
       const result = await this.orderService.approveQuotation({
         tenantId: actor.tenantId,
         orderId: req.params.id as string,
-        notes: req.body.notes,
+        action: req.body?.action,
+        editedMarginPercent: req.body?.editedMarginPercent,
+        editedDeliveryDate: req.body?.editedDeliveryDate,
+        unitPricePaise: req.body?.unitPricePaise,
+        totalPaise: req.body?.totalPaise,
+        lineItems: req.body?.lineItems,
+        paymentSchedule: req.body?.paymentSchedule,
+        notes: req.body?.notes,
+        reason: req.body?.reason,
+        recalculateReason: req.body?.recalculateReason,
         actor: {
           id: actor.subjectId,
           email: actor.email,

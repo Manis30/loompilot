@@ -10,8 +10,22 @@ export class ProductController {
       const actor = req.actor!;
       const pagination = parsePaginationQuery(req.query as any);
       const search = req.query.search as string | undefined;
+      const category = req.query.category as string | undefined;
 
-      const result = await this.productService.listProducts(actor.tenantId, pagination, search);
+      let active: boolean | undefined = undefined;
+      if (typeof req.query.active === "boolean") {
+        active = req.query.active;
+      } else if (req.query.status === "active") {
+        active = true;
+      } else if (req.query.status === "inactive") {
+        active = false;
+      }
+
+      const result = await this.productService.listProducts(actor.tenantId, pagination, {
+        search,
+        category,
+        active,
+      });
       res.json(result);
     } catch (err) {
       next(err);
@@ -33,9 +47,16 @@ export class ProductController {
       const actor = req.actor!;
       const created = await this.productService.createProduct({
         tenantId: actor.tenantId,
-        ...req.body,
+        productName: req.body.productName,
+        category: req.body.category,
+        basePricePaise: req.body.basePricePaise,
+        bom: req.body.bom,
+        routing: req.body.routing,
+        imageFileIds: req.body.imageFileIds,
+        active: req.body.active,
         actor: {
           id: actor.subjectId,
+          email: actor.email,
           ip: req.ip,
           requestId: actor.requestId,
         },
@@ -52,9 +73,18 @@ export class ProductController {
       const updated = await this.productService.updateProduct({
         tenantId: actor.tenantId,
         id: req.params.id as string,
-        updates: req.body,
+        updates: {
+          productName: req.body.productName,
+          category: req.body.category,
+          basePricePaise: req.body.basePricePaise,
+          bom: req.body.bom,
+          routing: req.body.routing,
+          imageFileIds: req.body.imageFileIds,
+          active: req.body.active,
+        },
         actor: {
           id: actor.subjectId,
+          email: actor.email,
           ip: req.ip,
           requestId: actor.requestId,
         },
@@ -73,11 +103,12 @@ export class ProductController {
         id: req.params.id as string,
         actor: {
           id: actor.subjectId,
+          email: actor.email,
           ip: req.ip,
           requestId: actor.requestId,
         },
       });
-      res.json({ success: true, message: "Product deleted successfully" });
+      res.json({ success: true, message: "Product deactivated successfully" });
     } catch (err) {
       next(err);
     }
@@ -87,7 +118,13 @@ export class ProductController {
     try {
       const actor = req.actor!;
       const pagination = parsePaginationQuery(req.query as any);
-      const result = await this.productService.listClientSafe(actor.tenantId, pagination);
+      const search = req.query.search as string | undefined;
+      const category = req.query.category as string | undefined;
+
+      const result = await this.productService.listClientSafe(actor.tenantId, pagination, {
+        search,
+        category,
+      });
       res.json(result);
     } catch (err) {
       next(err);
@@ -110,6 +147,9 @@ export class ProductController {
       const fileId = req.body.fileId;
       const updated = await this.productService.addImage(actor.tenantId, req.params.id as string, fileId, {
         id: actor.subjectId,
+        email: actor.email,
+        ip: req.ip,
+        requestId: actor.requestId,
       });
       res.json({ data: updated });
     } catch (err) {

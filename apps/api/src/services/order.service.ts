@@ -1,4 +1,9 @@
-import { OrdersRepository } from "../repositories/orders.repository.js";
+import type { IOrder, IQuotation } from "../models/orders/order.model.js";
+import {
+  OrdersRepository,
+  ORDER_DETAIL_PROJECTION,
+  CLIENT_SAFE_ORDER_PROJECTION,
+} from "../repositories/orders.repository.js";
 import { AdminCostingService } from "./admin/admin-costing.service.js";
 import { CounterRepository } from "../repositories/counter.repository.js";
 import { ClientRepository } from "../repositories/client.repository.js";
@@ -20,6 +25,7 @@ import { AppError } from "../errors/app-error.js";
 import {
   ErrorCode,
   OrderStatus,
+  assertTransition,
   toClientOrderStatus,
   splitPaise,
   InternalFeasibilityReport,
@@ -161,7 +167,10 @@ export function toSupervisorOrderDto(order: any): any {
 
 export function toAdminOrderDto(order: any): any {
   const { costing, ...safeOrder } = order;
-  return safeOrder;
+  return {
+    ...safeOrder,
+    id: String(order._id || order.id),
+  };
 }
 
 export class OrderService {
@@ -214,6 +223,7 @@ export class OrderService {
     quantity: number;
     deliveryDeadline: string;
     deliveryAddress?: string;
+    deliveryNotes?: string;
     spec: {
       sizes?: string[];
       gsm?: number;
@@ -223,9 +233,20 @@ export class OrderService {
     };
     notes?: string;
     referenceFiles?: string[];
+    unitPricePaise?: number;
+    targetPricePaise?: number;
     actor: { id: string; email?: string; ip?: string; requestId?: string; type: "user" | "client" };
   }): Promise<any> {
     const { tenantId, clientId, actor } = params;
+
+    // Validate client existence and active status
+    const client = await this.clientRepo.findById(tenantId, clientId);
+    if (!client) {
+      throw new AppError(ErrorCode.VALIDATION_FAILED, "Selected client does not exist", 400);
+    }
+    if (client.status === "inactive") {
+      throw new AppError(ErrorCode.VALIDATION_FAILED, "Selected client is inactive", 400);
+    }
 
     if (!params.quantity || params.quantity <= 0) {
       throw new AppError(ErrorCode.VALIDATION_FAILED, "Quantity must be a positive integer", 400);
@@ -263,6 +284,15 @@ export class OrderService {
     const year = new Date().getFullYear();
     const orderNumber = `ORD-${year}-${String(seq).padStart(5, "0")}`;
 
+    const quotation = params.unitPricePaise
+      ? {
+          unitPricePaise: params.unitPricePaise,
+          totalPaise: params.unitPricePaise * params.quantity,
+          version: 1,
+          status: "pending_approval" as const,
+        }
+      : undefined;
+
     const created = await this.ordersRepo.createOrder(tenantId, {
       orderNumber,
       clientId,
@@ -281,6 +311,8 @@ export class OrderService {
       notes: params.notes,
       referenceFiles: params.referenceFiles,
       actorId: actor.id,
+      source: actor.type === "client" ? "client_portal" : "admin_manual",
+      quotation,
     });
 
     // Auto-transition to analyzing
@@ -358,11 +390,16 @@ export class OrderService {
     filter?: {
       status?: string;
       clientId?: string;
+      productId?: string;
       search?: string;
+      fromDate?: string;
+      toDate?: string;
+      deliveryFrom?: string;
+      deliveryTo?: string;
     };
     isClient?: boolean;
     clientId?: string;
-  }): Promise<PaginatedResult<any>> {
+  }): Promise<PaginatedResult<any> & { items: any[]; total: number }> {
     const { tenantId, pagination, isClient, clientId, filter = {} } = params;
 
     const queryFilter: Record<string, any> = {};
@@ -378,17 +415,43 @@ export class OrderService {
       queryFilter.status = filter.status;
     }
 
-    if (filter.search) {
-      queryFilter.orderNumber = { $regex: filter.search.trim(), $options: "i" };
+    if (filter.productId) {
+      queryFilter.productId = filter.productId;
     }
 
-    const result = await this.ordersRepo.findPaginated(tenantId, queryFilter, pagination);
+    if (filter.search) {
+      const term = filter.search.trim();
+      queryFilter.$or = [
+        { orderNumber: { $regex: term, $options: "i" } },
+        { productDescription: { $regex: term, $options: "i" } },
+        { deliveryAddress: { $regex: term, $options: "i" } },
+      ];
+    }
+
+    if (filter.fromDate || filter.toDate) {
+      const dateFilter: Record<string, any> = {};
+      if (filter.fromDate) dateFilter.$gte = new Date(filter.fromDate);
+      if (filter.toDate) dateFilter.$lte = new Date(filter.toDate);
+      queryFilter.createdAt = dateFilter;
+    }
+
+    if (filter.deliveryFrom || filter.deliveryTo) {
+      const deadlineFilter: Record<string, any> = {};
+      if (filter.deliveryFrom) deadlineFilter.$gte = filter.deliveryFrom;
+      if (filter.deliveryTo) deadlineFilter.$lte = filter.deliveryTo;
+      queryFilter.deliveryDeadline = deadlineFilter;
+    }
+
+    const projection = isClient ? CLIENT_SAFE_ORDER_PROJECTION : ORDER_DETAIL_PROJECTION;
+    const result = await this.ordersRepo.findPaginated(tenantId, queryFilter, pagination, projection);
 
     const mapped = result.data.map((order) =>
       isClient ? toClientOrderDto(order) : toAdminOrderDto(order)
     );
 
     return {
+      items: mapped,
+      total: result.meta.total,
       data: mapped,
       meta: result.meta,
     };
@@ -429,6 +492,201 @@ export class OrderService {
     return toAdminOrderDto(order);
   }
 
+  async updateOrder(params: {
+    tenantId: string;
+    orderId: string;
+    data: {
+      quantity?: number;
+      deliveryDeadline?: string;
+      deliveryAddress?: string;
+      deliveryNotes?: string;
+      productDescription?: string;
+      productId?: string;
+      clientId?: string;
+      spec?: any;
+      notes?: string;
+      referenceFiles?: string[];
+      status?: OrderStatus;
+      statusReason?: string;
+      reason?: string;
+    };
+    actor: { id: string; email?: string; ip?: string; requestId?: string; type: "user" };
+  }): Promise<any> {
+    const { tenantId, orderId, data, actor } = params;
+
+    const order = await this.ordersRepo.findById(tenantId, orderId);
+    if (!order) {
+      throw new AppError(ErrorCode.NOT_FOUND, `Order '${orderId}' not found`, 404);
+    }
+
+    // Terminal / Closed statuses cannot be updated
+    const TERMINAL_STATUSES: OrderStatus[] = [
+      OrderStatus.COMPLETED,
+      OrderStatus.CANCELLED,
+      OrderStatus.REJECTED_BY_ADMIN,
+      OrderStatus.DECLINED_BY_CLIENT,
+      OrderStatus.EXPIRED,
+    ];
+    if (TERMINAL_STATUSES.includes(order.status)) {
+      throw new AppError(
+        ErrorCode.INVALID_TRANSITION,
+        `Cannot update order: order is in finalized status '${order.status}'`,
+        400
+      );
+    }
+
+    // If order is already in production / delivery stages, lock manufacturing parameters
+    const PRODUCTION_LOCKED_STATUSES: OrderStatus[] = [
+      OrderStatus.ASSIGNED,
+      OrderStatus.IN_PRODUCTION,
+      OrderStatus.READY_FOR_DELIVERY,
+      OrderStatus.PARTIALLY_DELIVERED,
+      OrderStatus.DELIVERED,
+    ];
+    if (PRODUCTION_LOCKED_STATUSES.includes(order.status)) {
+      if (data.quantity !== undefined && data.quantity !== order.quantity) {
+        throw new AppError(
+          ErrorCode.VALIDATION_FAILED,
+          `Cannot modify quantity for order in production status '${order.status}'`,
+          400
+        );
+      }
+      if (data.productId !== undefined && String(data.productId) !== String(order.productId)) {
+        throw new AppError(
+          ErrorCode.VALIDATION_FAILED,
+          `Cannot modify product for order in production status '${order.status}'`,
+          400
+        );
+      }
+      if (data.clientId !== undefined && String(data.clientId) !== String(order.clientId)) {
+        throw new AppError(
+          ErrorCode.VALIDATION_FAILED,
+          `Cannot modify client for order in production status '${order.status}'`,
+          400
+        );
+      }
+      if (data.spec !== undefined) {
+        throw new AppError(
+          ErrorCode.VALIDATION_FAILED,
+          `Cannot modify manufacturing spec for order in production status '${order.status}'`,
+          400
+        );
+      }
+    }
+
+    // Validate client reference if changed
+    if (data.clientId && String(data.clientId) !== String(order.clientId)) {
+      const client = await this.clientRepo.findById(tenantId, data.clientId);
+      if (!client || client.status === "inactive") {
+        throw new AppError(ErrorCode.VALIDATION_FAILED, "Selected client is invalid or inactive", 400);
+      }
+    }
+
+    // Validate product reference if changed
+    if (data.productId && String(data.productId) !== String(order.productId)) {
+      const product = await this.productRepo.findById(tenantId, data.productId);
+      if (!product || product.active === false) {
+        throw new AppError(ErrorCode.VALIDATION_FAILED, "Selected product is invalid or inactive", 400);
+      }
+    }
+
+    // Validate delivery deadline if changed
+    if (data.deliveryDeadline && data.deliveryDeadline !== order.deliveryDeadline) {
+      const today = getTodayBusinessDate();
+      if (data.deliveryDeadline <= today) {
+        throw new AppError(
+          ErrorCode.VALIDATION_FAILED,
+          `Delivery deadline '${data.deliveryDeadline}' must be a future date (after ${today})`,
+          400
+        );
+      }
+    }
+
+    // Validate quantity if changed
+    if (data.quantity !== undefined && data.quantity <= 0) {
+      throw new AppError(ErrorCode.VALIDATION_FAILED, "Quantity must be a positive integer", 400);
+    }
+
+    // If status transition requested
+    const reason = data.reason || data.statusReason;
+    if (data.status && data.status !== order.status) {
+      if (data.status === OrderStatus.CANCELLED) {
+        return this.cancelOrder({
+          tenantId,
+          orderId,
+          reason: reason || "Cancelled via order update",
+          actor,
+        });
+      }
+      if (data.status === OrderStatus.ON_HOLD) {
+        return this.holdOrder({
+          tenantId,
+          orderId,
+          reason: reason || "Put on hold via order update",
+          actor,
+        });
+      }
+
+      // Assert transition validity
+      assertTransition("order", order.status, data.status, {
+        role: "admin",
+        reason,
+        by: actor.id as any,
+      });
+
+      await this.ordersRepo.updateStatus(tenantId, orderId, data.status, {
+        role: "admin",
+        reason: reason || `Status updated to ${data.status}`,
+        by: actor.id as any,
+      });
+    }
+
+    // Build fields to update
+    const updateFields: Partial<IOrder> = {};
+    if (data.quantity !== undefined) updateFields.quantity = data.quantity;
+    if (data.deliveryDeadline !== undefined) updateFields.deliveryDeadline = data.deliveryDeadline;
+    if (data.deliveryAddress !== undefined) updateFields.deliveryAddress = data.deliveryAddress;
+    if (data.deliveryNotes !== undefined) updateFields.deliveryNotes = data.deliveryNotes;
+    else if (data.notes !== undefined) updateFields.deliveryNotes = data.notes;
+    if (data.productDescription !== undefined) updateFields.productDescription = data.productDescription;
+    if (data.productId !== undefined) updateFields.productId = data.productId as any;
+    if (data.clientId !== undefined) updateFields.clientId = data.clientId as any;
+    if (data.spec !== undefined) updateFields.spec = data.spec;
+    if (data.referenceFiles !== undefined) {
+      updateFields.referenceFiles = data.referenceFiles as any;
+    }
+
+    let updated = order;
+    if (Object.keys(updateFields).length > 0) {
+      const res = await this.ordersRepo.updateOrderDetails(tenantId, orderId, updateFields);
+      if (res) updated = res;
+    } else if (data.status) {
+      const refreshed = await this.ordersRepo.findById(tenantId, orderId);
+      if (refreshed) updated = refreshed;
+    }
+
+    await this.auditService.log({
+      tenantId,
+      actor: { id: actor.id, type: "user", email: actor.email },
+      action: "ORDER_UPDATED",
+      entity: { collection: "orders", id: orderId },
+      before: {
+        quantity: order.quantity,
+        deliveryDeadline: order.deliveryDeadline,
+        status: order.status,
+      },
+      after: {
+        quantity: updated.quantity,
+        deliveryDeadline: updated.deliveryDeadline,
+        status: updated.status,
+      },
+      ip: actor.ip,
+      requestId: actor.requestId,
+    });
+
+    return toAdminOrderDto(updated);
+  }
+
   async ingestFeasibilityReport(
     report: InternalFeasibilityReport,
     actor: { id: string; type: "agent" | "user"; requestId?: string }
@@ -437,6 +695,21 @@ export class OrderService {
     const order = await this.ordersRepo.findById(tenantId, orderId);
     if (!order) {
       throw new AppError(ErrorCode.NOT_FOUND, `Order '${orderId}' not found for feasibility report`, 404);
+    }
+
+    // Guard against stale feasibility callbacks if order has progressed or cancelled
+    const validFeasibilityStatuses: string[] = [
+      OrderStatus.SUBMITTED,
+      OrderStatus.ANALYZING,
+      OrderStatus.ANALYSIS_FAILED,
+      OrderStatus.AWAITING_ADMIN_DECISION,
+    ];
+    if (!validFeasibilityStatuses.includes(order.status)) {
+      logger.warn(
+        { orderId, currentStatus: order.status, verdict },
+        "Ignoring stale feasibility report for order that already transitioned beyond analysis"
+      );
+      return order;
     }
 
     await this.ordersRepo.setFeasibility(tenantId, orderId, report);
@@ -471,14 +744,22 @@ export class OrderService {
         const draftResult = await client.requestQuotationDraft({
           tenantId,
           orderId,
+          productId: order.productId ? String(order.productId) : undefined,
           quantity: order.quantity,
           deadline: report.etaDate,
+          feasibilityVerdict: verdict,
         });
 
         if (draftResult.success && draftResult.data) {
           await this.ingestQuotationDraft(draftResult.data, actor);
+        } else if (!draftResult.success && draftResult.unavailable) {
+          logger.warn(
+            { orderId, error: draftResult.error },
+            "Agent service unavailable during quotation draft request; will await async draft callback"
+          );
         }
-      } catch {
+      } catch (err: any) {
+        logger.warn({ orderId, err: err.message }, "Error requesting quotation draft from agent service");
         // Will be delivered asynchronously via /internal/v1/quotation-drafts
       }
     }
@@ -496,11 +777,32 @@ export class OrderService {
       throw new AppError(ErrorCode.NOT_FOUND, `Order '${orderId}' not found for quotation draft`, 404);
     }
 
+    // Guard against stale quotation draft callbacks
+    const validDraftStatuses: string[] = [
+      OrderStatus.ANALYZING,
+      OrderStatus.QUOTATION_DRAFTING,
+      OrderStatus.QUOTATION_PENDING_APPROVAL,
+      OrderStatus.AWAITING_ADMIN_DECISION,
+    ];
+    if (!validDraftStatuses.includes(order.status)) {
+      logger.warn(
+        { orderId, currentStatus: order.status },
+        "Ignoring stale quotation draft for order that already transitioned beyond drafting"
+      );
+      return order;
+    }
+
+    const settings = await this.settingsRepo.getSettings(tenantId);
+    const validityDays = settings?.quoteValidityDays ?? 7;
+    const defaultValidUntil = new Date(Date.now() + validityDays * 86400000).toISOString().split("T")[0];
+
     const quotationData: any = {
       version: (order.quotation?.version || 0) + 1,
       unitPricePaise: draft.unitPricePaise,
       totalPaise: draft.totalPaise,
       etaDate: draft.etaDate,
+      validUntil: (draft as any).validUntil || defaultValidUntil,
+      status: "pending_approval",
       lineItems: draft.lineItems,
       paymentSchedule: draft.paymentSchedule,
       processPlan: draft.processPlan,
@@ -513,6 +815,7 @@ export class OrderService {
       marginWarning: draft.marginWarning,
       basePriceWarning: draft.basePriceWarning,
       lowData: draft.lowData,
+      revisions: order.quotation?.revisions || [],
       generatedAt: new Date(),
     };
 
@@ -534,7 +837,7 @@ export class OrderService {
       actor: { id: actor.id, type: actor.type },
       action: "QUOTATION_DRAFT_INGESTED",
       entity: { collection: "orders", id: orderId },
-      after: { totalPaise: draft.totalPaise, etaDate: draft.etaDate },
+      after: { totalPaise: draft.totalPaise, etaDate: draft.etaDate, validUntil: quotationData.validUntil },
       requestId: actor.requestId,
     });
 
@@ -624,15 +927,117 @@ export class OrderService {
   async approveQuotation(params: {
     tenantId: string;
     orderId: string;
+    action?: "approve" | "reject" | "recalculate";
+    editedMarginPercent?: number;
+    editedDeliveryDate?: string;
+    unitPricePaise?: number;
+    totalPaise?: number;
+    lineItems?: any[];
+    paymentSchedule?: any[];
     notes?: string;
+    reason?: string;
+    recalculateReason?: "price_surge" | "admin_edit" | "discount" | "date_change";
     actor: { id: string; email?: string; ip?: string; requestId?: string };
   }): Promise<any> {
-    const { tenantId, orderId, notes, actor } = params;
+    const { tenantId, orderId, action = "approve", actor } = params;
     const order = await this.ordersRepo.findById(tenantId, orderId);
     if (!order) {
       throw new AppError(ErrorCode.NOT_FOUND, `Order '${orderId}' not found`, 404);
     }
 
+    if (action === "reject") {
+      const validRejectStatuses: string[] = [
+        OrderStatus.QUOTATION_PENDING_APPROVAL,
+        OrderStatus.QUOTATION_DRAFTING,
+        OrderStatus.AWAITING_ADMIN_DECISION,
+      ];
+      if (!validRejectStatuses.includes(order.status)) {
+        throw new AppError(
+          ErrorCode.VALIDATION_FAILED,
+          `Cannot reject quotation for order with status '${order.status}'`,
+          400
+        );
+      }
+
+      const updated = await this.ordersRepo.updateStatus(tenantId, orderId, OrderStatus.REJECTED_BY_ADMIN, {
+        role: "admin",
+        reason: params.reason || params.notes || "Quotation rejected by administrator",
+      });
+
+      if (order.quotation) {
+        await this.ordersRepo.setQuotation(tenantId, orderId, {
+          ...order.quotation,
+          status: "rejected" as const,
+        });
+      }
+
+      await this.auditService.log({
+        tenantId,
+        actor: { id: actor.id, type: "user", email: actor.email },
+        action: "QUOTATION_REJECTED",
+        entity: { collection: "orders", id: orderId },
+        after: { status: OrderStatus.REJECTED_BY_ADMIN, reason: params.reason || params.notes },
+        ip: actor.ip,
+        requestId: actor.requestId,
+      });
+
+      return toAdminOrderDto(updated);
+    }
+
+    if (action === "recalculate") {
+      const validRecalcStatuses: string[] = [
+        OrderStatus.QUOTATION_PENDING_APPROVAL,
+        OrderStatus.QUOTATION_DRAFTING,
+        OrderStatus.AWAITING_ADMIN_DECISION,
+      ];
+      if (!validRecalcStatuses.includes(order.status)) {
+        throw new AppError(
+          ErrorCode.VALIDATION_FAILED,
+          `Cannot recalculate quotation for order with status '${order.status}'`,
+          400
+        );
+      }
+
+      const client = this.getAgentsClient();
+      const reasonType = params.recalculateReason || "admin_edit";
+      const recalcResult = await client.recalculateQuotation({
+        tenantId,
+        orderId,
+        reasonType,
+        targetPricePaise: params.totalPaise,
+        targetEtaDate: params.editedDeliveryDate,
+        discountPct: params.editedMarginPercent,
+      });
+
+      if (recalcResult.success && recalcResult.data) {
+        await this.ingestQuotationRevision(recalcResult.data, {
+          id: actor.id,
+          type: "user",
+          requestId: actor.requestId,
+        });
+      } else if (!recalcResult.success && recalcResult.unavailable) {
+        throw new AppError(
+          ErrorCode.AGENTS_UNAVAILABLE,
+          "Pricing agent is currently unavailable for recalculation",
+          503
+        );
+      }
+
+      await this.auditService.log({
+        tenantId,
+        actor: { id: actor.id, type: "user", email: actor.email },
+        action: "QUOTATION_RECALCULATED",
+        entity: { collection: "orders", id: orderId },
+        after: { reasonType, notes: params.notes },
+        ip: actor.ip,
+        requestId: actor.requestId,
+      });
+
+      const refreshed = await this.ordersRepo.findById(tenantId, orderId);
+      return toAdminOrderDto(refreshed);
+    }
+
+    // Default / "approve" action
     if (order.status !== OrderStatus.QUOTATION_PENDING_APPROVAL) {
       throw new AppError(
         ErrorCode.VALIDATION_FAILED,
@@ -641,17 +1046,87 @@ export class OrderService {
       );
     }
 
+    if (!order.quotation) {
+      throw new AppError(ErrorCode.VALIDATION_FAILED, "Order does not have a quotation drafted", 400);
+    }
+
+    // Minimum margin threshold validation
+    const settings = await this.settingsRepo.getSettings(tenantId);
+    const minMargin = settings?.minMarginPct ?? 10;
+    if (params.editedMarginPercent !== undefined && params.editedMarginPercent < minMargin) {
+      throw new AppError(
+        ErrorCode.BELOW_THRESHOLD,
+        `Margin ${params.editedMarginPercent}% is below the minimum threshold of ${minMargin}%`,
+        400
+      );
+    }
+
+    let totalPaise = params.totalPaise ?? order.quotation.totalPaise;
+    let unitPricePaise = params.unitPricePaise ?? order.quotation.unitPricePaise;
+
+    // If editedMarginPercent is provided, recalculate margin and total if costing exists
+    if (params.editedMarginPercent !== undefined) {
+      const existingCosting = await this.adminCostingService.getCosting(tenantId, orderId);
+      if (existingCosting && existingCosting.totalCostPaise > 0) {
+        const newMarginPaise = Math.round(existingCosting.totalCostPaise * (params.editedMarginPercent / 100));
+        totalPaise = existingCosting.totalCostPaise + newMarginPaise;
+        unitPricePaise = Math.round(totalPaise / order.quantity);
+        await this.adminCostingService.updateCosting(tenantId, orderId, {
+          ...existingCosting,
+          marginPct: params.editedMarginPercent,
+          marginPaise: newMarginPaise,
+        });
+      }
+    } else if (params.unitPricePaise !== undefined && params.totalPaise === undefined) {
+      totalPaise = params.unitPricePaise * order.quantity;
+    } else if (params.totalPaise !== undefined && params.unitPricePaise === undefined) {
+      unitPricePaise = Math.round(params.totalPaise / order.quantity);
+    }
+
+    // Recompute milestone payment amounts using splitPaise if total changed
+    let schedule = params.paymentSchedule || order.quotation.paymentSchedule || [];
+    if (schedule.length > 0 && totalPaise && totalPaise !== order.quotation.totalPaise) {
+      const weights = schedule.map((m: any) => m.percent);
+      const newAmounts = splitPaise(totalPaise, weights);
+      schedule = schedule.map((m: any, idx: number) => ({
+        ...m,
+        amountPaise: newAmounts[idx] ?? m.amountPaise,
+      }));
+    }
+
+    const updatedQuotation: IQuotation = {
+      ...order.quotation,
+      status: "approved" as const,
+      approvedBy: actor.id as any,
+      approvedAt: new Date(),
+      totalPaise,
+      unitPricePaise,
+      etaDate: params.editedDeliveryDate || order.quotation.etaDate,
+      lineItems: params.lineItems || order.quotation.lineItems,
+      paymentSchedule: schedule,
+    };
+
+    await this.ordersRepo.setQuotation(tenantId, orderId, updatedQuotation);
+
     await this.auditService.log({
       tenantId,
       actor: { id: actor.id, type: "user", email: actor.email },
       action: "QUOTATION_APPROVED",
       entity: { collection: "orders", id: orderId },
-      after: { approved: true, notes },
+      after: {
+        status: "approved",
+        totalPaise,
+        unitPricePaise,
+        marginPct: params.editedMarginPercent,
+        etaDate: updatedQuotation.etaDate,
+        notes: params.notes,
+      },
       ip: actor.ip,
       requestId: actor.requestId,
     });
 
-    return toAdminOrderDto(order);
+    const refreshed = await this.ordersRepo.findById(tenantId, orderId);
+    return toAdminOrderDto(refreshed);
   }
 
   async sendQuotation(params: {
@@ -726,6 +1201,12 @@ export class OrderService {
 
     await this.ordersRepo.setQuotationClientPdfFileId(tenantId, orderId, String(fileDoc._id));
 
+    await this.ordersRepo.setQuotation(tenantId, orderId, {
+      ...order.quotation,
+      status: "sent",
+      sentAt: new Date(),
+    });
+
     // Transition status to quotation_sent
     const updated = await this.ordersRepo.updateStatus(tenantId, orderId, OrderStatus.QUOTATION_SENT, {
       role: "admin",
@@ -792,6 +1273,17 @@ export class OrderService {
 
     if (String(order.clientId) !== String(clientId)) {
       throw new AppError(ErrorCode.FORBIDDEN, "Access denied: Order does not belong to client", 403);
+    }
+
+    if (order.quotation?.validUntil) {
+      const todayStr = getTodayBusinessDate();
+      if (order.quotation.validUntil < todayStr) {
+        throw new AppError(
+          ErrorCode.VALIDATION_FAILED,
+          `Quotation has expired on ${order.quotation.validUntil}`,
+          400
+        );
+      }
     }
 
     if (revisionNo !== undefined) {
@@ -885,6 +1377,13 @@ export class OrderService {
       role: "admin",
       reason: "Quotation accepted by client",
     });
+
+    if (order.quotation) {
+      await this.ordersRepo.setQuotation(tenantId, orderId, {
+        ...order.quotation,
+        status: "accepted",
+      });
+    }
 
     await this.notificationRepo.createNotification(tenantId, {
       recipient: await this.getAdminRecipient(tenantId),
@@ -1002,6 +1501,13 @@ export class OrderService {
       }
     );
 
+    if (order.quotation) {
+      await this.ordersRepo.setQuotation(tenantId, orderId, {
+        ...order.quotation,
+        status: "declined",
+      });
+    }
+
     await this.notificationRepo.createNotification(tenantId, {
       recipient: await this.getAdminRecipient(tenantId),
       kind: "notification",
@@ -1048,44 +1554,123 @@ export class OrderService {
       );
     }
 
-    // Recompute milestone payment amounts using splitPaise
-    const currentSchedule = order.quotation?.paymentSchedule || [];
-    if (currentSchedule.length > 0) {
-      const weights = currentSchedule.map((m: any) => m.percent);
-      const newAmounts = splitPaise(newPricePaise, weights);
-      for (let i = 0; i < currentSchedule.length; i++) {
-        if (currentSchedule[i] && newAmounts[i] !== undefined) {
-          currentSchedule[i]!.amountPaise = newAmounts[i]!;
-        }
-      }
+    // Guard against terminal/finalized orders
+    const terminalStatuses: string[] = [
+      OrderStatus.CANCELLED,
+      OrderStatus.COMPLETED,
+      OrderStatus.EXPIRED,
+      OrderStatus.DECLINED_BY_CLIENT,
+      OrderStatus.REJECTED_BY_ADMIN,
+    ];
+    if (terminalStatuses.includes(order.status)) {
+      logger.warn(
+        { orderId, currentStatus: order.status },
+        "Ignoring quotation revision for finalized/terminal order"
+      );
+      return order;
     }
 
-    await this.ordersRepo.addQuotationRevision(tenantId, orderId, {
-      ...revision,
-      createdAt: new Date(),
-    });
+    // Duplicate check by agentRunId
+    const currentRevisions = order.quotation?.revisions || [];
+    if (
+      revision.agentRunId &&
+      currentRevisions.some((r: any) => String(r.agentRunId) === String(revision.agentRunId))
+    ) {
+      logger.warn({ orderId, agentRunId: revision.agentRunId }, "Ignoring duplicate quotation revision from agent");
+      return order;
+    }
 
-    const updatedQuotation = {
-      ...order.quotation,
-      totalPaise: newPricePaise,
-      unitPricePaise: Math.round(newPricePaise / order.quantity),
-      etaDate: revision.newEtaDate || order.quotation?.etaDate,
-      paymentSchedule: currentSchedule,
-      version: (order.quotation?.version || 1) + 1,
+    const nextRevisionNo = (revision as any).revisionNo || (currentRevisions.length + 1);
+
+    const revisionDoc = {
+      ...revision,
+      revisionNo: nextRevisionNo,
+      status: (revision as any).status || "sent",
+      createdAt: new Date(),
     };
 
-    const updated = await this.ordersRepo.setQuotation(tenantId, orderId, updatedQuotation);
+    await this.ordersRepo.addQuotationRevision(tenantId, orderId, revisionDoc);
+
+    // Note: When revision is proposed or sent, original quotation price and milestones
+    // stand untouched until client accepts the revision!
+
+    await this.notificationRepo.createNotification(tenantId, {
+      recipient: { clientId: String(order.clientId) },
+      kind: "notification",
+      type: "quotation_revised",
+      channel: "in_app",
+      title: `Quotation Revision #${nextRevisionNo} for ${order.orderNumber}`,
+      body: `A price revision has been issued for order ${order.orderNumber}. New total: ₹${(newPricePaise / 100).toLocaleString()}`,
+      entity: { collection: "orders", id: orderId },
+    });
 
     await this.auditService.log({
       tenantId,
       actor: { id: actor.id, type: actor.type },
       action: "QUOTATION_REVISION_INGESTED",
       entity: { collection: "orders", id: orderId },
-      after: { newPricePaise, changePct: revision.changePct, reasonType: revision.reasonType },
+      after: {
+        revisionNo: nextRevisionNo,
+        newPricePaise,
+        changePct: revision.changePct,
+        reasonType: revision.reasonType,
+      },
       requestId: actor.requestId,
     });
 
-    return updated;
+    const refreshed = await this.ordersRepo.findById(tenantId, orderId);
+    return refreshed;
+  }
+
+  async checkAndExpireQuotations(tenantId: string): Promise<number> {
+    const todayStr = getTodayBusinessDate();
+    const sentOrders = await this.ordersRepo.findPaginated(
+      tenantId,
+      { status: OrderStatus.QUOTATION_SENT },
+      { page: 1, limit: 100, sortOrder: "asc" },
+      ORDER_DETAIL_PROJECTION
+    );
+
+    let expiredCount = 0;
+    for (const order of sentOrders.data) {
+      if (order.quotation?.validUntil && order.quotation.validUntil < todayStr) {
+        try {
+          await this.ordersRepo.updateStatus(tenantId, String(order._id), OrderStatus.EXPIRED, {
+            role: "admin",
+            reason: `Quotation validity expired on ${order.quotation.validUntil}`,
+          });
+
+          await this.ordersRepo.setQuotation(tenantId, String(order._id), {
+            ...order.quotation,
+            status: "expired" as const,
+          });
+
+          await this.notificationRepo.createNotification(tenantId, {
+            recipient: { clientId: String(order.clientId) },
+            kind: "alert",
+            type: "quotation_expired",
+            channel: "in_app",
+            title: `Quotation Expired for ${order.orderNumber}`,
+            body: `Your quotation for order ${order.orderNumber} expired on ${order.quotation.validUntil}.`,
+            entity: { collection: "orders", id: String(order._id) },
+          });
+
+          await this.auditService.log({
+            tenantId,
+            actor: { id: "system", type: "system" },
+            action: "QUOTATION_EXPIRED",
+            entity: { collection: "orders", id: String(order._id) },
+            after: { status: OrderStatus.EXPIRED, validUntil: order.quotation.validUntil },
+          });
+
+          expiredCount++;
+        } catch (err: any) {
+          logger.warn({ orderId: order._id, err: err.message }, "Failed to auto-expire quotation");
+        }
+      }
+    }
+
+    return expiredCount;
   }
 
   async runQuoteReminders(tenantId: string): Promise<number> {

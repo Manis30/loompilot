@@ -159,6 +159,8 @@ export class OrdersRepository {
       notes?: string;
       referenceFiles?: string[];
       actorId?: string;
+      source?: "client_portal" | "admin_manual" | "import";
+      quotation?: any;
     },
     tx?: TxContext
   ): Promise<IOrder> {
@@ -176,6 +178,8 @@ export class OrdersRepository {
       notes: data.notes,
       referenceFiles: data.referenceFiles?.map((id) => new Types.ObjectId(id)) || [],
       status: OrderStatus.SUBMITTED,
+      source: data.source || (data.actorId ? "admin_manual" : "client_portal"),
+      quotation: data.quotation,
       statusHistory: [
         {
           status: OrderStatus.SUBMITTED,
@@ -195,10 +199,48 @@ export class OrdersRepository {
     projection: Record<string, any> = ORDER_DETAIL_PROJECTION,
     tx?: TxContext
   ): Promise<IOrder | null> {
+    if (typeof orderId === "string" && !Types.ObjectId.isValid(orderId)) {
+      return null;
+    }
     const session = this.getSession(tx);
     return this.model
       .findOne({ tenantId, _id: orderId }, projection)
       .session(session ?? null)
+      .lean<IOrder>()
+      .exec();
+  }
+
+  async updateOrderDetails(
+    tenantId: string,
+    orderId: string | Types.ObjectId,
+    fields: Partial<IOrder>,
+    tx?: TxContext
+  ): Promise<IOrder | null> {
+    if (typeof orderId === "string" && !Types.ObjectId.isValid(orderId)) {
+      return null;
+    }
+    const session = this.getSession(tx);
+    const updateObj: any = { ...fields };
+    if (updateObj.productId && typeof updateObj.productId === "string") {
+      updateObj.productId = new Types.ObjectId(updateObj.productId);
+    }
+    if (updateObj.clientId && typeof updateObj.clientId === "string") {
+      updateObj.clientId = new Types.ObjectId(updateObj.clientId);
+    }
+    if (Array.isArray(updateObj.referenceFiles)) {
+      updateObj.referenceFiles = updateObj.referenceFiles.map((f: any) =>
+        typeof f === "string" ? new Types.ObjectId(f) : f
+      );
+    }
+    return this.model
+      .findOneAndUpdate(
+        { tenantId, _id: orderId },
+        {
+          $set: updateObj,
+          $inc: { version: 1 },
+        },
+        { new: true, session: session ?? null }
+      )
       .lean<IOrder>()
       .exec();
   }
@@ -1153,6 +1195,26 @@ export class OrdersRepository {
       ],
     });
     return count > 0;
+  }
+
+  async countByProductId(tenantId: string, productId: string): Promise<number> {
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      return 0;
+    }
+    return this.model.countDocuments({
+      tenantId,
+      productId: new Types.ObjectId(productId),
+    }).exec();
+  }
+
+  async countByClientId(tenantId: string, clientId: string): Promise<number> {
+    if (!mongoose.Types.ObjectId.isValid(clientId)) {
+      return 0;
+    }
+    return this.model.countDocuments({
+      tenantId,
+      clientId: new Types.ObjectId(clientId),
+    }).exec();
   }
 }
 

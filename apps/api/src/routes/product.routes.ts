@@ -5,10 +5,12 @@ import { authorize } from "../middleware/rbac.js";
 import {
   validateBody,
   validateParams,
+  validateQuery,
   IdParamSchema,
   ProductCreateSchema,
   ProductUpdateSchema,
   ProductImageSchema,
+  ProductQuerySchema,
 } from "../validators/index.js";
 
 export const productRouter: Router = Router();
@@ -19,6 +21,7 @@ productRouter.use(authenticate);
 productRouter.get(
   "/",
   authorize("GET /api/v1/products"),
+  validateQuery(ProductQuerySchema),
   controller.listProducts
 );
 

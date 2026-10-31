@@ -6,9 +6,13 @@ import { idempotencyMiddleware } from "../middleware/idempotency.js";
 import {
   validateBody,
   validateParams,
+  validateQuery,
   IdParamSchema,
   AdminCreateOrderSchema,
+  OrderQuerySchema,
+  OrderUpdateSchema,
   OrderDecisionSchema,
+  OrderApproveQuotationSchema,
   OrderAssignSupervisorsSchema,
   OrderHoldSchema,
   OrderCancelSchema,
@@ -26,6 +30,7 @@ orderRouter.use(authenticate);
 orderRouter.get(
   "/",
   authorize("GET /api/v1/orders"),
+  validateQuery(OrderQuerySchema),
   controller.listOrders
 );
 
@@ -34,6 +39,14 @@ orderRouter.get(
   authorize("GET /api/v1/orders/:id"),
   validateParams(IdParamSchema),
   controller.getOrderById
+);
+
+orderRouter.patch(
+  "/:id",
+  authorize("PATCH /api/v1/orders/:id"),
+  validateParams(IdParamSchema),
+  validateBody(OrderUpdateSchema),
+  controller.updateOrder
 );
 
 orderRouter.post(
@@ -56,6 +69,7 @@ orderRouter.post(
   "/:id/quotation/approve",
   authorize("POST /api/v1/orders/:id/quotation/approve"),
   validateParams(IdParamSchema),
+  validateBody(OrderApproveQuotationSchema),
   controller.approveQuotation
 );
 

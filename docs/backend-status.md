@@ -1,6 +1,6 @@
 # LoomPilot Backend Status Report (Generated)
 
-**Generated At:** `2026-10-31T11:11:16.723Z`  
+**Generated At:** `2026-10-31T15:02:54.657Z`  
 **Monorepo:** pnpm workspace (`apps/api`, `packages/shared`, `packages/agents-client`, `apps/web`)  
 **TypeScript Typecheck:** Passing (0 errors)  
 **Architectural Decoupling (`depcruise`):** Passing (0 violations across 178 modules, 636 dependencies)  
@@ -40,7 +40,7 @@ Total Model Files: **22**
 
 ## 2. API Routes & RBAC Matrix
 
-Total Registered Route Endpoints: **94**
+Total Registered Route Endpoints: **96**
 
 | Method | Route Path | Allowed Realms | Allowed Roles | Idempotent |
 | :--- | :--- | :--- | :--- | :---: |
@@ -57,6 +57,7 @@ Total Registered Route Endpoints: **94**
 | `PATCH` | `/api/v1/me` | `user, client` | `admin, supervisor` | No |
 | `POST` | `/api/v1/auth/change-password` | `user, client` | `admin, supervisor` | No |
 | `GET` | `/api/v1/users` | `user` | `admin` | No |
+| `GET` | `/api/v1/users/:id` | `user` | `admin` | No |
 | `POST` | `/api/v1/users` | `user` | `admin` | No |
 | `PATCH` | `/api/v1/users/:id` | `user` | `admin` | No |
 | `POST` | `/api/v1/users/:id/lock` | `user` | `admin` | No |
@@ -120,6 +121,7 @@ Total Registered Route Endpoints: **94**
 | `GET` | `/api/v1/orders` | `user` | `admin, supervisor` | No |
 | `GET` | `/api/v1/orders/:id` | `user` | `admin, supervisor` | No |
 | `POST` | `/api/v1/orders` | `user` | `admin` | Yes |
+| `PATCH` | `/api/v1/orders/:id` | `user` | `admin` | No |
 | `POST` | `/api/v1/orders/:id/decide` | `user` | `admin` | No |
 | `POST` | `/api/v1/orders/:id/quotation/approve` | `user` | `admin` | Yes |
 | `POST` | `/api/v1/orders/:id/quotation/send` | `user` | `admin` | Yes |
@@ -173,8 +175,8 @@ Total Repositories: **21**
 
 ## 4. Test Suite Summary (`apps/api/test`)
 
-Total Test Files: **34**  
-Total Test Declarations: **201**
+Total Test Files: **35**  
+Total Test Declarations: **212**
 
 | Test File | Test Count |
 | :--- | :---: |
@@ -202,6 +204,7 @@ Total Test Declarations: **201**
 | `models/schema-indexes.test.ts` | 11 |
 | `models/schema-v4-rules.test.ts` | 33 |
 | `orders/phase-b-c-d-workflows.test.ts` | 9 |
+| `orders/quotation-workflow.test.ts` | 11 |
 | `repositories/base-repository.test.ts` | 7 |
 | `repositories/orders-repository.test.ts` | 16 |
 | `repositories/unit-of-work.test.ts` | 7 |

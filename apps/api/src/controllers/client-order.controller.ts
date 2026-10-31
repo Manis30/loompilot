@@ -42,7 +42,12 @@ export class ClientOrderController {
         clientId,
         filter: {
           status: req.query.status as string | undefined,
+          productId: req.query.productId as string | undefined,
           search: req.query.search as string | undefined,
+          fromDate: (req.query.fromDate || req.query.createdFrom) as string | undefined,
+          toDate: (req.query.toDate || req.query.createdTo) as string | undefined,
+          deliveryFrom: (req.query.deliveryFrom || req.query.deadlineFrom) as string | undefined,
+          deliveryTo: (req.query.deliveryTo || req.query.deadlineTo) as string | undefined,
         },
       });
 

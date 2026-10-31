@@ -124,6 +124,15 @@ export const ROUTE_PERMISSION_MATRIX: Record<string, RoutePermission> = {
     allowedRoles: ["admin"],
     idempotent: false,
   },
+  "GET /api/v1/users/:id": {
+    routeKey: "GET /api/v1/users/:id",
+    method: "GET",
+    path: "/api/v1/users/:id",
+    description: "Get staff user details",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin"],
+    idempotent: false,
+  },
   "POST /api/v1/users": {
     routeKey: "POST /api/v1/users",
     method: "POST",
@@ -712,6 +721,15 @@ export const ROUTE_PERMISSION_MATRIX: Record<string, RoutePermission> = {
     allowedRealms: ["user"],
     allowedRoles: ["admin"],
     idempotent: true,
+  },
+  "PATCH /api/v1/orders/:id": {
+    routeKey: "PATCH /api/v1/orders/:id",
+    method: "PATCH",
+    path: "/api/v1/orders/:id",
+    description: "Update order details where workflow permits",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin"],
+    idempotent: false,
   },
   "POST /api/v1/orders/:id/decide": {
     routeKey: "POST /api/v1/orders/:id/decide",

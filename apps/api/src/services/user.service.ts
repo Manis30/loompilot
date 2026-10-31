@@ -7,6 +7,42 @@ import { AppError } from "../errors/app-error.js";
 import { ErrorCode } from "@loompilot/shared";
 import { hashPassword, validatePasswordPolicy } from "../utils/password.js";
 import { IUser } from "../models/identity/user.model.js";
+import { PaginationQuery, PaginatedResult } from "../utils/pagination.js";
+
+export interface SafeUserDto {
+  id: string;
+  _id: string;
+  tenantId: string;
+  role: "admin" | "supervisor";
+  name: string;
+  email: string;
+  phone?: string;
+  processAreas: string[];
+  status: "active" | "locked";
+  notificationPrefs?: any;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export function toSafeUserDto(user: any): SafeUserDto {
+  const obj = user.toObject ? user.toObject() : { ...user };
+  delete obj.passwordHash;
+  delete obj.lockout;
+  return {
+    id: String(obj._id || obj.id),
+    _id: String(obj._id || obj.id),
+    tenantId: obj.tenantId,
+    role: obj.role,
+    name: obj.name,
+    email: obj.email,
+    phone: obj.phone,
+    processAreas: obj.processAreas || [],
+    status: obj.status,
+    notificationPrefs: obj.notificationPrefs,
+    createdAt: obj.createdAt,
+    updatedAt: obj.updatedAt,
+  };
+}
 
 export class UserService {
   constructor(
@@ -39,14 +75,61 @@ export class UserService {
     }
   }
 
-  async listUsers(tenantId: string) {
-    return this.userRepo.find(tenantId, {});
+  async listUsers(
+    tenantId: string,
+    pagination?: PaginationQuery,
+    filterOptions?: {
+      search?: string;
+      role?: "admin" | "supervisor";
+      status?: "active" | "locked";
+      processArea?: string;
+    }
+  ): Promise<PaginatedResult<SafeUserDto>> {
+    const filter: Record<string, any> = {};
+
+    if (filterOptions?.search) {
+      const searchRegex = { $regex: filterOptions.search.trim(), $options: "i" };
+      filter.$or = [
+        { name: searchRegex },
+        { email: searchRegex },
+        { phone: searchRegex },
+      ];
+    }
+
+    if (filterOptions?.role) {
+      filter.role = filterOptions.role;
+    }
+
+    if (filterOptions?.status) {
+      filter.status = filterOptions.status;
+    }
+
+    if (filterOptions?.processArea) {
+      filter.processAreas = filterOptions.processArea.trim();
+    }
+
+    const defaultPagination: PaginationQuery = {
+      page: 1,
+      limit: 50,
+      sortOrder: "desc",
+    };
+
+    const result = await this.userRepo.findPaginated(
+      tenantId,
+      filter,
+      pagination || defaultPagination
+    );
+
+    return {
+      data: result.data.map(toSafeUserDto),
+      meta: result.meta,
+    };
   }
 
-  async getUserById(tenantId: string, userId: string) {
+  async getUserById(tenantId: string, userId: string): Promise<SafeUserDto> {
     const user = await this.userRepo.findById(tenantId, userId);
     if (!user) throw new AppError(ErrorCode.NOT_FOUND, "User not found", 404);
-    return user;
+    return toSafeUserDto(user);
   }
 
   async createUser(params: {
@@ -60,7 +143,7 @@ export class UserService {
     processAreas?: string[];
     ip?: string;
     requestId?: string;
-  }) {
+  }): Promise<SafeUserDto> {
     const { tenantId, actorUserId, email, name, password, role, phone, processAreas, ip, requestId } = params;
 
     const existing = await this.userRepo.findByEmail(tenantId, email);
@@ -80,6 +163,7 @@ export class UserService {
       role,
       status: "active",
       processAreas: processAreas || [],
+      version: 1,
     });
 
     await this.auditService.log({
@@ -92,7 +176,7 @@ export class UserService {
       requestId,
     });
 
-    return created;
+    return toSafeUserDto(created);
   }
 
   async updateUser(params: {
@@ -106,7 +190,7 @@ export class UserService {
     processAreas?: string[];
     ip?: string;
     requestId?: string;
-  }) {
+  }): Promise<SafeUserDto> {
     const { tenantId, actorUserId, userId, name, phone, role, status, processAreas, ip, requestId } = params;
 
     const existing = await this.userRepo.findById(tenantId, userId);
@@ -141,10 +225,16 @@ export class UserService {
     if (processAreas !== undefined) updates.processAreas = processAreas;
 
     const updated = await this.userRepo.update(tenantId, userId, updates);
+    if (!updated) {
+      throw new AppError(ErrorCode.NOT_FOUND, "User not found", 404);
+    }
 
     // If status was locked, revoke all active sessions immediately
     if (status === "locked") {
       await this.refreshTokenRepo.revokeAllForSubject(tenantId, "user", userId);
+      await StatusCacheService.invalidate("user", tenantId, userId);
+    } else if (role !== undefined) {
+      // Invalidate cache so role change takes immediate effect
       await StatusCacheService.invalidate("user", tenantId, userId);
     }
 
@@ -159,10 +249,10 @@ export class UserService {
       requestId,
     });
 
-    return updated;
+    return toSafeUserDto(updated);
   }
 
-  async lockUser(tenantId: string, actorUserId: string, userId: string, ip?: string, requestId?: string) {
+  async lockUser(tenantId: string, actorUserId: string, userId: string, ip?: string, requestId?: string): Promise<SafeUserDto> {
     return this.updateUser({
       tenantId,
       actorUserId,
@@ -173,8 +263,11 @@ export class UserService {
     });
   }
 
-  async unlockUser(tenantId: string, actorUserId: string, userId: string, ip?: string, requestId?: string) {
+  async unlockUser(tenantId: string, actorUserId: string, userId: string, ip?: string, requestId?: string): Promise<SafeUserDto> {
     const updated = await this.userRepo.updateStatus(tenantId, userId, "active");
+    if (!updated) {
+      throw new AppError(ErrorCode.NOT_FOUND, "User not found", 404);
+    }
     await StatusCacheService.setStatus("user", tenantId, userId, "active", 60);
 
     await this.auditService.log({
@@ -186,7 +279,7 @@ export class UserService {
       requestId,
     });
 
-    return updated;
+    return toSafeUserDto(updated);
   }
 
   async getProfile(tenantId: string, userId: string) {

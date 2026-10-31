@@ -5,9 +5,11 @@ import { authorize } from "../middleware/rbac.js";
 import {
   validateBody,
   validateParams,
+  validateQuery,
   IdParamSchema,
   ClientCreateSchema,
   ClientUpdateSchema,
+  ClientQuerySchema,
 } from "../validators/index.js";
 
 export const clientRouter: Router = Router();
@@ -18,6 +20,7 @@ clientRouter.use(authenticate);
 clientRouter.get(
   "/",
   authorize("GET /api/v1/clients"),
+  validateQuery(ClientQuerySchema),
   controller.listClients
 );
 

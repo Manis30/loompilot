@@ -18,6 +18,7 @@ Enforced strictly at the API gateway layer via `authenticate` and `authorize` mi
 | **PATCH** | `/api/v1/me` | Authenticated | `user`, `client` | `admin`, `supervisor` | No | Update own profile settings |
 | **POST** | `/api/v1/auth/change-password` | Authenticated | `user`, `client` | `admin`, `supervisor` | No | Change password and revoke other sessions |
 | **GET** | `/api/v1/users` | Authenticated | `user` | `admin` | No | List staff users |
+| **GET** | `/api/v1/users/:id` | Authenticated | `user` | `admin` | No | Get staff user details |
 | **POST** | `/api/v1/users` | Authenticated | `user` | `admin` | No | Create staff user |
 | **PATCH** | `/api/v1/users/:id` | Authenticated | `user` | `admin` | No | Update staff user |
 | **POST** | `/api/v1/users/:id/lock` | Authenticated | `user` | `admin` | No | Lock staff user and revoke sessions |
@@ -81,6 +82,7 @@ Enforced strictly at the API gateway layer via `authenticate` and `authorize` mi
 | **GET** | `/api/v1/orders` | Authenticated | `user` | `admin` | No | List and filter all tenant orders (Admin inbox) |
 | **GET** | `/api/v1/orders/:id` | Authenticated | `user` | `admin` | No | Get complete order details (Admin only) |
 | **POST** | `/api/v1/orders` | Authenticated | `user` | `admin` | Yes | Manual order entry by administrator |
+| **PATCH** | `/api/v1/orders/:id` | Authenticated | `user` | `admin` | No | Update order details where workflow permits |
 | **POST** | `/api/v1/orders/:id/decide` | Authenticated | `user` | `admin` | No | Record administrative decision on infeasible or at-risk order |
 | **POST** | `/api/v1/orders/:id/quotation/approve` | Authenticated | `user` | `admin` | Yes | Approve draft quotation for sending |
 | **POST** | `/api/v1/orders/:id/quotation/send` | Authenticated | `user` | `admin` | Yes | Generate quotation PDF and dispatch to client |

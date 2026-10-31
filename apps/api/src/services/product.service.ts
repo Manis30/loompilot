@@ -1,6 +1,8 @@
 import { ProductRepository } from "../repositories/product.repository.js";
 import { MaterialRepository } from "../repositories/material.repository.js";
 import { SettingsRepository } from "../repositories/settings.repository.js";
+import { FileRepository } from "../repositories/file.repository.js";
+import { OrdersRepository } from "../repositories/orders.repository.js";
 import { IProduct, IRoutingStep } from "../models/catalog/product.model.js";
 import { PaginationQuery, PaginatedResult } from "../utils/pagination.js";
 import { AuditService } from "./audit.service.js";
@@ -34,10 +36,35 @@ export class ProductService {
     private readonly productRepo = new ProductRepository(),
     private readonly materialRepo = new MaterialRepository(),
     private readonly settingsRepo = new SettingsRepository(),
-    private readonly auditService = new AuditService()
+    private readonly auditService = new AuditService(),
+    private readonly fileRepo = new FileRepository(),
+    private readonly ordersRepo = new OrdersRepository()
   ) {}
 
-  private async validateBom(tenantId: string, bom: Array<{ materialId: string; qtyPerUnit: number; wastage?: number }>): Promise<Array<{ materialId: string; qtyPerUnit: number; wastage?: number }>> {
+  private async validateImages(tenantId: string, imageFileIds?: string[]): Promise<void> {
+    if (!imageFileIds || imageFileIds.length === 0) {
+      return;
+    }
+
+    for (const fileId of imageFileIds) {
+      const file = await this.fileRepo.findById(tenantId, fileId);
+      if (!file) {
+        throw new AppError(ErrorCode.NOT_FOUND, `Image file '${fileId}' not found`, 404);
+      }
+      if (!file.mime.startsWith("image/")) {
+        throw new AppError(
+          ErrorCode.VALIDATION_FAILED,
+          `File '${fileId}' is not an image (mime: '${file.mime}')`,
+          400
+        );
+      }
+    }
+  }
+
+  private async validateBom(
+    tenantId: string,
+    bom: Array<{ materialId: string; qtyPerUnit: number; wastage?: number }>
+  ): Promise<Array<{ materialId: string; qtyPerUnit: number; wastage?: number }>> {
     if (!bom || bom.length === 0) {
       throw new AppError(ErrorCode.VALIDATION_FAILED, "Product BOM must contain at least one material line", 400);
     }
@@ -73,7 +100,10 @@ export class ProductService {
     return validated;
   }
 
-  private async validateRouting(tenantId: string, routing: Array<{ stage: string; seq: number; stdMinPerUnit: number }>): Promise<IRoutingStep[]> {
+  private async validateRouting(
+    tenantId: string,
+    routing: Array<{ stage: string; seq: number; stdMinPerUnit: number }>
+  ): Promise<IRoutingStep[]> {
     if (!routing || routing.length === 0) {
       throw new AppError(ErrorCode.VALIDATION_FAILED, "Product routing must contain at least one stage", 400);
     }
@@ -119,14 +149,25 @@ export class ProductService {
   async listProducts(
     tenantId: string,
     pagination: PaginationQuery,
-    search?: string
+    filterOptions?: {
+      search?: string;
+      category?: string;
+      active?: boolean;
+    }
   ): Promise<PaginatedResult<IProduct>> {
     const filter: Record<string, any> = {};
-    if (search) {
+    if (filterOptions?.search) {
+      const searchRegex = { $regex: filterOptions.search.trim(), $options: "i" };
       filter.$or = [
-        { productName: { $regex: search.trim(), $options: "i" } },
-        { category: { $regex: search.trim(), $options: "i" } },
+        { productName: searchRegex },
+        { category: searchRegex },
       ];
+    }
+    if (filterOptions?.category) {
+      filter.category = { $regex: `^${filterOptions.category.trim()}$`, $options: "i" };
+    }
+    if (typeof filterOptions?.active === "boolean") {
+      filter.active = filterOptions.active;
     }
     return this.productRepo.findPaginated(tenantId, filter, pagination);
   }
@@ -154,6 +195,9 @@ export class ProductService {
 
     const validatedBom = await this.validateBom(tenantId, data.bom);
     const validatedRouting = await this.validateRouting(tenantId, data.routing);
+    if (data.imageFileIds && data.imageFileIds.length > 0) {
+      await this.validateImages(tenantId, data.imageFileIds);
+    }
 
     const created = await this.productRepo.createProductWithDetails(tenantId, {
       productName: data.productName,
@@ -187,6 +231,7 @@ export class ProductService {
       basePricePaise?: number;
       bom?: Array<{ materialId: string; qtyPerUnit: number; wastage?: number }>;
       routing?: Array<{ stage: string; seq: number; stdMinPerUnit: number }>;
+      imageFileIds?: string[];
       active?: boolean;
     };
     actor: { id: string; email?: string; ip?: string; requestId?: string };
@@ -194,13 +239,37 @@ export class ProductService {
     const { tenantId, id, updates, actor } = params;
     const before = await this.getProductById(tenantId, id);
 
-    const payload: any = { ...updates };
+    const payload: {
+      productName?: string;
+      category?: string;
+      basePricePaise?: number;
+      bom?: Array<{ materialId: string; qtyPerUnit: number; wastage?: number }>;
+      routing?: IRoutingStep[];
+      imageFileIds?: string[];
+      active?: boolean;
+    } = {};
 
-    if (updates.bom) {
+    if (updates.productName !== undefined) {
+      payload.productName = updates.productName;
+    }
+    if (updates.category !== undefined) {
+      payload.category = updates.category;
+    }
+    if (updates.basePricePaise !== undefined) {
+      payload.basePricePaise = updates.basePricePaise;
+    }
+    if (updates.bom !== undefined) {
       payload.bom = await this.validateBom(tenantId, updates.bom);
     }
-    if (updates.routing) {
+    if (updates.routing !== undefined) {
       payload.routing = await this.validateRouting(tenantId, updates.routing);
+    }
+    if (updates.imageFileIds !== undefined) {
+      await this.validateImages(tenantId, updates.imageFileIds);
+      payload.imageFileIds = updates.imageFileIds;
+    }
+    if (updates.active !== undefined) {
+      payload.active = updates.active;
     }
 
     const updated = await this.productRepo.updateProductWithDetails(tenantId, id, payload);
@@ -230,6 +299,8 @@ export class ProductService {
     const { tenantId, id, actor } = params;
     const before = await this.getProductById(tenantId, id);
 
+    const historicalOrderCount = await this.ordersRepo.countByProductId(tenantId, id);
+
     await this.productRepo.updateProductWithDetails(tenantId, id, { active: false });
 
     await this.auditService.log({
@@ -238,14 +309,18 @@ export class ProductService {
       action: "PRODUCT_DEACTIVATED",
       entity: { collection: "products", id },
       before,
-      after: { active: false },
+      after: { active: false, historicalOrderCount },
       ip: actor.ip,
       requestId: actor.requestId,
     });
   }
 
-  async listClientSafe(tenantId: string, pagination: PaginationQuery): Promise<PaginatedResult<ClientSafeProductDto>> {
-    const result = await this.productRepo.findClientSafePaginated(tenantId, pagination);
+  async listClientSafe(
+    tenantId: string,
+    pagination: PaginationQuery,
+    filterOptions?: { search?: string; category?: string }
+  ): Promise<PaginatedResult<ClientSafeProductDto>> {
+    const result = await this.productRepo.findClientSafePaginated(tenantId, pagination, filterOptions);
     return {
       data: result.data.map(toClientSafeProductDto),
       meta: result.meta,
@@ -260,8 +335,15 @@ export class ProductService {
     return toClientSafeProductDto(product);
   }
 
-  async addImage(tenantId: string, productId: string, fileId: string, actor: { id: string; email?: string }): Promise<IProduct> {
+  async addImage(
+    tenantId: string,
+    productId: string,
+    fileId: string,
+    actor: { id: string; email?: string; ip?: string; requestId?: string }
+  ): Promise<IProduct> {
     await this.getProductById(tenantId, productId);
+    await this.validateImages(tenantId, [fileId]);
+
     const updated = await this.productRepo.addImageFileId(tenantId, productId, fileId);
     if (!updated) {
       throw new AppError(ErrorCode.NOT_FOUND, `Product '${productId}' not found`, 404);
@@ -273,6 +355,8 @@ export class ProductService {
       action: "PRODUCT_IMAGE_ADDED",
       entity: { collection: "products", id: productId },
       after: { fileId },
+      ip: actor.ip,
+      requestId: actor.requestId,
     });
 
     return updated;

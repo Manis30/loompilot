@@ -3,6 +3,7 @@ import { ClientModel, IClient } from "../models/identity/client.model.js";
 import { TxContext } from "../interfaces/unit-of-work.interface.js";
 import { AppError } from "../errors/app-error.js";
 import { ErrorCode } from "@loompilot/shared";
+import { PaginationQuery, PaginatedResult, paginate } from "../utils/pagination.js";
 
 /**
  * Stage 3.5 Step 3: ClientRepository
@@ -23,6 +24,9 @@ export class ClientRepository {
     includePasswordHash = false,
     tx?: TxContext
   ): Promise<IClient | null> {
+    if (typeof id === "string" && !mongoose.Types.ObjectId.isValid(id)) {
+      return null;
+    }
     const session = this.getSession(tx);
     const query = this.model
       .findOne({ tenantId, _id: id })
@@ -54,6 +58,69 @@ export class ClientRepository {
     }
 
     return query.exec();
+  }
+
+  async findByEmail(
+    tenantId: string,
+    email: string,
+    tx?: TxContext
+  ): Promise<IClient | null> {
+    const session = this.getSession(tx);
+    return this.model
+      .findOne({
+        tenantId,
+        email: email.toLowerCase().trim(),
+      })
+      .session(session ?? null)
+      .exec();
+  }
+
+  async findByName(
+    tenantId: string,
+    clientName: string,
+    tx?: TxContext
+  ): Promise<IClient | null> {
+    const session = this.getSession(tx);
+    return this.model
+      .findOne({
+        tenantId,
+        clientName: { $regex: `^${clientName.trim()}$`, $options: "i" },
+      })
+      .session(session ?? null)
+      .exec();
+  }
+
+  async findPaginated(
+    tenantId: string,
+    filter: Record<string, any>,
+    pagination: PaginationQuery,
+    tx?: TxContext
+  ): Promise<PaginatedResult<IClient>> {
+    const session = this.getSession(tx);
+    const { page, limit, sortBy, sortOrder } = pagination;
+    const skip = (page - 1) * limit;
+    const sort: Record<string, 1 | -1> = sortBy
+      ? { [sortBy]: sortOrder === "asc" ? 1 : -1 }
+      : { createdAt: -1 };
+
+    const scopedFilter = { tenantId, ...filter };
+
+    const [items, total] = await Promise.all([
+      this.model
+        .find(scopedFilter)
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .session(session ?? null)
+        .lean<IClient[]>()
+        .exec(),
+      this.model
+        .countDocuments(scopedFilter)
+        .session(session ?? null)
+        .exec(),
+    ]);
+
+    return paginate(items, total, page, limit);
   }
 
   async find(
@@ -88,6 +155,9 @@ export class ClientRepository {
     updates: Partial<IClient>,
     tx?: TxContext
   ): Promise<IClient | null> {
+    if (typeof id === "string" && !mongoose.Types.ObjectId.isValid(id)) {
+      return null;
+    }
     const session = this.getSession(tx);
     return this.model
       .findOneAndUpdate(

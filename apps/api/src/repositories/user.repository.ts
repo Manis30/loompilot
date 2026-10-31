@@ -1,10 +1,25 @@
 import { Types } from "mongoose";
 import { BaseRepository } from "./base.repository.js";
 import { IUser, UserModel } from "../models/identity/user.model.js";
+import { TxContext } from "../interfaces/unit-of-work.interface.js";
 
 export class UserRepository extends BaseRepository<IUser> {
   constructor() {
     super(UserModel);
+  }
+
+  override async findById(tenantId: string, id: string, tx?: TxContext): Promise<IUser | null> {
+    if (!Types.ObjectId.isValid(id)) {
+      return null;
+    }
+    return super.findById(tenantId, id, tx);
+  }
+
+  override async update(tenantId: string, id: string, data: Partial<IUser>, tx?: TxContext): Promise<IUser | null> {
+    if (!Types.ObjectId.isValid(id)) {
+      return null;
+    }
+    return super.update(tenantId, id, data, tx);
   }
 
   async findByEmail(tenantId: string, email: string): Promise<IUser | null> {

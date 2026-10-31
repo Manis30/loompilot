@@ -6,10 +6,12 @@ import { idempotencyMiddleware } from "../middleware/idempotency.js";
 import {
   validateBody,
   validateParams,
+  validateQuery,
   IdParamSchema,
   ClientSubmitOrderSchema,
   ClientAcceptQuotationSchema,
   ClientDeclineQuotationSchema,
+  OrderQuerySchema,
 } from "../validators/index.js";
 
 export const clientOrderRouter: Router = Router();
@@ -28,6 +30,7 @@ clientOrderRouter.post(
 clientOrderRouter.get(
   "/",
   authorize("GET /api/v1/client/orders"),
+  validateQuery(OrderQuerySchema),
   controller.listOrders
 );
 
