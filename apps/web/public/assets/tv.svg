@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 100" fill="none">
+  <!-- Screen Frame -->
+  <rect x="15" y="10" width="110" height="70" rx="4" fill="#0f172a" />
+  <rect x="18" y="13" width="104" height="64" rx="2" fill="#38bdf8" />
+  
+  <!-- Screen Display Waves -->
+  <defs>
+    <linearGradient id="tv-wave-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#bae6fd" />
+      <stop offset="50%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+  </defs>
+  <rect x="18" y="13" width="104" height="64" rx="2" fill="url(#tv-wave-grad)" />
+  <path d="M18 55 Q 45 35, 70 50 T 122 35 L 122 77 L 18 77 Z" fill="#ffffff" fill-opacity="0.35" />
+  <path d="M18 62 Q 50 48, 80 60 T 122 45 L 122 77 L 18 77 Z" fill="#ffffff" fill-opacity="0.25" />
+  <path d="M18 35 Q 60 65, 100 40 T 122 55" stroke="#ffffff" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.6" />
+
+  <!-- TV Stand Base -->
+  <path d="M66 80 L62 90 L45 92" stroke="#334155" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M74 80 L78 90 L95 92" stroke="#334155" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+  <ellipse cx="70" cy="81" rx="8" ry="2" fill="#1e293b" />
+</svg>
