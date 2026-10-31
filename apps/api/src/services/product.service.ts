@@ -7,6 +7,28 @@ import { AuditService } from "./audit.service.js";
 import { AppError } from "../errors/app-error.js";
 import { ErrorCode } from "@loompilot/shared";
 
+export interface ClientSafeProductDto {
+  id: string;
+  productName: string;
+  category: string;
+  basePricePaise: number;
+  imageFileIds?: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export function toClientSafeProductDto(product: any): ClientSafeProductDto {
+  return {
+    id: String(product._id || product.id),
+    productName: product.productName,
+    category: product.category,
+    basePricePaise: product.basePricePaise,
+    imageFileIds: product.imageFileIds?.map(String) || [],
+    createdAt: product.createdAt,
+    updatedAt: product.updatedAt,
+  };
+}
+
 export class ProductService {
   constructor(
     private readonly productRepo = new ProductRepository(),
@@ -222,16 +244,20 @@ export class ProductService {
     });
   }
 
-  async listClientSafe(tenantId: string, pagination: PaginationQuery): Promise<PaginatedResult<any>> {
-    return this.productRepo.findClientSafePaginated(tenantId, pagination);
+  async listClientSafe(tenantId: string, pagination: PaginationQuery): Promise<PaginatedResult<ClientSafeProductDto>> {
+    const result = await this.productRepo.findClientSafePaginated(tenantId, pagination);
+    return {
+      data: result.data.map(toClientSafeProductDto),
+      meta: result.meta,
+    };
   }
 
-  async getClientSafeById(tenantId: string, id: string): Promise<any> {
+  async getClientSafeById(tenantId: string, id: string): Promise<ClientSafeProductDto> {
     const product = await this.productRepo.findClientSafeById(tenantId, id);
     if (!product) {
       throw new AppError(ErrorCode.NOT_FOUND, `Product '${id}' not found in active catalogue`, 404);
     }
-    return product;
+    return toClientSafeProductDto(product);
   }
 
   async addImage(tenantId: string, productId: string, fileId: string, actor: { id: string; email?: string }): Promise<IProduct> {

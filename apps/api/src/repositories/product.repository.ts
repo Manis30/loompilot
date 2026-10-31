@@ -21,13 +21,36 @@ export class ProductRepository extends BaseRepository<IProduct> {
     const { page, limit } = pagination;
     const skip = (page - 1) * limit;
 
-    // Read directly from the clientSafeProducts database view
-    const view = db.collection("clientSafeProducts");
     const filter = { tenantId, active: true };
+    const collections = await db.listCollections({ name: "clientSafeProducts" }).toArray();
+
+    if (collections.length > 0) {
+      const view = db.collection("clientSafeProducts");
+      const [items, total] = await Promise.all([
+        view.find(filter).skip(skip).limit(limit).toArray(),
+        view.countDocuments(filter),
+      ]);
+      return paginate(items, total, page, limit);
+    }
 
     const [items, total] = await Promise.all([
-      view.find(filter).skip(skip).limit(limit).toArray(),
-      view.countDocuments(filter),
+      ProductModel.find(
+        filter,
+        {
+          _id: 1,
+          tenantId: 1,
+          productName: 1,
+          category: 1,
+          basePricePaise: 1,
+          imageFileIds: 1,
+          createdAt: 1,
+          updatedAt: 1,
+        }
+      )
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      ProductModel.countDocuments(filter),
     ]);
 
     return paginate(items, total, page, limit);
@@ -39,8 +62,25 @@ export class ProductRepository extends BaseRepository<IProduct> {
       throw new Error("Database not connected");
     }
 
-    const view = db.collection("clientSafeProducts");
-    return view.findOne({ tenantId, _id: new mongoose.Types.ObjectId(id), active: true });
+    const collections = await db.listCollections({ name: "clientSafeProducts" }).toArray();
+    if (collections.length > 0) {
+      const view = db.collection("clientSafeProducts");
+      return view.findOne({ tenantId, _id: new mongoose.Types.ObjectId(id), active: true });
+    }
+
+    return ProductModel.findOne(
+      { tenantId, _id: new mongoose.Types.ObjectId(id), active: true },
+      {
+        _id: 1,
+        tenantId: 1,
+        productName: 1,
+        category: 1,
+        basePricePaise: 1,
+        imageFileIds: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      }
+    ).lean();
   }
 
   async createProductWithDetails(

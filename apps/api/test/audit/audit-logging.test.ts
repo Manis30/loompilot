@@ -28,7 +28,7 @@ describe("Stage 3: Immutable Audit Logging & Secret Redaction", () => {
         email: "alice.audit@mill.local",
         password: "SuperSecretPassword123!",
         role: "supervisor",
-        processAreas: ["winding"],
+        processAreas: ["knitting"],
       });
 
     expect(resCreate.status).toBe(201);

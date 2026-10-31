@@ -1,4 +1,5 @@
 import mongoose, { Types } from "mongoose";
+import { DEFAULT_PROCESS_CONFIG } from "../../src/config/tenant-defaults.js";
 import { UserModel, IUser } from "../../src/models/identity/user.model.js";
 import { ClientModel, IClient } from "../../src/models/identity/client.model.js";
 import { SettingsModel } from "../../src/models/identity/settings.model.js";
@@ -22,11 +23,7 @@ export async function ensureDefaultSettings(tenantId = "test_tenant"): Promise<v
         safetyDays: 3,
         quoteValidityDays: 14,
         priceThresholds: { daily: 5, sevenday: 10, vol: 15 },
-        processConfig: [
-          { area: "winding", stages: ["winding"], hours: 8, overlap: 0, fallbackOut: 100 },
-          { area: "warping", stages: ["warping"], hours: 8, overlap: 0, fallbackOut: 100 },
-          { area: "weaving", stages: ["weaving"], hours: 8, overlap: 0, fallbackOut: 100 },
-        ],
+        processConfig: DEFAULT_PROCESS_CONFIG,
         marketRuntime: "18:00",
         reportCutoff: "20:00",
       },
@@ -48,7 +45,7 @@ export async function createTestUser(params?: {
   const plainPassword = params?.password || "ValidSecret123!";
   const role = params?.role || "admin";
   const status = params?.status || "active";
-  const processAreas = params?.processAreas || ["winding", "warping", "weaving"];
+  const processAreas = params?.processAreas || DEFAULT_PROCESS_CONFIG.map((p) => p.area);
 
   await ensureDefaultSettings(tenantId);
   const passwordHash = await hashPassword(plainPassword);
@@ -151,6 +148,7 @@ export function generateTestAuthHeader(params: {
   tenantId?: string;
   role?: "admin" | "supervisor";
   clientId?: string;
+  processAreas?: string[];
 }): string {
   const { token } = TokenService.generateAccessToken({
     subjectId: params.subjectId,
@@ -158,6 +156,7 @@ export function generateTestAuthHeader(params: {
     tenantId: params.tenantId || "test_tenant",
     role: params.role || (params.realm === "user" ? "admin" : undefined),
     clientId: params.clientId,
+    processAreas: params.processAreas,
   });
   return `Bearer ${token}`;
 }

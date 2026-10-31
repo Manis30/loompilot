@@ -317,7 +317,7 @@ describe("Stage 3.5: Step 2 Schema v4 Architectural Rules & Invariants", () => {
   });
 
   // -------------------------------------------------------------------------
-  // 6. Drift Fixture Verification (Against expected-schema-paths.json)
+  // 6. Drift Fixture Verification (Against expected-schema-paths.json and manifest enums)
   // -------------------------------------------------------------------------
   describe("Schema Drift Prevention (Against expected-schema-paths.json)", () => {
     it("verifies all 22 registered models match their expected schema paths fixture exactly", async () => {
@@ -331,6 +331,24 @@ describe("Stage 3.5: Step 2 Schema v4 Architectural Rules & Invariants", () => {
         expect(model, `Export ${modelExportName} not found in Models`).toBeDefined();
         const actualPaths = Object.keys(model.schema.paths).sort();
         expect(actualPaths).toEqual(expectedList.slice().sort());
+      }
+    });
+
+    it("verifies all schema enum values match SCHEMA_V4_MANIFEST definitions exactly", () => {
+      for (const [modelExportName, manifest] of Object.entries(SCHEMA_V4_MANIFEST)) {
+        const model = (Models as any)[modelExportName];
+        expect(model, `Export ${modelExportName} not found in Models`).toBeDefined();
+        for (const [fieldName, fieldDef] of Object.entries(manifest.fields || {})) {
+          if (fieldDef.enum) {
+            const pathInstance = model.schema.path(fieldName);
+            expect(pathInstance, `Path ${modelExportName}.${fieldName} not found`).toBeDefined();
+            const actualEnums = (pathInstance as any)?.enumValues || [];
+            expect(
+              actualEnums.slice().sort(),
+              `Enum mismatch on ${modelExportName}.${fieldName}`
+            ).toEqual(fieldDef.enum.slice().sort());
+          }
+        }
       }
     });
   });

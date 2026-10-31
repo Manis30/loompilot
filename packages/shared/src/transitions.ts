@@ -159,6 +159,17 @@ export function assertTransition(
     }
   }
 
+  // S4 Safeguard: Milestone reversal from 'received' requires a non-empty reason
+  if (entity === "milestone" && fromStatus === "received") {
+    if (!context?.reason || typeof context.reason !== "string" || context.reason.trim() === "") {
+      throw new TransitionError(
+        "A valid reason is required to reverse a received milestone",
+        ErrorCode.VALIDATION_FAILED,
+        400
+      );
+    }
+  }
+
   // Safeguard: ticket open -> assigned requires technicianName and technicianContact
   if (entity === "ticket" && fromStatus === "open" && toStatus === "assigned") {
     if (!context?.technicianName || typeof context.technicianName !== "string" || context.technicianName.trim() === "") {

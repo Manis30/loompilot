@@ -112,7 +112,7 @@ export async function authenticate(
       tenantId: claims.tenantId,
       role: claims.role,
       clientId: claims.clientId,
-      processAreas,
+      processAreas: claims.processAreas || processAreas,
       requestId: (req as any).id,
     };
 

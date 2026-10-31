@@ -296,6 +296,12 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
       },
       unit: { type: "String" },
       watchlist: { type: "Boolean" },
+      status: {
+        type: "String",
+        enum: ["active", "inactive"],
+        default: "active",
+        required: true,
+      },
     },
     indexes: [
       { fields: { tenantId: 1, type: 1 } },
@@ -314,7 +320,7 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
       capacityUnitsPerDay: { type: "Number", required: true },
       currentStatus: {
         type: "String",
-        enum: ["available", "maint", "breakdown"],
+        enum: ["available", "maint", "breakdown", "inactive"],
         default: "available",
         required: true,
       },
@@ -1493,6 +1499,8 @@ export const SCHEMA_V4_MANIFEST: Record<string, CollectionManifest> = {
       },
       rowsOk: { type: "Number", default: 0 },
       rowsFailed: { type: "Number", default: 0 },
+      fileHash: { type: "String" },
+      validRows: { type: "Mixed" },
       errors: {
         type: "Array",
         items: {

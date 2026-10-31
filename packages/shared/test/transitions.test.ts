@@ -7,12 +7,14 @@ describe("Stage 3.5: State Transitions (S4 Safeguards)", () => {
     for (const [entityName, table] of Object.entries(TRANSITION_TABLES)) {
       for (const [fromStatus, targets] of Object.entries(table)) {
         for (const toStatus of targets as readonly string[]) {
-          // Provide context for order on_hold or ticket assigned to pass specific guards
+          // Provide context for order on_hold, ticket assigned, or milestone reversal to pass specific guards
           let context: any;
           if (entityName === "order" && toStatus === "on_hold") {
             context = { role: "admin", reason: "Machine breakdown" };
           } else if (entityName === "ticket" && fromStatus === "open" && toStatus === "assigned") {
             context = { technicianName: "Ramesh Tech", technicianContact: "9876543210" };
+          } else if (entityName === "milestone" && fromStatus === "received") {
+            context = { reason: "Payment reversed by admin" };
           }
 
           assert.doesNotThrow(
@@ -128,7 +130,19 @@ describe("Stage 3.5: State Transitions (S4 Safeguards)", () => {
     assert.doesNotThrow(() => assertTransition("milestone", "partial", "received"));
     assert.doesNotThrow(() => assertTransition("milestone", "pending", "overdue"));
     assert.doesNotThrow(() => assertTransition("milestone", "overdue", "received"));
+    // Reversal from 'received' requires a reason
     assert.throws(() => assertTransition("milestone", "received", "pending"), TransitionError);
+    assert.throws(() => assertTransition("milestone", "received", "partial"), TransitionError);
+    assert.throws(() => assertTransition("milestone", "received", "pending", { reason: "" }), TransitionError);
+    assert.doesNotThrow(() =>
+      assertTransition("milestone", "received", "partial", { reason: "Partial refund" })
+    );
+    assert.doesNotThrow(() =>
+      assertTransition("milestone", "received", "pending", { reason: "Payment reversed" })
+    );
+    // Other illegal moves from 'received' throw
+    assert.throws(() => assertTransition("milestone", "received", "overdue"), TransitionError);
+    assert.throws(() => assertTransition("milestone", "received", "unknown"), TransitionError);
   });
 
   test("Maintenance ticket transitions: requires technician details on open->assigned", () => {

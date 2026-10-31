@@ -224,6 +224,7 @@ export const StockAdjustSchema = z.object({
 export const ImportDryRunSchema = z.object({
   type: z.enum(["materials", "suppliers", "machines", "products", "market_prices"]),
   csvContent: z.string().optional(),
+  fileId: z.string().optional(),
 });
 
 export const ImportCommitSchema = z.object({
@@ -265,7 +266,14 @@ export const OrderDecisionSchema = z.object({
   notes: z.string().optional(),
 });
 
+export const ClientAcceptQuotationSchema = z
+  .object({
+    revisionNo: z.number().int().positive().optional(),
+  })
+  .optional();
+
 export const ClientDeclineQuotationSchema = z.object({
+  revisionNo: z.number().int().positive().optional(),
   reason: z.string().optional(),
 });
 
@@ -319,7 +327,7 @@ export const OrderReverseReceiptSchema = z.object({
   milestoneIndex: z.number().int().nonnegative(),
   receiptIndex: z.number().int().nonnegative().optional(),
   receiptRef: z.string().optional(),
-  reason: z.string().min(1, "reason is required for payment reversal"),
+  reason: z.string().trim().min(1, "reason is required for payment reversal"),
 });
 
 export const OrderDeliverySchema = z.object({

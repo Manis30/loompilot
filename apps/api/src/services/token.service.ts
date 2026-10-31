@@ -10,6 +10,7 @@ export interface AccessTokenClaims {
   tenantId: string;
   role?: "admin" | "supervisor";
   clientId?: string;
+  processAreas?: string[];
   jti: string;
   aud: "loompilot-user" | "loompilot-client";
   iss: string;
@@ -37,6 +38,7 @@ export class TokenService {
     tenantId: string;
     role?: "admin" | "supervisor";
     clientId?: string;
+    processAreas?: string[];
   }): { token: string; jti: string; expiresIn: string } {
     const env = getEnv();
     const jti = crypto.randomUUID();
@@ -49,6 +51,7 @@ export class TokenService {
       jti,
       ...(params.role ? { role: params.role } : {}),
       ...(params.clientId ? { clientId: params.clientId } : {}),
+      ...(params.processAreas ? { processAreas: params.processAreas } : {}),
     };
 
     const token = jwt.sign(payload, env.JWT_ACCESS_SECRET, {

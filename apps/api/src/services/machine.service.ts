@@ -1,10 +1,32 @@
 import { MachineRepository } from "../repositories/machine.repository.js";
 import { SettingsRepository } from "../repositories/settings.repository.js";
 import { IMachine } from "../models/catalog/machine.model.js";
-import { PaginationQuery, PaginatedResult } from "../utils/pagination.js";
+import { PaginationQuery, PaginatedResult, paginate } from "../utils/pagination.js";
 import { AuditService } from "./audit.service.js";
 import { AppError } from "../errors/app-error.js";
 import { ErrorCode } from "@loompilot/shared";
+
+export interface SupervisorMachineDto {
+  id: string;
+  machineCode: string;
+  machineName: string;
+  processArea: string;
+  capacityUnitsPerDay: number;
+  currentStatus: string;
+  machineType?: string;
+}
+
+export function toSupervisorMachineDto(m: any): SupervisorMachineDto {
+  return {
+    id: String(m._id || m.id),
+    machineCode: m.machineCode,
+    machineName: m.machineName,
+    processArea: m.processArea,
+    capacityUnitsPerDay: m.capacityUnitsPerDay,
+    currentStatus: m.currentStatus,
+    machineType: m.machineType,
+  };
+}
 
 export class MachineService {
   constructor(
@@ -31,12 +53,28 @@ export class MachineService {
   async listMachines(
     tenantId: string,
     pagination: PaginationQuery,
-    filterParams?: { processArea?: string; currentStatus?: string; search?: string }
-  ): Promise<PaginatedResult<IMachine>> {
+    filterParams?: { processArea?: string; currentStatus?: string; search?: string },
+    supervisorProcessAreas?: string[]
+  ): Promise<PaginatedResult<any>> {
     const filter: Record<string, any> = {};
-    if (filterParams?.processArea) {
+
+    if (supervisorProcessAreas !== undefined) {
+      if (supervisorProcessAreas.length === 0) {
+        return paginate([], 0, pagination.page, pagination.limit);
+      }
+
+      if (filterParams?.processArea) {
+        if (!supervisorProcessAreas.includes(filterParams.processArea)) {
+          return paginate([], 0, pagination.page, pagination.limit);
+        }
+        filter.processArea = filterParams.processArea;
+      } else {
+        filter.processArea = { $in: supervisorProcessAreas };
+      }
+    } else if (filterParams?.processArea) {
       filter.processArea = filterParams.processArea;
     }
+
     if (filterParams?.currentStatus) {
       filter.currentStatus = filterParams.currentStatus;
     }
@@ -46,14 +84,38 @@ export class MachineService {
         { machineName: { $regex: filterParams.search.trim(), $options: "i" } },
       ];
     }
-    return this.machineRepo.findPaginated(tenantId, filter, pagination);
+
+    const result = await this.machineRepo.findPaginated(tenantId, filter, pagination);
+    if (supervisorProcessAreas !== undefined) {
+      return {
+        data: result.data.map(toSupervisorMachineDto),
+        meta: result.meta,
+      };
+    }
+    return result;
   }
 
-  async getMachineById(tenantId: string, id: string): Promise<IMachine> {
+  async getMachineById(
+    tenantId: string,
+    id: string,
+    supervisorProcessAreas?: string[]
+  ): Promise<any> {
     const machine = await this.machineRepo.findById(tenantId, id);
     if (!machine) {
       throw new AppError(ErrorCode.NOT_FOUND, `Machine with id '${id}' not found`, 404);
     }
+
+    if (supervisorProcessAreas !== undefined) {
+      if (!supervisorProcessAreas.includes(machine.processArea)) {
+        throw new AppError(
+          ErrorCode.FORBIDDEN,
+          "Access denied: Machine process area not in supervisor's assigned areas",
+          403
+        );
+      }
+      return toSupervisorMachineDto(machine);
+    }
+
     return machine;
   }
 

@@ -1,9 +1,9 @@
 # LoomPilot Backend Status Report (Generated)
 
-**Generated At:** `2026-10-31T05:35:06.587Z`  
+**Generated At:** `2026-10-31T11:11:16.723Z`  
 **Monorepo:** pnpm workspace (`apps/api`, `packages/shared`, `packages/agents-client`, `apps/web`)  
 **TypeScript Typecheck:** Passing (0 errors)  
-**Architectural Decoupling (`depcruise`):** Passing (0 violations across 122 modules, 346 dependencies)  
+**Architectural Decoupling (`depcruise`):** Passing (0 violations across 178 modules, 636 dependencies)  
 
 ---
 
@@ -40,7 +40,7 @@ Total Model Files: **22**
 
 ## 2. API Routes & RBAC Matrix
 
-Total Registered Route Endpoints: **28**
+Total Registered Route Endpoints: **94**
 
 | Method | Route Path | Allowed Realms | Allowed Roles | Idempotent |
 | :--- | :--- | :--- | :--- | :---: |
@@ -67,17 +67,83 @@ Total Registered Route Endpoints: **28**
 | `POST` | `/api/v1/clients/:id/portal/lock` | `user` | `admin` | No |
 | `POST` | `/api/v1/clients/:id/portal/unlock` | `user` | `admin` | No |
 | `GET` | `/api/v1/audit` | `user` | `admin` | No |
+| `GET` | `/api/v1/settings` | `user` | `admin` | No |
+| `PATCH` | `/api/v1/settings` | `user` | `admin` | No |
+| `GET` | `/api/v1/clients` | `user` | `admin` | No |
+| `POST` | `/api/v1/clients` | `user` | `admin` | No |
+| `GET` | `/api/v1/clients/:id` | `user` | `admin` | No |
+| `PATCH` | `/api/v1/clients/:id` | `user` | `admin` | No |
+| `DELETE` | `/api/v1/clients/:id` | `user` | `admin` | No |
+| `GET` | `/api/v1/suppliers` | `user` | `admin` | No |
+| `POST` | `/api/v1/suppliers` | `user` | `admin` | No |
+| `GET` | `/api/v1/suppliers/:id` | `user` | `admin` | No |
+| `PATCH` | `/api/v1/suppliers/:id` | `user` | `admin` | No |
+| `DELETE` | `/api/v1/suppliers/:id` | `user` | `admin` | No |
+| `GET` | `/api/v1/materials` | `user` | `admin, supervisor` | No |
+| `POST` | `/api/v1/materials` | `user` | `admin` | No |
+| `GET` | `/api/v1/materials/:id` | `user` | `admin, supervisor` | No |
+| `PATCH` | `/api/v1/materials/:id` | `user` | `admin` | No |
+| `DELETE` | `/api/v1/materials/:id` | `user` | `admin` | No |
+| `POST` | `/api/v1/materials/:id/rate` | `user` | `admin` | No |
+| `POST` | `/api/v1/materials/:id/offers` | `user` | `admin` | No |
+| `GET` | `/api/v1/machines` | `user` | `admin, supervisor` | No |
+| `POST` | `/api/v1/machines` | `user` | `admin` | No |
+| `GET` | `/api/v1/machines/:id` | `user` | `admin, supervisor` | No |
+| `PATCH` | `/api/v1/machines/:id` | `user` | `admin` | No |
+| `DELETE` | `/api/v1/machines/:id` | `user` | `admin` | No |
+| `GET` | `/api/v1/products` | `user` | `admin` | No |
+| `POST` | `/api/v1/products` | `user` | `admin` | No |
+| `GET` | `/api/v1/products/:id` | `user` | `admin` | No |
+| `PATCH` | `/api/v1/products/:id` | `user` | `admin` | No |
+| `DELETE` | `/api/v1/products/:id` | `user` | `admin` | No |
+| `POST` | `/api/v1/products/:id/images` | `user` | `admin` | No |
+| `GET` | `/api/v1/client/products` | `client` | `-` | No |
+| `GET` | `/api/v1/client/products/:id` | `client` | `-` | No |
+| `POST` | `/api/v1/files` | `user, client` | `admin, supervisor` | No |
+| `GET` | `/api/v1/files/:id` | `user, client` | `admin, supervisor` | No |
+| `POST` | `/api/v1/stock/receipt` | `user` | `admin` | Yes |
+| `POST` | `/api/v1/stock/adjust` | `user` | `admin` | No |
+| `GET` | `/api/v1/stock/balances` | `user` | `admin` | No |
+| `GET` | `/api/v1/stock/movements` | `user` | `admin` | No |
+| `POST` | `/api/v1/imports/dry-run` | `user` | `admin` | No |
+| `POST` | `/api/v1/imports/commit` | `user` | `admin` | Yes |
 | `GET` | `/health` | `Public` | `-` | No |
 | `GET` | `/ready` | `Public` | `-` | No |
 | `GET` | `/api/v1/health` | `Public` | `-` | No |
 | `GET` | `/api/v1/ready` | `Public` | `-` | No |
 | `GET` | `/docs.json` | `Public` | `-` | No |
+| `POST` | `/api/v1/client/orders` | `client` | `-` | Yes |
+| `GET` | `/api/v1/client/orders` | `client` | `-` | No |
+| `GET` | `/api/v1/client/orders/:id` | `client` | `-` | No |
+| `POST` | `/api/v1/client/orders/:id/quotation/accept` | `client` | `-` | Yes |
+| `POST` | `/api/v1/client/orders/:id/quotation/decline` | `client` | `-` | Yes |
+| `GET` | `/api/v1/orders` | `user` | `admin, supervisor` | No |
+| `GET` | `/api/v1/orders/:id` | `user` | `admin, supervisor` | No |
+| `POST` | `/api/v1/orders` | `user` | `admin` | Yes |
+| `POST` | `/api/v1/orders/:id/decide` | `user` | `admin` | No |
+| `POST` | `/api/v1/orders/:id/quotation/approve` | `user` | `admin` | Yes |
+| `POST` | `/api/v1/orders/:id/quotation/send` | `user` | `admin` | Yes |
+| `POST` | `/internal/v1/feasibility-reports` | `Public` | `-` | No |
+| `POST` | `/internal/v1/quotation-drafts` | `Public` | `-` | No |
+| `POST` | `/internal/v1/quotation-revisions` | `Public` | `-` | No |
+| `POST` | `/api/v1/orders/:id/assign` | `user` | `admin` | Yes |
+| `POST` | `/api/v1/orders/:id/hold` | `user` | `admin` | Yes |
+| `POST` | `/api/v1/orders/:id/resume` | `user` | `admin` | Yes |
+| `POST` | `/api/v1/orders/:id/cancel` | `user` | `admin` | Yes |
+| `POST` | `/api/v1/orders/:id/ready-for-delivery` | `user` | `admin` | Yes |
+| `POST` | `/api/v1/orders/:id/start` | `user` | `admin, supervisor` | Yes |
+| `POST` | `/api/v1/orders/:id/payments/create-order` | `client, user` | `admin` | Yes |
+| `POST` | `/api/v1/client/orders/:id/payments/:milestoneIndex/razorpay-order` | `client` | `-` | Yes |
+| `POST` | `/api/v1/orders/:id/payments/manual-receipt` | `user` | `admin` | Yes |
+| `POST` | `/api/v1/orders/:id/payments/reverse` | `user` | `admin` | Yes |
+| `POST` | `/api/v1/orders/:id/deliveries` | `user` | `admin` | Yes |
+| `POST` | `/webhooks/razorpay` | `Public` | `-` | No |
 
 ---
 
 ## 3. Repositories (`apps/api/src/repositories`)
 
-Total Repositories: **10**
+Total Repositories: **21**
 
 | # | Repository |
 | :---: | :--- |
@@ -85,31 +151,44 @@ Total Repositories: **10**
 | 2 | `audit-log.repository.ts` |
 | 3 | `base.repository.ts` |
 | 4 | `client.repository.ts` |
-| 5 | `idempotency.repository.ts` |
-| 6 | `orders.repository.ts` |
-| 7 | `refresh-token.repository.ts` |
-| 8 | `settings.repository.ts` |
-| 9 | `unit-of-work.ts` |
-| 10 | `user.repository.ts` |
+| 5 | `counter.repository.ts` |
+| 6 | `file.repository.ts` |
+| 7 | `idempotency.repository.ts` |
+| 8 | `import-job.repository.ts` |
+| 9 | `machine.repository.ts` |
+| 10 | `market-price.repository.ts` |
+| 11 | `material.repository.ts` |
+| 12 | `notification.repository.ts` |
+| 13 | `orders.repository.ts` |
+| 14 | `outbox.repository.ts` |
+| 15 | `product.repository.ts` |
+| 16 | `refresh-token.repository.ts` |
+| 17 | `settings.repository.ts` |
+| 18 | `stock-movement.repository.ts` |
+| 19 | `supplier.repository.ts` |
+| 20 | `unit-of-work.ts` |
+| 21 | `user.repository.ts` |
 
 ---
 
 ## 4. Test Suite Summary (`apps/api/test`)
 
-Total Test Files: **30**  
-Total Test Declarations: **182**
+Total Test Files: **34**  
+Total Test Declarations: **201**
 
 | Test File | Test Count |
 | :--- | :---: |
 | `audit/audit-logging.test.ts` | 2 |
 | `auth/auth-login.test.ts` | 7 |
 | `auth/client-portal-security.test.ts` | 3 |
+| `auth/forbidden-keys-scan.test.ts` | 7 |
 | `auth/invite-flow.test.ts` | 7 |
 | `auth/last-admin.test.ts` | 3 |
 | `auth/realm-separation.test.ts` | 3 |
 | `auth/refresh-rotation.test.ts` | 5 |
 | `auth/tenant-isolation.test.ts` | 1 |
 | `config/env.test.ts` | 6 |
+| `imports/csv-import.test.ts` | 1 |
 | `middleware/auth-rate-limiter.test.ts` | 1 |
 | `middleware/error-handler.test.ts` | 6 |
 | `middleware/idempotency.test.ts` | 2 |
@@ -121,12 +200,14 @@ Total Test Declarations: **182**
 | `models/partial-indexes.test.ts` | 6 |
 | `models/ref-types.test.ts` | 2 |
 | `models/schema-indexes.test.ts` | 11 |
-| `models/schema-v4-rules.test.ts` | 32 |
+| `models/schema-v4-rules.test.ts` | 33 |
+| `orders/phase-b-c-d-workflows.test.ts` | 9 |
 | `repositories/base-repository.test.ts` | 7 |
 | `repositories/orders-repository.test.ts` | 16 |
 | `repositories/unit-of-work.test.ts` | 7 |
 | `routes/health.test.ts` | 6 |
 | `scripts/create-admin.test.ts` | 1 |
+| `stock/goods-receipt.test.ts` | 1 |
 | `utils/dates.test.ts` | 7 |
 | `utils/logger.test.ts` | 5 |
 | `utils/money.test.ts` | 11 |

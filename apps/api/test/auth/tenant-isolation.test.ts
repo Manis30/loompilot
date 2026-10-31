@@ -59,7 +59,7 @@ describe("Stage 3: Multi-Tenancy Isolation", () => {
         name: "Spoofed User",
         password: "ValidSecret123!",
         role: "supervisor",
-        processAreas: ["winding"],
+        processAreas: ["knitting"],
       });
 
     expect(resCreate.status).toBe(201);

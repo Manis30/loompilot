@@ -8,6 +8,7 @@ import {
   validateParams,
   IdParamSchema,
   ClientSubmitOrderSchema,
+  ClientAcceptQuotationSchema,
   ClientDeclineQuotationSchema,
 } from "../validators/index.js";
 
@@ -42,6 +43,7 @@ clientOrderRouter.post(
   idempotencyMiddleware,
   authorize("POST /api/v1/client/orders/:id/quotation/accept"),
   validateParams(IdParamSchema),
+  validateBody(ClientAcceptQuotationSchema),
   controller.acceptQuotation
 );
 
@@ -58,14 +60,6 @@ clientOrderRouter.post(
   "/:id/payments/:milestoneIndex/razorpay-order",
   idempotencyMiddleware,
   authorize("POST /api/v1/client/orders/:id/payments/:milestoneIndex/razorpay-order"),
-  validateParams(IdParamSchema),
-  controller.createPaymentOrder
-);
-
-clientOrderRouter.post(
-  "/:id/payments/create-order",
-  idempotencyMiddleware,
-  authorize("POST /api/v1/orders/:id/payments/create-order"),
   validateParams(IdParamSchema),
   controller.createPaymentOrder
 );

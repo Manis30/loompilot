@@ -137,6 +137,7 @@ export class AuthService {
       realm: "user",
       tenantId,
       role: user.role,
+      processAreas: user.processAreas,
     });
 
     const rawRefreshToken = TokenService.generateRefreshToken();
@@ -407,6 +408,7 @@ export class AuthService {
     // Verify account status before issuing new tokens
     let role: "admin" | "supervisor" | undefined;
     let clientId: string | undefined;
+    let processAreas: string[] | undefined;
 
     if (existing.realm === "user") {
       const user = await this.userRepo.findById(
@@ -417,6 +419,7 @@ export class AuthService {
         throw new AppError(ErrorCode.ACCOUNT_LOCKED, "Account is inactive or locked", 403);
       }
       role = user.role;
+      processAreas = user.processAreas;
     } else {
       const client = await this.clientRepo.findById(
         existing.tenantId,
@@ -448,6 +451,7 @@ export class AuthService {
       tenantId: existing.tenantId,
       role,
       clientId,
+      processAreas,
     });
 
     await this.auditService.log({

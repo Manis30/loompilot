@@ -1,6 +1,7 @@
 import { MaterialRepository } from "../repositories/material.repository.js";
 import { StockMovementRepository } from "../repositories/stock-movement.repository.js";
 import { SupplierRepository } from "../repositories/supplier.repository.js";
+import { OrdersRepository } from "../repositories/orders.repository.js";
 import { IUnitOfWork } from "../interfaces/unit-of-work.interface.js";
 import { MongoUnitOfWork } from "../repositories/unit-of-work.js";
 import { AuditService } from "./audit.service.js";
@@ -13,6 +14,7 @@ export class StockService {
     private readonly materialRepo = new MaterialRepository(),
     private readonly stockMovementRepo = new StockMovementRepository(),
     private readonly supplierRepo = new SupplierRepository(),
+    private readonly ordersRepo = new OrdersRepository(),
     private readonly unitOfWork: IUnitOfWork = new MongoUnitOfWork(),
     private readonly auditService = new AuditService()
   ) {}
@@ -64,13 +66,24 @@ export class StockService {
         tx
       );
 
-      // 3. Audit
+      // 3. Atomically update supplierOrder status, recvQty and recvAt if linked to order purchase decision
+      if (orderId && purchaseDecisionId) {
+        await this.ordersRepo.updatePurchaseDecisionReceipt(
+          tenantId,
+          orderId,
+          purchaseDecisionId,
+          qty,
+          tx
+        );
+      }
+
+      // 4. Audit
       await this.auditService.log({
         tenantId,
         actor: { id: actor.id, type: "user", email: actor.email },
         action: "STOCK_GOODS_RECEIPT",
         entity: { collection: "stockMovements", id: String(movement._id) },
-        after: { materialId, qty, qtyAfter: updated.stockQty, supplierId, unitCostPaise },
+        after: { materialId, qty, qtyAfter: updated.stockQty, supplierId, unitCostPaise, orderId, purchaseDecisionId },
         ip: actor.ip,
         requestId: actor.requestId,
       });

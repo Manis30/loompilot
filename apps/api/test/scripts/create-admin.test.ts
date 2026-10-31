@@ -27,7 +27,16 @@ describe("Stage 3: create-admin Provisioning CLI", () => {
     expect(user).toBeDefined();
     expect(user?.role).toBe("admin");
     expect(user?.status).toBe("active");
-    expect(user?.processAreas).toEqual(["winding", "warping", "weaving"]);
+    expect(user?.processAreas).toEqual([
+      "yarn_stock",
+      "knitting",
+      "dyeing_processing",
+      "cutting",
+      "stitching",
+      "checking",
+      "ironing_finishing",
+      "packing",
+    ]);
 
     // Verify default Settings created in MongoDB
     const settings = await SettingsModel.findOne({ tenantId });

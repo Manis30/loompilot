@@ -14,13 +14,28 @@ export class MachineController {
       search: req.query.search as string | undefined,
     };
 
-    const result = await this.machineService.listMachines(actor.tenantId, pagination, filterParams);
+    const supervisorAreas =
+      actor.role === "supervisor" ? actor.processAreas || [] : undefined;
+
+    const result = await this.machineService.listMachines(
+      actor.tenantId,
+      pagination,
+      filterParams,
+      supervisorAreas
+    );
     res.json(result);
   };
 
   getMachineById = async (req: Request, res: Response): Promise<void> => {
     const actor = req.actor!;
-    const machine = await this.machineService.getMachineById(actor.tenantId, req.params.id as string);
+    const supervisorAreas =
+      actor.role === "supervisor" ? actor.processAreas || [] : undefined;
+
+    const machine = await this.machineService.getMachineById(
+      actor.tenantId,
+      req.params.id as string,
+      supervisorAreas
+    );
     res.json({ data: machine });
   };
 

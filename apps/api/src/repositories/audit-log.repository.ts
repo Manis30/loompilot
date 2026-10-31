@@ -33,11 +33,14 @@ export class AuditLogRepository {
     ip?: string;
     requestId?: string;
   }): Promise<IAuditLog> {
-    const actorId = data.actor.id
-      ? typeof data.actor.id === "string"
-        ? new Types.ObjectId(data.actor.id)
-        : data.actor.id
-      : null;
+    let actorId: Types.ObjectId | null = null;
+    if (data.actor.id) {
+      if (typeof data.actor.id === "string") {
+        actorId = Types.ObjectId.isValid(data.actor.id) ? new Types.ObjectId(data.actor.id) : null;
+      } else {
+        actorId = data.actor.id;
+      }
+    }
 
     return this.model.create({
       ...data,

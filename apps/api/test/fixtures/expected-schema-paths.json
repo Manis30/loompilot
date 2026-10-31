@@ -121,6 +121,7 @@
     "createdAt",
     "createdBy",
     "errors",
+    "fileHash",
     "fileId",
     "rowsFailed",
     "rowsOk",
@@ -128,6 +129,7 @@
     "tenantId",
     "type",
     "updatedAt",
+    "validRows",
     "version"
   ],
   "MachineModel": [
@@ -190,6 +192,7 @@
     "preferredSupplierId",
     "reorderLevel",
     "reservedQty",
+    "status",
     "stockQty",
     "supplierOffers",
     "tenantId",

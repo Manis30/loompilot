@@ -60,13 +60,23 @@ export function toClientOrderDto(order: any): any {
           unitPricePaise: order.quotation.unitPricePaise,
           totalPaise: order.quotation.totalPaise,
           etaDate: order.quotation.etaDate,
-          lineItems: order.quotation.lineItems,
+          validUntil: order.quotation.validUntil,
+          termsVersion: order.quotation.termsVersion,
+          priceVariationClause: order.quotation.priceVariationClause,
           paymentSchedule: order.quotation.paymentSchedule,
-          processPlan: order.quotation.processPlan,
           clientExplanation: order.quotation.clientExplanation,
           clientPdfFileId: order.quotation.clientPdfFileId
             ? String(order.quotation.clientPdfFileId)
             : undefined,
+          revisions: (order.quotation.revisions || []).map((r: any) => ({
+            revisionNo: r.revisionNo,
+            oldPricePaise: r.oldPricePaise,
+            newPricePaise: r.newPricePaise,
+            changePct: r.changePct,
+            newEtaDate: r.newEtaDate,
+            clientReason: r.clientReason,
+            status: r.status,
+          })),
         }
       : undefined,
     financials: order.financials
@@ -87,7 +97,6 @@ export function toClientOrderDto(order: any): any {
             status: m.status,
             receivedPaise: m.receivedPaise || 0,
             duePaise: Math.max(0, m.amountPaise - (m.receivedPaise || 0)),
-            razorpayOrderId: m.razorpayOrderId,
           })),
         }
       : undefined,
@@ -96,6 +105,11 @@ export function toClientOrderDto(order: any): any {
           phase: order.production.phase,
           percentComplete: order.production.percentComplete,
           producedQty: order.production.producedQty,
+          deliveredQty: order.production.deliveredQty,
+          estimatedCompletionDate:
+            order.production.monitoring?.projectedFinish ||
+            order.quotation?.etaDate ||
+            order.deliveryDeadline,
         }
       : undefined,
     deliveries: order.deliveries?.map((d: any) => ({
@@ -105,6 +119,41 @@ export function toClientOrderDto(order: any): any {
       invoiceAmountPaise: d.invoiceAmountPaise,
       onTime: d.onTime,
     })),
+    createdAt: order.createdAt,
+    updatedAt: order.updatedAt,
+  };
+}
+
+export function toSupervisorOrderDto(order: any): any {
+  return {
+    id: String(order._id),
+    orderNumber: order.orderNumber,
+    productDescription: order.productDescription,
+    quantity: order.quantity,
+    deliveryDeadline: order.deliveryDeadline,
+    spec: order.spec,
+    referenceFiles: order.referenceFiles?.map(String) || [],
+    status: order.status,
+    production: order.production
+      ? {
+          phase: order.production.phase,
+          percentComplete: order.production.percentComplete,
+          producedQty: order.production.producedQty,
+          deliveredQty: order.production.deliveredQty,
+          assignmentStatus: order.production.assignmentStatus,
+          processPlan: (order.production.processPlan || []).map((p: any) => ({
+            stage: p.stage,
+            start: p.start,
+            end: p.end,
+            dailyTarget: p.dailyTarget,
+          })),
+          assignedSupervisors: (order.production.assignedSupervisors || []).map((s: any) => ({
+            supervisorId: String(s.supervisorId),
+            processes: s.processes || [],
+            acknowledgedAt: s.acknowledgedAt,
+          })),
+        }
+      : undefined,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
   };
@@ -350,8 +399,10 @@ export class OrderService {
     orderId: string;
     isClient?: boolean;
     clientId?: string;
+    role?: "admin" | "supervisor";
+    supervisorId?: string;
   }): Promise<any> {
-    const { tenantId, orderId, isClient, clientId } = params;
+    const { tenantId, orderId, isClient, clientId, role, supervisorId } = params;
     const order = await this.ordersRepo.findById(tenantId, orderId);
 
     if (!order) {
@@ -363,6 +414,16 @@ export class OrderService {
         throw new AppError(ErrorCode.FORBIDDEN, "Access denied: Order does not belong to client", 403);
       }
       return toClientOrderDto(order);
+    }
+
+    if (role === "supervisor") {
+      const isAssigned = (order.production?.assignedSupervisors || []).some(
+        (s: any) => String(s.supervisorId) === String(supervisorId)
+      );
+      if (!isAssigned) {
+        throw new AppError(ErrorCode.FORBIDDEN, "Access denied: Order not assigned to supervisor", 403);
+      }
+      return toSupervisorOrderDto(order);
     }
 
     return toAdminOrderDto(order);
@@ -707,14 +768,23 @@ export class OrderService {
     return toAdminOrderDto(updated);
   }
 
+  private async getAdminRecipient(tenantId: string): Promise<{ userId: any }> {
+    const adminUser = await this.userRepo.findOne(tenantId, { role: "admin" });
+    if (adminUser) {
+      return { userId: adminUser._id };
+    }
+    return { userId: "000000000000000000000000" };
+  }
+
   async clientAcceptQuotation(params: {
     tenantId: string;
     clientId: string;
     orderId: string;
+    revisionNo?: number;
     idempotencyKey?: string;
     actor: { id: string; email?: string; ip?: string; requestId?: string };
   }): Promise<any> {
-    const { tenantId, clientId, orderId, actor } = params;
+    const { tenantId, clientId, orderId, revisionNo, actor } = params;
     const order = await this.ordersRepo.findById(tenantId, orderId);
     if (!order) {
       throw new AppError(ErrorCode.NOT_FOUND, `Order '${orderId}' not found`, 404);
@@ -722,6 +792,81 @@ export class OrderService {
 
     if (String(order.clientId) !== String(clientId)) {
       throw new AppError(ErrorCode.FORBIDDEN, "Access denied: Order does not belong to client", 403);
+    }
+
+    if (revisionNo !== undefined) {
+      const revision = (order.quotation?.revisions || []).find((r: any) => r.revisionNo === revisionNo);
+      if (!revision) {
+        throw new AppError(ErrorCode.NOT_FOUND, `Quotation revision #${revisionNo} not found`, 404);
+      }
+
+      if (revision.status === "accepted") {
+        return toClientOrderDto(order); // Idempotent return
+      }
+
+      const schedule = order.quotation?.paymentSchedule || [];
+      let updatedSchedule = schedule;
+      if (schedule.length > 0) {
+        const weights = schedule.map((m: any) => m.percent);
+        const newAmounts = splitPaise(revision.newPricePaise, weights);
+        updatedSchedule = schedule.map((m: any, idx: number) => ({
+          ...m,
+          amountPaise: newAmounts[idx] ?? m.amountPaise,
+        }));
+      }
+
+      const unitPricePaise = Math.round(revision.newPricePaise / order.quantity);
+      const updated = await this.ordersRepo.updateRevisionStatus(
+        tenantId,
+        orderId,
+        revisionNo,
+        "accepted",
+        { decision: "accepted", at: new Date() },
+        {
+          totalPaise: revision.newPricePaise,
+          unitPricePaise,
+          etaDate: revision.newEtaDate || order.quotation?.etaDate,
+          paymentSchedule: updatedSchedule,
+        }
+      );
+
+      if (!updated) {
+        throw new AppError(
+          ErrorCode.INVALID_TRANSITION,
+          `Quotation revision #${revisionNo} cannot be accepted from status '${revision.status}'`,
+          409
+        );
+      }
+
+      if (order.status === OrderStatus.QUOTATION_SENT) {
+        await this.ordersRepo.updateStatus(tenantId, orderId, OrderStatus.CLIENT_ACCEPTED, {
+          role: "admin",
+          reason: `Quotation revision #${revisionNo} accepted by client`,
+        });
+      }
+
+      await this.notificationRepo.createNotification(tenantId, {
+        recipient: await this.getAdminRecipient(tenantId),
+        kind: "notification",
+        type: "quotation_accepted",
+        channel: "in_app",
+        title: `Revision #${revisionNo} Accepted for ${order.orderNumber}`,
+        body: `Client accepted revised pricing for ${order.orderNumber}. New total: ₹${(revision.newPricePaise / 100).toLocaleString()}`,
+        entity: { collection: "orders", id: orderId },
+      });
+
+      await this.auditService.log({
+        tenantId,
+        actor: { id: actor.id, type: "client", email: actor.email },
+        action: "QUOTATION_REVISION_ACCEPTED",
+        entity: { collection: "orders", id: orderId },
+        after: { revisionNo, totalPaise: revision.newPricePaise },
+        ip: actor.ip,
+        requestId: actor.requestId,
+      });
+
+      const refreshed = await this.ordersRepo.findById(tenantId, orderId);
+      return toClientOrderDto(refreshed);
     }
 
     if (order.status === OrderStatus.CLIENT_ACCEPTED) {
@@ -742,7 +887,7 @@ export class OrderService {
     });
 
     await this.notificationRepo.createNotification(tenantId, {
-      recipient: {},
+      recipient: await this.getAdminRecipient(tenantId),
       kind: "notification",
       type: "quotation_accepted",
       channel: "in_app",
@@ -768,11 +913,12 @@ export class OrderService {
     tenantId: string;
     clientId: string;
     orderId: string;
+    revisionNo?: number;
     reason?: string;
     idempotencyKey?: string;
     actor: { id: string; email?: string; ip?: string; requestId?: string };
   }): Promise<any> {
-    const { tenantId, clientId, orderId, reason, actor } = params;
+    const { tenantId, clientId, orderId, revisionNo, reason, actor } = params;
     const order = await this.ordersRepo.findById(tenantId, orderId);
     if (!order) {
       throw new AppError(ErrorCode.NOT_FOUND, `Order '${orderId}' not found`, 404);
@@ -780,6 +926,58 @@ export class OrderService {
 
     if (String(order.clientId) !== String(clientId)) {
       throw new AppError(ErrorCode.FORBIDDEN, "Access denied: Order does not belong to client", 403);
+    }
+
+    if (revisionNo !== undefined) {
+      const revision = (order.quotation?.revisions || []).find((r: any) => r.revisionNo === revisionNo);
+      if (!revision) {
+        throw new AppError(ErrorCode.NOT_FOUND, `Quotation revision #${revisionNo} not found`, 404);
+      }
+
+      if (revision.status === "declined") {
+        return toClientOrderDto(order); // Idempotent return
+      }
+
+      // S4 Rule: When revision is declined, original quotation price stands untouched!
+      const updated = await this.ordersRepo.updateRevisionStatus(
+        tenantId,
+        orderId,
+        revisionNo,
+        "declined",
+        { decision: "declined", reason, at: new Date() }
+      );
+
+      if (!updated) {
+        throw new AppError(
+          ErrorCode.INVALID_TRANSITION,
+          `Quotation revision #${revisionNo} cannot be declined from status '${revision.status}'`,
+          409
+        );
+      }
+
+      // Send alert notification to admin
+      await this.notificationRepo.createNotification(tenantId, {
+        recipient: await this.getAdminRecipient(tenantId),
+        kind: "alert",
+        type: "quotation_revision_declined",
+        channel: "in_app",
+        title: `Revision #${revisionNo} Declined for ${order.orderNumber}`,
+        body: `Client declined quotation revision #${revisionNo} for ${order.orderNumber}. Original quotation price stands. Reason: ${reason || "None specified"}`,
+        entity: { collection: "orders", id: orderId },
+      });
+
+      await this.auditService.log({
+        tenantId,
+        actor: { id: actor.id, type: "client", email: actor.email },
+        action: "QUOTATION_REVISION_DECLINED",
+        entity: { collection: "orders", id: orderId },
+        after: { revisionNo, status: "declined", reason },
+        ip: actor.ip,
+        requestId: actor.requestId,
+      });
+
+      const refreshed = await this.ordersRepo.findById(tenantId, orderId);
+      return toClientOrderDto(refreshed);
     }
 
     if (order.status === OrderStatus.DECLINED_BY_CLIENT) {
@@ -805,7 +1003,7 @@ export class OrderService {
     );
 
     await this.notificationRepo.createNotification(tenantId, {
-      recipient: {},
+      recipient: await this.getAdminRecipient(tenantId),
       kind: "notification",
       type: "quotation_declined",
       channel: "in_app",
@@ -1198,7 +1396,12 @@ export class OrderService {
         );
       }
 
-      const freshOrder = await this.ordersRepo.findById(params.tenantId, params.orderId);
+      const freshOrder = await this.ordersRepo.findById(
+        params.tenantId,
+        params.orderId,
+        undefined,
+        tx
+      );
       return toAdminOrderDto(freshOrder);
     });
   }
@@ -1211,33 +1414,53 @@ export class OrderService {
     const order = await this.ordersRepo.findById(params.tenantId, params.orderId);
     if (!order) throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
 
-    if (order.status !== OrderStatus.ASSIGNED) {
+    if (
+      order.status !== OrderStatus.ASSIGNED &&
+      order.status !== OrderStatus.IN_PRODUCTION
+    ) {
       throw new AppError(
         ErrorCode.INVALID_TRANSITION,
-        `Cannot start production on order with status '${order.status}'; must be 'assigned'`,
+        `Cannot start production on order with status '${order.status}'; must be 'assigned' or 'in_production'`,
         400
       );
     }
 
+    if (params.actor.role === "supervisor") {
+      const isAssigned = (order.production?.assignedSupervisors || []).some(
+        (s: any) => String(s.supervisorId) === String(params.actor.id)
+      );
+      if (!isAssigned) {
+        throw new AppError(
+          ErrorCode.FORBIDDEN,
+          "Access denied: Supervisor is not assigned to this order",
+          403
+        );
+      }
+    }
+
     return this.getUnitOfWork().withTransaction(async (tx) => {
-      await this.ordersRepo.acknowledgeAndStartProduction(
+      const updatedAck = await this.ordersRepo.acknowledgeAndStartProduction(
         params.tenantId,
         params.orderId,
         params.actor.id,
         tx
       );
 
-      const updated = await this.ordersRepo.updateStatus(
-        params.tenantId,
-        params.orderId,
-        OrderStatus.IN_PRODUCTION,
-        {
-          role: params.actor.role || "supervisor",
-          reason: "Production acknowledged and started",
-          by: params.actor.id as any,
-        },
-        tx
-      );
+      let finalOrder = updatedAck;
+
+      if (order.status === OrderStatus.ASSIGNED) {
+        finalOrder = await this.ordersRepo.updateStatus(
+          params.tenantId,
+          params.orderId,
+          OrderStatus.IN_PRODUCTION,
+          {
+            role: params.actor.role || "supervisor",
+            reason: "Production acknowledged and started",
+            by: params.actor.id as any,
+          },
+          tx
+        );
+      }
 
       await this.auditService.log({
         tenantId: params.tenantId,
@@ -1247,7 +1470,7 @@ export class OrderService {
         requestId: params.actor.requestId,
       });
 
-      return toAdminOrderDto(updated);
+      return toAdminOrderDto(finalOrder);
     });
   }
 

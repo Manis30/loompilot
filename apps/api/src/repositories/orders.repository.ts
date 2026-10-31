@@ -796,46 +796,142 @@ export class OrdersRepository {
     tx?: TxContext
   ): Promise<IOrder> {
     const session = this.getSession(tx);
+    const filter: Record<string, any> = {
+      tenantId,
+      _id: orderId,
+    };
+
+    const update: Record<string, any> = {
+      $set: {
+        "production.assignmentStatus": "started",
+      },
+      $inc: { version: 1 },
+    };
+
+    const options: any = { new: true, session: session ?? null };
+
     if (supervisorId) {
       const sId = typeof supervisorId === "string" ? new Types.ObjectId(supervisorId) : supervisorId;
-      const updated = await this.model
-        .findOneAndUpdate(
-          {
-            tenantId,
-            _id: orderId,
-            "production.assignedSupervisors.supervisorId": sId,
-          },
-          {
-            $set: {
-              "production.assignmentStatus": "started",
-              "production.assignedSupervisors.$.acknowledgedAt": new Date(),
-            },
-            $inc: { version: 1 },
-          },
-          { new: true, session: session ?? null }
-        )
-        .lean<IOrder>()
-        .exec();
-
-      if (updated) return updated;
+      filter["production.assignedSupervisors.supervisorId"] = sId;
+      update.$set["production.assignedSupervisors.$[elem].acknowledgedAt"] = new Date();
+      options.arrayFilters = [{ "elem.supervisorId": sId }];
     }
 
     const updated = await this.model
+      .findOneAndUpdate(filter, update, options)
+      .lean<IOrder>()
+      .exec();
+
+    if (!updated) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Order not found or supervisor not assigned", 404);
+    }
+    return updated;
+  }
+
+  async updatePurchaseDecisionReceipt(
+    tenantId: string,
+    orderId: string | Types.ObjectId,
+    decisionId: string,
+    receivedQty: number,
+    tx?: TxContext
+  ): Promise<IOrder | null> {
+    const session = this.getSession(tx);
+    const order = await this.model
+      .findOne({
+        tenantId,
+        _id: orderId,
+        "purchaseDecisions.decisionId": decisionId,
+      })
+      .session(session ?? null)
+      .lean<IOrder>()
+      .exec();
+
+    if (!order) {
+      return null;
+    }
+
+    const decision = order.purchaseDecisions?.find((d) => d.decisionId === decisionId);
+    if (!decision) return null;
+
+    const currentRecv = decision.supplierOrder?.recvQty || 0;
+    const newRecv = currentRecv + receivedQty;
+    const targetQty = decision.qty;
+    const status = newRecv >= targetQty ? "received" : "partially_received";
+    const now = new Date();
+
+    return this.model
       .findOneAndUpdate(
-        { tenantId, _id: orderId },
         {
-          $set: { "production.assignmentStatus": "started" },
+          tenantId,
+          _id: orderId,
+          "purchaseDecisions.decisionId": decisionId,
+        },
+        {
+          $set: {
+            "purchaseDecisions.$.supplierOrder.recvQty": newRecv,
+            "purchaseDecisions.$.supplierOrder.status": status,
+            "purchaseDecisions.$.supplierOrder.recvAt": now,
+          },
           $inc: { version: 1 },
         },
         { new: true, session: session ?? null }
       )
       .lean<IOrder>()
       .exec();
+  }
 
-    if (!updated) {
-      throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+  async updateRevisionStatus(
+    tenantId: string,
+    orderId: string | Types.ObjectId,
+    revisionNo: number,
+    status: "accepted" | "declined",
+    decision: { decision: string; reason?: string; at: Date },
+    priceUpdates?: {
+      totalPaise: number;
+      unitPricePaise: number;
+      etaDate?: string;
+      paymentSchedule?: any[];
+    },
+    tx?: TxContext
+  ): Promise<IOrder | null> {
+    const session = this.getSession(tx);
+    const update: Record<string, any> = {
+      $set: {
+        "quotation.revisions.$[elem].status": status,
+        "quotation.revisions.$[elem].clientDecision": decision,
+      },
+      $inc: { version: 1 },
+    };
+
+    if (priceUpdates) {
+      update.$set["quotation.totalPaise"] = priceUpdates.totalPaise;
+      update.$set["quotation.unitPricePaise"] = priceUpdates.unitPricePaise;
+      if (priceUpdates.etaDate) {
+        update.$set["quotation.etaDate"] = priceUpdates.etaDate;
+      }
+      if (priceUpdates.paymentSchedule) {
+        update.$set["quotation.paymentSchedule"] = priceUpdates.paymentSchedule;
+      }
     }
-    return updated;
+
+    return this.model
+      .findOneAndUpdate(
+        {
+          tenantId,
+          _id: orderId,
+          "quotation.revisions": {
+            $elemMatch: { revisionNo, status: { $in: ["sent", "proposed", "approved"] } },
+          },
+        },
+        update,
+        {
+          arrayFilters: [{ "elem.revisionNo": revisionNo }],
+          new: true,
+          session: session ?? null,
+        }
+      )
+      .lean<IOrder>()
+      .exec();
   }
 
   async setMilestoneRazorpayOrderId(
