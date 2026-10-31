@@ -24,3 +24,4 @@ export interface INotifier {
   sendWhatsApp(options: WhatsAppOptions): Promise<void>;
   sendSms(options: SmsOptions): Promise<void>;
 }
+

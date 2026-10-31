@@ -86,3 +86,4 @@ export interface IAgentsClient {
   runMonitoring(params: MonitoringRequest): Promise<AgentResult<InternalMonitoringSnapshot>>;
   adminAssistantAsk(params: AdminAssistantAskRequest): Promise<AgentResult<InternalAdminAssistantRun>>;
 }
+

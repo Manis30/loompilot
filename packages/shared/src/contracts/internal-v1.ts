@@ -221,3 +221,4 @@ export type InternalMarketObservation = z.infer<typeof InternalMarketObservation
 export type InternalMonitoringSnapshot = z.infer<typeof InternalMonitoringSnapshotSchema>;
 export type InternalChatReply = z.infer<typeof InternalChatReplySchema>;
 export type InternalAdminAssistantRun = z.infer<typeof InternalAdminAssistantRunSchema>;
+

@@ -17,6 +17,16 @@ import { authRouter } from "./routes/auth.routes.js";
 import { meRouter } from "./routes/me.routes.js";
 import { userRouter } from "./routes/user.routes.js";
 import { clientPortalRouter } from "./routes/client-portal.routes.js";
+import { clientRouter } from "./routes/client.routes.js";
+import { settingsRouter } from "./routes/settings.routes.js";
+import { supplierRouter } from "./routes/supplier.routes.js";
+import { materialRouter } from "./routes/material.routes.js";
+import { machineRouter } from "./routes/machine.routes.js";
+import { productRouter } from "./routes/product.routes.js";
+import { clientCatalogueRouter } from "./routes/client-catalogue.routes.js";
+import { fileRouter } from "./routes/file.routes.js";
+import { stockRouter } from "./routes/stock.routes.js";
+import { importRouter } from "./routes/import.routes.js";
 import { auditRouter } from "./routes/audit.routes.js";
 import { AppContainer, getContainer } from "./container.js";
 
@@ -104,7 +114,19 @@ export function createApp(container: AppContainer = getContainer()): Express {
   app.use("/api/v1/me", meRouter);
   app.use("/api/v1/users", userRouter);
   app.use("/api/v1/clients", clientPortalRouter);
+  app.use("/api/v1/clients", clientRouter);
   app.use("/api/v1/audit", auditRouter);
+
+  // Phase B: Master Data & Platform Basics Routes
+  app.use("/api/v1/settings", settingsRouter);
+  app.use("/api/v1/suppliers", supplierRouter);
+  app.use("/api/v1/materials", materialRouter);
+  app.use("/api/v1/machines", machineRouter);
+  app.use("/api/v1/products", productRouter);
+  app.use("/api/v1/client", clientCatalogueRouter);
+  app.use("/api/v1/files", fileRouter);
+  app.use("/api/v1/stock", stockRouter);
+  app.use("/api/v1/imports", importRouter);
 
   // 10. Unmatched routes -> 404
   app.use((req) => {

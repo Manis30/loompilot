@@ -55,3 +55,4 @@ export const DEFAULT_SETTINGS: Omit<ISettings, "tenantId" | "createdAt" | "updat
     },
   ],
 };
+

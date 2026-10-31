@@ -45,3 +45,8 @@ export function paginate<T>(data: T[], total: number, page: number, limit: numbe
   };
 }
 
+export function parsePaginationQuery(query: Record<string, unknown>): PaginationQuery {
+  return paginationQuerySchema.parse(query);
+}
+
+

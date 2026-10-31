@@ -59,3 +59,4 @@ export class EmailNotifier implements INotifier {
     logger.info({ to: options.to, message: options.message }, "[STUB] SMS message queued");
   }
 }
+
