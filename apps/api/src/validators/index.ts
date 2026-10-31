@@ -227,8 +227,9 @@ export const ImportDryRunSchema = z.object({
 });
 
 export const ImportCommitSchema = z.object({
-  type: z.enum(["materials", "suppliers", "machines", "products", "market_prices"]),
-  fileHash: z.string().min(1),
+  jobId: z.string().optional(),
+  type: z.enum(["materials", "suppliers", "machines", "products", "market_prices"]).optional(),
+  fileHash: z.string().optional(),
   csvContent: z.string().optional(),
   fileId: z.string().optional(),
 });

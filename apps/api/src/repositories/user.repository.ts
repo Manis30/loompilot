@@ -95,4 +95,12 @@ export class UserRepository extends BaseRepository<IUser> {
       { new: true }
     );
   }
+
+  async isProcessAreaUsed(tenantId: string, area: string): Promise<boolean> {
+    const count = await this.model.countDocuments({
+      tenantId,
+      processAreas: area,
+    });
+    return count > 0;
+  }
 }

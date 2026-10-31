@@ -19,6 +19,7 @@ export interface IMaterial extends BaseEntity {
   supplierOffers?: ISupplierOffer[];
   unit: string;
   watchlist?: boolean;
+  status: "active" | "inactive";
 }
 
 const SupplierOfferSchema = new Schema<ISupplierOffer>(
@@ -47,6 +48,12 @@ const MaterialSchema = new Schema<IMaterial>(
     supplierOffers: { type: [SupplierOfferSchema] },
     unit: { type: String, trim: true },
     watchlist: { type: Boolean },
+    status: {
+      type: String,
+      enum: ["active", "inactive"],
+      default: "active",
+      required: true,
+    },
     version: { type: Number, default: 1 },
   },
   { timestamps: true }

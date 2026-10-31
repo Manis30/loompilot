@@ -23,6 +23,12 @@ export class ImportController {
       tenantId: actor.tenantId,
       type,
       csvContent,
+      fileId: req.body.fileId,
+      actor: {
+        id: actor.subjectId,
+        ip: req.ip,
+        requestId: actor.requestId,
+      },
     });
 
     res.json({ data: report });
@@ -30,23 +36,25 @@ export class ImportController {
 
   commit = async (req: Request, res: Response): Promise<void> => {
     const actor = req.actor!;
-    const type = req.body.type as ImportType;
-    const fileHash = req.body.fileHash as string;
-    let csvContent = req.body.csvContent as string;
+    const jobId = req.body.jobId as string | undefined;
+    const fileHash = req.body.fileHash as string | undefined;
+    const type = req.body.type as ImportType | undefined;
+    let csvContent = req.body.csvContent as string | undefined;
 
     if (req.file) {
       csvContent = req.file.buffer.toString("utf-8");
     }
 
-    if (!csvContent || !fileHash) {
-      throw new AppError(ErrorCode.VALIDATION_FAILED, "CSV content and fileHash are required", 400);
+    if (!jobId && !fileHash && !csvContent) {
+      throw new AppError(ErrorCode.VALIDATION_FAILED, "jobId or fileHash is required to commit import", 400);
     }
 
     const job = await this.importService.commit({
       tenantId: actor.tenantId,
+      jobId,
+      fileHash,
       type,
       csvContent,
-      fileHash,
       fileId: req.body.fileId,
       actor: {
         id: actor.subjectId,

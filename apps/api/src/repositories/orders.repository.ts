@@ -642,5 +642,30 @@ export class OrdersRepository {
 
     return updated!;
   }
+
+  async hasFileForSupervisor(
+    tenantId: string,
+    fileId: string,
+    supervisorId: string
+  ): Promise<boolean> {
+    const count = await this.model.countDocuments({
+      tenantId,
+      "production.assignedSupervisors.supervisorId": new Types.ObjectId(supervisorId),
+      referenceFiles: new Types.ObjectId(fileId),
+    });
+    return count > 0;
+  }
+
+  async isProcessAreaUsedInActiveOrders(tenantId: string, area: string): Promise<boolean> {
+    const count = await this.model.countDocuments({
+      tenantId,
+      status: { $nin: ["delivered", "completed", "cancelled"] },
+      $or: [
+        { "quotation.plan.stage": area },
+        { "production.stageTotals.stage": area },
+      ],
+    });
+    return count > 0;
+  }
 }
 

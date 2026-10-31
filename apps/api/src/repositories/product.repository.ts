@@ -128,5 +128,29 @@ export class ProductRepository extends BaseRepository<IProduct> {
       .lean<IProduct>()
       .exec();
   }
-}
 
+  async isProductImage(
+    tenantId: string,
+    fileId: string,
+    activeOnly = false
+  ): Promise<boolean> {
+    const filter: Record<string, any> = {
+      tenantId,
+      imageFileIds: new mongoose.Types.ObjectId(fileId),
+    };
+    if (activeOnly) {
+      filter.active = true;
+    }
+    const count = await this.model.countDocuments(filter);
+    return count > 0;
+  }
+
+  async isProcessAreaUsed(tenantId: string, area: string): Promise<boolean> {
+    const count = await this.model.countDocuments({
+      tenantId,
+      active: true,
+      "routing.stage": area,
+    });
+    return count > 0;
+  }
+}

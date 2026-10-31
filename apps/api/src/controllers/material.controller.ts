@@ -12,15 +12,18 @@ export class MaterialController {
       type: req.query.type as string | undefined,
       watchlist: req.query.watchlist !== undefined ? req.query.watchlist === "true" : undefined,
       search: req.query.search as string | undefined,
+      status: req.query.status as string | undefined,
     };
 
-    const result = await this.materialService.listMaterials(actor.tenantId, pagination, filterParams);
+    const isSupervisor = actor.role === "supervisor";
+    const result = await this.materialService.listMaterials(actor.tenantId, pagination, filterParams, isSupervisor);
     res.json(result);
   };
 
   getMaterialById = async (req: Request, res: Response): Promise<void> => {
     const actor = req.actor!;
-    const material = await this.materialService.getMaterialById(actor.tenantId, req.params.id as string);
+    const isSupervisor = actor.role === "supervisor";
+    const material = await this.materialService.getMaterialById(actor.tenantId, req.params.id as string, isSupervisor);
     res.json({ data: material });
   };
 
@@ -87,7 +90,7 @@ export class MaterialController {
 
   deleteMaterial = async (req: Request, res: Response): Promise<void> => {
     const actor = req.actor!;
-    await this.materialService.deleteMaterial({
+    await this.materialService.deactivateMaterial({
       tenantId: actor.tenantId,
       id: req.params.id as string,
       actor: {
@@ -96,6 +99,6 @@ export class MaterialController {
         requestId: actor.requestId,
       },
     });
-    res.json({ success: true, message: "Material deleted successfully" });
+    res.json({ success: true, message: "Material deactivated successfully" });
   };
 }

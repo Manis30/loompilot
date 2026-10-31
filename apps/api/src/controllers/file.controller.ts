@@ -51,6 +51,7 @@ export class FileController {
       fileId: req.params.id as string,
       requester: {
         realm: actor.realm,
+        role: actor.role,
         clientId: actor.clientId,
         userId: actor.realm === "user" ? actor.subjectId : undefined,
       },
@@ -59,6 +60,7 @@ export class FileController {
     res.setHeader("Content-Type", fileData.mime);
     res.setHeader("Content-Length", fileData.size);
     res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(fileData.name)}"`);
+    res.setHeader("X-Content-Type-Options", "nosniff");
 
     fileData.stream.pipe(res);
   };

@@ -7,12 +7,19 @@ export class ImportJobRepository extends BaseRepository<IImportJob> {
     super(ImportJobModel);
   }
 
-  async findCompletedJob(tenantId: string, type: string, fileId?: string): Promise<IImportJob | null> {
+  async findCompletedJob(tenantId: string, type: string, fileId?: string, fileHash?: string): Promise<IImportJob | null> {
     const filter: Record<string, any> = { tenantId, type, status: "completed" };
     if (fileId) {
       filter.fileId = new Types.ObjectId(fileId);
     }
+    if (fileHash) {
+      filter.fileHash = fileHash;
+    }
     return this.findOne(tenantId, filter);
+  }
+
+  async findByHash(tenantId: string, fileHash: string): Promise<IImportJob | null> {
+    return this.findOne(tenantId, { tenantId, fileHash });
   }
 
   async createJobRecord(
@@ -23,6 +30,8 @@ export class ImportJobRepository extends BaseRepository<IImportJob> {
       rowsOk: number;
       rowsFailed: number;
       errors?: IImportError[];
+      fileHash?: string;
+      validRows?: any[];
       fileId?: string;
       createdBy: string;
     }
@@ -33,7 +42,9 @@ export class ImportJobRepository extends BaseRepository<IImportJob> {
       rowsOk: data.rowsOk,
       rowsFailed: data.rowsFailed,
       errors: data.errors,
-      fileId: data.fileId ? new Types.ObjectId(data.fileId) : new Types.ObjectId(),
+      fileHash: data.fileHash,
+      validRows: data.validRows,
+      fileId: data.fileId ? new Types.ObjectId(data.fileId) : undefined,
       createdBy: new Types.ObjectId(data.createdBy),
       version: 1,
     } as any);

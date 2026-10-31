@@ -12,7 +12,9 @@ export interface IImportJob extends BaseEntity {
   rowsOk: number;
   rowsFailed: number;
   errors?: IImportError[];
-  fileId: Types.ObjectId;
+  fileHash?: string;
+  validRows?: any[];
+  fileId?: Types.ObjectId;
   createdBy: Types.ObjectId;
 }
 
@@ -37,7 +39,9 @@ const ImportJobSchema = new Schema<IImportJob>(
     rowsOk: { type: Number, default: 0 },
     rowsFailed: { type: Number, default: 0 },
     errors: { type: [ImportErrorSchema] },
-    fileId: { type: Schema.Types.ObjectId, ref: "File", required: true },
+    fileHash: { type: String, index: true },
+    validRows: { type: Schema.Types.Mixed },
+    fileId: { type: Schema.Types.ObjectId, ref: "File" },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
     version: { type: Number, default: 1 },
   },
@@ -45,6 +49,7 @@ const ImportJobSchema = new Schema<IImportJob>(
 );
 
 ImportJobSchema.index({ tenantId: 1, createdAt: -1 });
+ImportJobSchema.index({ tenantId: 1, fileHash: 1 });
 
 export const ImportJobModel: mongoose.Model<IImportJob> =
   (mongoose.models.ImportJob as mongoose.Model<IImportJob>) ||

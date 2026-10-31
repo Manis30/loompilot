@@ -6,7 +6,7 @@ export interface IMachine extends BaseEntity {
   machineName: string;
   processArea: string;
   capacityUnitsPerDay: number;
-  currentStatus: "available" | "maint" | "breakdown";
+  currentStatus: "available" | "maint" | "breakdown" | "inactive";
   machineType?: string;
 }
 
@@ -19,7 +19,7 @@ const MachineSchema = new Schema<IMachine>(
     capacityUnitsPerDay: { type: Number, required: true },
     currentStatus: {
       type: String,
-      enum: ["available", "maint", "breakdown"],
+      enum: ["available", "maint", "breakdown", "inactive"],
       default: "available",
       required: true,
     },

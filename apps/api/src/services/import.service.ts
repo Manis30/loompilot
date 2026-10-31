@@ -8,10 +8,23 @@ import { MarketPriceRepository } from "../repositories/market-price.repository.j
 import { AuditService } from "./audit.service.js";
 import { AppError } from "../errors/app-error.js";
 import { ErrorCode } from "@loompilot/shared";
+import { IImportJob } from "../models/platform/import-job.model.js";
 
 export type ImportType = "materials" | "suppliers" | "machines" | "products" | "market_prices";
 
+const VALID_IMPORT_TYPES = new Set<ImportType>([
+  "materials",
+  "suppliers",
+  "machines",
+  "products",
+  "market_prices",
+]);
+
+export const MAX_IMPORT_ROWS = 1000;
+export const MAX_IMPORT_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+
 export interface DryRunReport {
+  jobId: string;
   type: ImportType;
   totalRows: number;
   rowsOk: number;
@@ -106,13 +119,31 @@ export class ImportService {
     tenantId: string;
     type: ImportType;
     csvContent: string;
+    fileId?: string;
+    actor: { id: string; email?: string; ip?: string; requestId?: string };
   }): Promise<DryRunReport> {
-    const { type, csvContent } = params;
-    const fileHash = crypto.createHash("sha256").update(csvContent).digest("hex");
-    const rows = this.parseCsv(csvContent);
+    const { tenantId, type, csvContent, fileId, actor } = params;
 
+    if (!VALID_IMPORT_TYPES.has(type)) {
+      throw new AppError(ErrorCode.VALIDATION_FAILED, `Import type '${type}' is not supported`, 400);
+    }
+
+    if (Buffer.byteLength(csvContent, "utf8") > MAX_IMPORT_SIZE_BYTES) {
+      throw new AppError(ErrorCode.VALIDATION_FAILED, `CSV content exceeds maximum size of 5MB`, 400);
+    }
+
+    const rows = this.parseCsv(csvContent);
+    if (rows.length > MAX_IMPORT_ROWS) {
+      throw new AppError(
+        ErrorCode.VALIDATION_FAILED,
+        `CSV contains ${rows.length} rows, which exceeds the maximum limit of ${MAX_IMPORT_ROWS} rows`,
+        400
+      );
+    }
+
+    const fileHash = crypto.createHash("sha256").update(csvContent).digest("hex");
     const errors: Array<{ row: number; error: string }> = [];
-    let rowsOk = 0;
+    const validRows: Array<Record<string, string>> = [];
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -121,14 +152,28 @@ export class ImportService {
       if (err) {
         errors.push({ row: i + 2, error: err });
       } else {
-        rowsOk++;
+        validRows.push(row);
       }
     }
 
+    // Persist dry-run result in importJobs so commit doesn't need re-upload
+    const jobRecord = await this.importJobRepo.createJobRecord(tenantId, {
+      type,
+      status: "pending",
+      rowsOk: validRows.length,
+      rowsFailed: errors.length,
+      errors,
+      fileHash,
+      validRows,
+      fileId,
+      createdBy: actor.id,
+    });
+
     return {
+      jobId: String(jobRecord._id),
       type,
       totalRows: rows.length,
-      rowsOk,
+      rowsOk: validRows.length,
       rowsFailed: errors.length,
       errors,
       fileHash,
@@ -137,41 +182,52 @@ export class ImportService {
 
   async commit(params: {
     tenantId: string;
-    type: ImportType;
-    csvContent: string;
-    fileHash: string;
+    jobId?: string;
+    fileHash?: string;
+    type?: ImportType;
+    csvContent?: string;
     fileId?: string;
     actor: { id: string; email?: string; ip?: string; requestId?: string };
-  }) {
-    const { tenantId, type, csvContent, fileHash, fileId, actor } = params;
+  }): Promise<IImportJob> {
+    const { tenantId, jobId, fileHash, actor } = params;
 
-    // Idempotency: verify hash and check if already processed
-    const computedHash = crypto.createHash("sha256").update(csvContent).digest("hex");
-    if (computedHash !== fileHash) {
-      throw new AppError(ErrorCode.VALIDATION_FAILED, "File hash does not match uploaded content", 400);
+    let job: IImportJob | null = null;
+    if (jobId) {
+      job = await this.importJobRepo.findById(tenantId, jobId);
+    } else if (fileHash) {
+      job = await this.importJobRepo.findByHash(tenantId, fileHash);
     }
 
-    const existingJob = await this.importJobRepo.findCompletedJob(tenantId, type, fileId);
-
-    if (existingJob) {
-      return existingJob; // Idempotent return
+    // If job was already committed, return immediately for idempotency
+    if (job && job.status === "completed") {
+      return job;
     }
 
-    const rows = this.parseCsv(csvContent);
-    const errors: Array<{ row: number; error: string }> = [];
-    let rowsOk = 0;
+    // If no stored job was found, but csvContent was provided as fallback
+    if (!job && params.csvContent && fileHash && params.type) {
+      const dryResult = await this.dryRun({
+        tenantId,
+        type: params.type,
+        csvContent: params.csvContent,
+        fileId: params.fileId,
+        actor,
+      });
+      job = await this.importJobRepo.findById(tenantId, dryResult.jobId);
+    }
 
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row) continue;
-      const rowNum = i + 2;
-      const err = this.validateRow(type, row, rowNum);
+    if (!job) {
+      throw new AppError(
+        ErrorCode.NOT_FOUND,
+        "No matching import dry-run job found to commit. Run dry-run first.",
+        404
+      );
+    }
 
-      if (err) {
-        errors.push({ row: rowNum, error: err });
-        continue;
-      }
+    const type = job.type as ImportType;
+    const validRows = job.validRows || [];
+    const errors = job.errors || [];
 
+    for (const row of validRows) {
       try {
         if (type === "materials") {
           await this.materialRepo.create(tenantId, {
@@ -182,6 +238,7 @@ export class ImportService {
             reservedQty: 0,
             reorderLevel: row.reorderLevel ? Number(row.reorderLevel) : 0,
             unit: row.unit || "pcs",
+            status: "active",
             version: 1,
           } as any);
         } else if (type === "suppliers") {
@@ -219,36 +276,34 @@ export class ImportService {
             source: row.source || "historical_import",
             sourceType: (row.sourceType as any) || "supplier_quote",
             unitPricePaise: parseInt(row.unitPricePaise || "0", 10),
-            trust: "trusted",
+            trust: "normal",
             verificationStatus: "verified",
           });
         }
-        rowsOk++;
-      } catch (insertErr: any) {
-        errors.push({ row: rowNum, error: insertErr.message });
+      } catch (err: any) {
+        errors.push({ row: 0, error: `Commit error: ${err.message}` });
       }
     }
 
-    const job = await this.importJobRepo.createJobRecord(tenantId, {
-      type,
-      status: errors.length === 0 ? "completed" : rowsOk > 0 ? "completed" : "failed",
-      rowsOk,
-      rowsFailed: errors.length,
+    const updatedJob = await this.importJobRepo.update(tenantId, String(job._id), {
+      status: "completed",
       errors,
-      fileId,
-      createdBy: actor.id,
     });
 
     await this.auditService.log({
       tenantId,
       actor: { id: actor.id, type: "user", email: actor.email },
-      action: "CSV_IMPORT_COMMITTED",
+      action: "IMPORT_COMMITTED",
       entity: { collection: "importJobs", id: String(job._id) },
-      after: { type, rowsOk, rowsFailed: errors.length },
+      after: {
+        type: job.type,
+        rowsOk: job.rowsOk,
+        rowsFailed: errors.length,
+      },
       ip: actor.ip,
       requestId: actor.requestId,
     });
 
-    return job;
+    return updatedJob!;
   }
 }

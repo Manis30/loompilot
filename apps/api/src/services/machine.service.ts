@@ -134,14 +134,15 @@ export class MachineService {
     const { tenantId, id, actor } = params;
     const before = await this.getMachineById(tenantId, id);
 
-    await this.machineRepo.delete(tenantId, id);
+    await this.machineRepo.update(tenantId, id, { currentStatus: "inactive" });
 
     await this.auditService.log({
       tenantId,
       actor: { id: actor.id, type: "user", email: actor.email },
-      action: "MACHINE_DELETED",
+      action: "MACHINE_DEACTIVATED",
       entity: { collection: "machines", id },
       before,
+      after: { currentStatus: "inactive" },
       ip: actor.ip,
       requestId: actor.requestId,
     });

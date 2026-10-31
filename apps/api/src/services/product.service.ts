@@ -33,6 +33,9 @@ export class ProductService {
       if (!material) {
         throw new AppError(ErrorCode.VALIDATION_FAILED, `Material '${item.materialId}' does not exist`, 400);
       }
+      if (material.status === "inactive") {
+        throw new AppError(ErrorCode.VALIDATION_FAILED, `Material '${item.materialId}' is inactive and cannot be selected`, 400);
+      }
 
       if (item.qtyPerUnit <= 0) {
         throw new AppError(ErrorCode.VALIDATION_FAILED, `BOM qtyPerUnit must be positive`, 400);
@@ -205,14 +208,15 @@ export class ProductService {
     const { tenantId, id, actor } = params;
     const before = await this.getProductById(tenantId, id);
 
-    await this.productRepo.delete(tenantId, id);
+    await this.productRepo.updateProductWithDetails(tenantId, id, { active: false });
 
     await this.auditService.log({
       tenantId,
       actor: { id: actor.id, type: "user", email: actor.email },
-      action: "PRODUCT_DELETED",
+      action: "PRODUCT_DEACTIVATED",
       entity: { collection: "products", id },
       before,
+      after: { active: false },
       ip: actor.ip,
       requestId: actor.requestId,
     });
