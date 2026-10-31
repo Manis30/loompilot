@@ -9,6 +9,13 @@ import {
   IdParamSchema,
   AdminCreateOrderSchema,
   OrderDecisionSchema,
+  OrderAssignSupervisorsSchema,
+  OrderHoldSchema,
+  OrderCancelSchema,
+  OrderCreatePaymentOrderSchema,
+  OrderManualReceiptSchema,
+  OrderReverseReceiptSchema,
+  OrderDeliverySchema,
 } from "../validators/index.js";
 
 export const orderRouter: Router = Router();
@@ -58,4 +65,92 @@ orderRouter.post(
   authorize("POST /api/v1/orders/:id/quotation/send"),
   validateParams(IdParamSchema),
   controller.sendQuotation
+);
+
+// Phase D: Handover, Controls, Payments & Deliveries
+orderRouter.post(
+  "/:id/assign",
+  idempotencyMiddleware,
+  authorize("POST /api/v1/orders/:id/assign"),
+  validateParams(IdParamSchema),
+  validateBody(OrderAssignSupervisorsSchema),
+  controller.assignSupervisors
+);
+
+orderRouter.post(
+  "/:id/start",
+  idempotencyMiddleware,
+  authorize("POST /api/v1/orders/:id/start"),
+  validateParams(IdParamSchema),
+  controller.startProduction
+);
+
+orderRouter.post(
+  "/:id/hold",
+  idempotencyMiddleware,
+  authorize("POST /api/v1/orders/:id/hold"),
+  validateParams(IdParamSchema),
+  validateBody(OrderHoldSchema),
+  controller.holdOrder
+);
+
+orderRouter.post(
+  "/:id/resume",
+  idempotencyMiddleware,
+  authorize("POST /api/v1/orders/:id/resume"),
+  validateParams(IdParamSchema),
+  controller.resumeOrder
+);
+
+orderRouter.post(
+  "/:id/cancel",
+  idempotencyMiddleware,
+  authorize("POST /api/v1/orders/:id/cancel"),
+  validateParams(IdParamSchema),
+  validateBody(OrderCancelSchema),
+  controller.cancelOrder
+);
+
+orderRouter.post(
+  "/:id/ready-for-delivery",
+  idempotencyMiddleware,
+  authorize("POST /api/v1/orders/:id/ready-for-delivery"),
+  validateParams(IdParamSchema),
+  controller.markReadyForDelivery
+);
+
+orderRouter.post(
+  "/:id/payments/create-order",
+  idempotencyMiddleware,
+  authorize("POST /api/v1/orders/:id/payments/create-order"),
+  validateParams(IdParamSchema),
+  validateBody(OrderCreatePaymentOrderSchema),
+  controller.createPaymentOrder
+);
+
+orderRouter.post(
+  "/:id/payments/manual-receipt",
+  idempotencyMiddleware,
+  authorize("POST /api/v1/orders/:id/payments/manual-receipt"),
+  validateParams(IdParamSchema),
+  validateBody(OrderManualReceiptSchema),
+  controller.recordManualReceipt
+);
+
+orderRouter.post(
+  "/:id/payments/reverse",
+  idempotencyMiddleware,
+  authorize("POST /api/v1/orders/:id/payments/reverse"),
+  validateParams(IdParamSchema),
+  validateBody(OrderReverseReceiptSchema),
+  controller.reverseReceipt
+);
+
+orderRouter.post(
+  "/:id/deliveries",
+  idempotencyMiddleware,
+  authorize("POST /api/v1/orders/:id/deliveries"),
+  validateParams(IdParamSchema),
+  validateBody(OrderDeliverySchema),
+  controller.recordDelivery
 );

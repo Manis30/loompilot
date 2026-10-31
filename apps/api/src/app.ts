@@ -31,6 +31,7 @@ import { auditRouter } from "./routes/audit.routes.js";
 import { clientOrderRouter } from "./routes/client-order.routes.js";
 import { orderRouter } from "./routes/order.routes.js";
 import { internalGatewayRouter } from "./routes/internal-gateway.routes.js";
+import { webhookRouter } from "./routes/webhook.routes.js";
 import { AppContainer, getContainer } from "./container.js";
 
 export function createApp(container: AppContainer = getContainer()): Express {
@@ -78,7 +79,14 @@ export function createApp(container: AppContainer = getContainer()): Express {
   app.use(createRateLimiter(container.redisClient, env));
 
   // 5. Request parsing with configurable body size limit & cookies
-  app.use(express.json({ limit: env.BODY_LIMIT }));
+  app.use(
+    express.json({
+      limit: env.BODY_LIMIT,
+      verify: (req: any, _res, buf) => {
+        req.rawBody = buf.toString();
+      },
+    })
+  );
   app.use(express.urlencoded({ extended: true, limit: env.BODY_LIMIT }));
   app.use(cookieParser());
 
@@ -135,6 +143,9 @@ export function createApp(container: AppContainer = getContainer()): Express {
   app.use("/api/v1/client/orders", clientOrderRouter);
   app.use("/api/v1/orders", orderRouter);
   app.use("/internal/v1", internalGatewayRouter);
+
+  // Phase D: Razorpay Webhooks
+  app.use("/webhooks", webhookRouter);
 
   // 10. Unmatched routes -> 404
   app.use((req) => {

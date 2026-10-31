@@ -6,10 +6,15 @@ import { ProductRepository } from "../repositories/product.repository.js";
 import { SettingsRepository } from "../repositories/settings.repository.js";
 import { NotificationRepository } from "../repositories/notification.repository.js";
 import { OutboxRepository } from "../repositories/outbox.repository.js";
+import { UserRepository } from "../repositories/user.repository.js";
+import { MaterialRepository } from "../repositories/material.repository.js";
+import { StockMovementRepository } from "../repositories/stock-movement.repository.js";
 import { FileService } from "./file.service.js";
 import { QuotationPdfService } from "./quotation-pdf.service.js";
 import { AuditService } from "./audit.service.js";
 import { IAgentsClient } from "../interfaces/agents-client.interface.js";
+import { IUnitOfWork } from "../interfaces/unit-of-work.interface.js";
+import { IPaymentGateway } from "../interfaces/payment-gateway.interface.js";
 import { getContainer } from "../container.js";
 import { AppError } from "../errors/app-error.js";
 import {
@@ -23,6 +28,7 @@ import {
 } from "@loompilot/shared";
 import { PaginationQuery, PaginatedResult } from "../utils/pagination.js";
 import { getTodayBusinessDate } from "../utils/dates.js";
+import { logger } from "../utils/logger.js";
 
 export function toClientOrderDto(order: any): any {
   const isQuotationVisible =
@@ -63,6 +69,28 @@ export function toClientOrderDto(order: any): any {
             : undefined,
         }
       : undefined,
+    financials: order.financials
+      ? {
+          totalAmountPaise: order.quotation?.totalPaise || 0,
+          totalPaidPaise: order.financials.totalPaidPaise || 0,
+          amountDuePaise: Math.max(
+            0,
+            (order.quotation?.totalPaise || 0) - (order.financials.totalPaidPaise || 0)
+          ),
+          advanceReceivedPaise: order.financials.advanceReceivedPaise || 0,
+          milestones: order.financials.milestones?.map((m: any) => ({
+            milestone: m.milestone,
+            trigger: m.trigger,
+            stage: m.stage,
+            amountPaise: m.amountPaise,
+            dueDate: m.dueDate,
+            status: m.status,
+            receivedPaise: m.receivedPaise || 0,
+            duePaise: Math.max(0, m.amountPaise - (m.receivedPaise || 0)),
+            razorpayOrderId: m.razorpayOrderId,
+          })),
+        }
+      : undefined,
     production: order.production
       ? {
           phase: order.production.phase,
@@ -70,6 +98,13 @@ export function toClientOrderDto(order: any): any {
           producedQty: order.production.producedQty,
         }
       : undefined,
+    deliveries: order.deliveries?.map((d: any) => ({
+      deliveryDate: d.deliveryDate,
+      qty: d.qty,
+      invoiceNo: d.invoiceNo,
+      invoiceAmountPaise: d.invoiceAmountPaise,
+      onTime: d.onTime,
+    })),
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
   };
@@ -93,7 +128,12 @@ export class OrderService {
     private readonly fileService = new FileService(),
     private readonly pdfService = new QuotationPdfService(),
     private readonly auditService = new AuditService(),
-    private agentsClient?: IAgentsClient
+    private readonly userRepo = new UserRepository(),
+    private readonly materialRepo = new MaterialRepository(),
+    private readonly stockMovementRepo = new StockMovementRepository(),
+    private agentsClient?: IAgentsClient,
+    private unitOfWork?: IUnitOfWork,
+    private paymentGateway?: IPaymentGateway
   ) {}
 
   private getAgentsClient(): IAgentsClient {
@@ -101,6 +141,20 @@ export class OrderService {
       this.agentsClient = getContainer().agentsClient;
     }
     return this.agentsClient;
+  }
+
+  private getUnitOfWork(): IUnitOfWork {
+    if (!this.unitOfWork) {
+      this.unitOfWork = getContainer().unitOfWork;
+    }
+    return this.unitOfWork;
+  }
+
+  private getPaymentGateway(): IPaymentGateway {
+    if (!this.paymentGateway) {
+      this.paymentGateway = getContainer().paymentGateway;
+    }
+    return this.paymentGateway;
   }
 
   async submitOrder(params: {
@@ -883,5 +937,1107 @@ export class OrderService {
     }
 
     return remindersSent;
+  }
+
+  // ==========================================================================
+  // Phase D: Handover, Controls, Payments & Deliveries
+  // ==========================================================================
+
+  async assignSupervisors(params: {
+    tenantId: string;
+    orderId: string;
+    assignments: Array<{
+      supervisorId: string;
+      processes?: string[];
+      processArea?: string;
+    }>;
+    overrideReason?: string;
+    notes?: string;
+    actor: { id: string; email?: string; ip?: string; requestId?: string; type: "user" };
+  }): Promise<any> {
+    const order = await this.ordersRepo.findById(params.tenantId, params.orderId);
+    if (!order) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+    }
+
+    if (
+      order.status !== OrderStatus.CLIENT_ACCEPTED &&
+      order.status !== OrderStatus.ASSIGNED
+    ) {
+      throw new AppError(
+        ErrorCode.INVALID_TRANSITION,
+        `Cannot assign supervisors: order status is '${order.status}'; must be 'client_accepted' or 'assigned'`,
+        400
+      );
+    }
+
+    const processPlan = order.quotation?.processPlan;
+    if (!processPlan || processPlan.length === 0) {
+      throw new AppError(ErrorCode.PLAN_MISSING, "Quotation process plan is missing or empty", 400);
+    }
+
+    const settings = await this.settingsRepo.getSettings(params.tenantId);
+    const configuredAreas = new Set(settings?.processConfig?.map((p: any) => p.area) || []);
+
+    // Advance Gate validation
+    const advanceMilestones = (order.financials?.milestones || []).filter(
+      (m: any) => m.trigger === "advance"
+    );
+    let requiredAdvancePaise = 0;
+    if (advanceMilestones.length > 0) {
+      requiredAdvancePaise = advanceMilestones.reduce(
+        (sum: number, m: any) => sum + (m.amountPaise || 0),
+        0
+      );
+    } else if (settings?.advancePct && order.quotation?.totalPaise) {
+      requiredAdvancePaise = Math.round((order.quotation.totalPaise * settings.advancePct) / 100);
+    }
+
+    const advanceReceivedPaise = order.financials?.advanceReceivedPaise || 0;
+    if (advanceReceivedPaise < requiredAdvancePaise) {
+      if (!params.overrideReason || params.overrideReason.trim() === "") {
+        throw new AppError(
+          ErrorCode.ADVANCE_NOT_RECEIVED,
+          `Advance milestone payment of ₹${(requiredAdvancePaise / 100).toFixed(
+            2
+          )} required before assignment (received: ₹${(advanceReceivedPaise / 100).toFixed(2)})`,
+          400
+        );
+      }
+    }
+
+    // Validate each supervisor and their assigned processes
+    const mappedAssignments: Array<{ supervisorId: any; processes: string[] }> = [];
+    for (const a of params.assignments) {
+      const user = await this.userRepo.findById(params.tenantId, a.supervisorId);
+      if (!user) {
+        throw new AppError(ErrorCode.NOT_FOUND, `Supervisor ${a.supervisorId} not found`, 404);
+      }
+      if (user.status !== "active") {
+        throw new AppError(
+          ErrorCode.VALIDATION_FAILED,
+          `Supervisor ${user.name} is inactive or locked`,
+          400
+        );
+      }
+
+      const procs =
+        a.processes && a.processes.length > 0
+          ? a.processes
+          : a.processArea
+          ? [a.processArea]
+          : [];
+
+      if (procs.length === 0) {
+        throw new AppError(
+          ErrorCode.VALIDATION_FAILED,
+          `No processes specified for supervisor ${user.name}`,
+          400
+        );
+      }
+
+      for (const p of procs) {
+        if (!configuredAreas.has(p)) {
+          throw new AppError(
+            ErrorCode.VALIDATION_FAILED,
+            `Process area '${p}' is not configured in tenant settings`,
+            400
+          );
+        }
+      }
+
+      if (!params.overrideReason && user.role === "supervisor") {
+        const userAreas = new Set(user.processAreas || []);
+        for (const p of procs) {
+          if (!userAreas.has(p)) {
+            throw new AppError(
+              ErrorCode.VALIDATION_FAILED,
+              `Supervisor ${user.name} is not certified/assigned for process area '${p}'`,
+              400
+            );
+          }
+        }
+      }
+
+      mappedAssignments.push({ supervisorId: a.supervisorId, processes: procs });
+    }
+
+    return this.getUnitOfWork().withTransaction(async (tx) => {
+      // Reserve stock for BOM if not already reserved
+      const activeRes = (order.reservations || []).filter((r: any) => r.status === "active");
+      if (activeRes.length === 0) {
+        const materialReqs: Array<{ materialId: string; qty: number }> = [];
+
+        if (
+          order.feasibility?.materialRequirements &&
+          order.feasibility.materialRequirements.length > 0
+        ) {
+          for (const req of order.feasibility.materialRequirements) {
+            materialReqs.push({ materialId: String(req.materialId), qty: req.req });
+          }
+        } else if (order.productId) {
+          const product = await this.productRepo.findById(params.tenantId, String(order.productId));
+          if (product?.bom) {
+            for (const item of product.bom) {
+              const wastageMult = 1 + (item.wastage || 0) / 100;
+              const reqQty = Math.ceil(item.qtyPerUnit * order.quantity * wastageMult);
+              materialReqs.push({ materialId: String(item.materialId), qty: reqQty });
+            }
+          }
+        }
+
+        for (const req of materialReqs) {
+          const updatedMat = await this.materialRepo.reserveStock(
+            params.tenantId,
+            req.materialId,
+            req.qty,
+            tx
+          );
+          if (!updatedMat) {
+            throw new AppError(
+              ErrorCode.VALIDATION_FAILED,
+              `Insufficient unreserved stock for material ID ${req.materialId} (required: ${req.qty})`,
+              400
+            );
+          }
+
+          await this.stockMovementRepo.recordMovement(
+            params.tenantId,
+            {
+              materialId: req.materialId,
+              type: "reserve",
+              qty: req.qty,
+              qtyAfter: updatedMat.stockQty - updatedMat.reservedQty,
+              orderId: params.orderId,
+            },
+            tx
+          );
+
+          await this.ordersRepo.addReservation(
+            params.tenantId,
+            params.orderId,
+            {
+              materialId: req.materialId,
+              qty: req.qty,
+              status: "active",
+            },
+            tx
+          );
+        }
+      }
+
+      await this.ordersRepo.assignProduction(
+        params.tenantId,
+        params.orderId,
+        {
+          assignedSupervisors: mappedAssignments,
+          processPlan,
+          assignedBy: params.actor.id as any,
+        },
+        tx
+      );
+
+      if (order.status !== OrderStatus.ASSIGNED) {
+        await this.ordersRepo.updateStatus(
+          params.tenantId,
+          params.orderId,
+          OrderStatus.ASSIGNED,
+          {
+            role: "admin",
+            reason: params.overrideReason
+              ? `Assigned with override: ${params.overrideReason}`
+              : "Assigned supervisors to production plan",
+            by: params.actor.id as any,
+          },
+          tx
+        );
+      }
+
+      await this.auditService.log({
+        tenantId: params.tenantId,
+        actor: { id: params.actor.id, type: "user" },
+        action: order.status === OrderStatus.ASSIGNED ? "ORDER_REASSIGNED" : "ORDER_ASSIGNED",
+        entity: { collection: "orders", id: params.orderId },
+        after: {
+          assignedSupervisors: mappedAssignments,
+          overrideReason: params.overrideReason,
+        },
+        requestId: params.actor.requestId,
+      });
+
+      for (const a of mappedAssignments) {
+        await this.notificationRepo.createNotification(
+          params.tenantId,
+          {
+            recipient: { userId: a.supervisorId },
+            kind: "notification",
+            type: "production_assignment",
+            channel: "in_app",
+            title: `Assigned to Order ${order.orderNumber}`,
+            body: `You are assigned to order ${order.orderNumber} for stages: ${a.processes.join(
+              ", "
+            )}`,
+            entity: { collection: "orders", id: params.orderId },
+            dedupeKey: `assign_${order._id}_${a.supervisorId}`,
+          },
+          tx
+        );
+
+        await this.outboxRepo.createMessage(
+          params.tenantId,
+          {
+            recipient: { userId: a.supervisorId },
+            channel: "email",
+            payload: {
+              subject: `Assigned: Order ${order.orderNumber}`,
+              orderNumber: order.orderNumber,
+              processes: a.processes,
+            },
+          },
+          tx
+        );
+      }
+
+      const freshOrder = await this.ordersRepo.findById(params.tenantId, params.orderId);
+      return toAdminOrderDto(freshOrder);
+    });
+  }
+
+  async startProduction(params: {
+    tenantId: string;
+    orderId: string;
+    actor: { id: string; email?: string; ip?: string; requestId?: string; role?: "admin" | "supervisor" };
+  }): Promise<any> {
+    const order = await this.ordersRepo.findById(params.tenantId, params.orderId);
+    if (!order) throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+
+    if (order.status !== OrderStatus.ASSIGNED) {
+      throw new AppError(
+        ErrorCode.INVALID_TRANSITION,
+        `Cannot start production on order with status '${order.status}'; must be 'assigned'`,
+        400
+      );
+    }
+
+    return this.getUnitOfWork().withTransaction(async (tx) => {
+      await this.ordersRepo.acknowledgeAndStartProduction(
+        params.tenantId,
+        params.orderId,
+        params.actor.id,
+        tx
+      );
+
+      const updated = await this.ordersRepo.updateStatus(
+        params.tenantId,
+        params.orderId,
+        OrderStatus.IN_PRODUCTION,
+        {
+          role: params.actor.role || "supervisor",
+          reason: "Production acknowledged and started",
+          by: params.actor.id as any,
+        },
+        tx
+      );
+
+      await this.auditService.log({
+        tenantId: params.tenantId,
+        actor: { id: params.actor.id, type: "user" },
+        action: "ORDER_PRODUCTION_STARTED",
+        entity: { collection: "orders", id: params.orderId },
+        requestId: params.actor.requestId,
+      });
+
+      return toAdminOrderDto(updated);
+    });
+  }
+
+  async holdOrder(params: {
+    tenantId: string;
+    orderId: string;
+    reason: string;
+    actor: { id: string; email?: string; ip?: string; requestId?: string; type: "user" };
+  }): Promise<any> {
+    const order = await this.ordersRepo.findById(params.tenantId, params.orderId);
+    if (!order) throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+
+    return this.getUnitOfWork().withTransaction(async (tx) => {
+      const updated = await this.ordersRepo.updateStatus(
+        params.tenantId,
+        params.orderId,
+        OrderStatus.ON_HOLD,
+        {
+          role: "admin",
+          reason: params.reason,
+          by: params.actor.id as any,
+        },
+        tx
+      );
+
+      await this.auditService.log({
+        tenantId: params.tenantId,
+        actor: { id: params.actor.id, type: "user" },
+        action: "ORDER_HELD",
+        entity: { collection: "orders", id: params.orderId },
+        after: { reason: params.reason },
+        requestId: params.actor.requestId,
+      });
+
+      return toAdminOrderDto(updated);
+    });
+  }
+
+  async resumeOrder(params: {
+    tenantId: string;
+    orderId: string;
+    actor: { id: string; email?: string; ip?: string; requestId?: string; type: "user" };
+  }): Promise<any> {
+    const order = await this.ordersRepo.findById(params.tenantId, params.orderId);
+    if (!order) throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+
+    if (order.status !== OrderStatus.ON_HOLD) {
+      throw new AppError(
+        ErrorCode.INVALID_TRANSITION,
+        `Cannot resume order with status '${order.status}'; must be 'on_hold'`,
+        400
+      );
+    }
+
+    const targetStatus =
+      order.production?.assignmentStatus === "started"
+        ? OrderStatus.IN_PRODUCTION
+        : OrderStatus.ASSIGNED;
+
+    return this.getUnitOfWork().withTransaction(async (tx) => {
+      const updated = await this.ordersRepo.updateStatus(
+        params.tenantId,
+        params.orderId,
+        targetStatus,
+        {
+          role: "admin",
+          reason: "Order resumed by admin",
+          by: params.actor.id as any,
+        },
+        tx
+      );
+
+      await this.auditService.log({
+        tenantId: params.tenantId,
+        actor: { id: params.actor.id, type: "user" },
+        action: "ORDER_RESUMED",
+        entity: { collection: "orders", id: params.orderId },
+        after: { targetStatus },
+        requestId: params.actor.requestId,
+      });
+
+      return toAdminOrderDto(updated);
+    });
+  }
+
+  async cancelOrder(params: {
+    tenantId: string;
+    orderId: string;
+    reason: string;
+    actor: { id: string; email?: string; ip?: string; requestId?: string; type: "user" };
+  }): Promise<any> {
+    const order = await this.ordersRepo.findById(params.tenantId, params.orderId);
+    if (!order) throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+
+    return this.getUnitOfWork().withTransaction(async (tx) => {
+      const activeRes = (order.reservations || []).filter((r: any) => r.status === "active");
+      for (const res of activeRes) {
+        await this.materialRepo.releaseStock(
+          params.tenantId,
+          String(res.materialId),
+          res.qty,
+          tx
+        );
+        await this.stockMovementRepo.recordMovement(
+          params.tenantId,
+          {
+            materialId: String(res.materialId),
+            type: "release",
+            qty: res.qty,
+            qtyAfter: 0,
+            orderId: params.orderId,
+          },
+          tx
+        );
+      }
+      await this.ordersRepo.releaseReservations(params.tenantId, params.orderId, tx);
+
+      const updated = await this.ordersRepo.updateStatus(
+        params.tenantId,
+        params.orderId,
+        OrderStatus.CANCELLED,
+        {
+          role: "admin",
+          reason: params.reason,
+          by: params.actor.id as any,
+        },
+        tx
+      );
+
+      await this.auditService.log({
+        tenantId: params.tenantId,
+        actor: { id: params.actor.id, type: "user" },
+        action: "ORDER_CANCELLED",
+        entity: { collection: "orders", id: params.orderId },
+        after: { reason: params.reason },
+        requestId: params.actor.requestId,
+      });
+
+      return toAdminOrderDto(updated);
+    });
+  }
+
+  async markReadyForDelivery(params: {
+    tenantId: string;
+    orderId: string;
+    actor: { id: string; email?: string; ip?: string; requestId?: string; type: "user" };
+  }): Promise<any> {
+    const order = await this.ordersRepo.findById(params.tenantId, params.orderId);
+    if (!order) throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+
+    if (order.status !== OrderStatus.IN_PRODUCTION) {
+      throw new AppError(
+        ErrorCode.INVALID_TRANSITION,
+        `Cannot mark ready for delivery: order is in '${order.status}' status, must be 'in_production'`,
+        400
+      );
+    }
+
+    return this.getUnitOfWork().withTransaction(async (tx) => {
+      const updated = await this.ordersRepo.updateStatus(
+        params.tenantId,
+        params.orderId,
+        OrderStatus.READY_FOR_DELIVERY,
+        {
+          role: "admin",
+          reason: "Marked ready for delivery by admin",
+          by: params.actor.id as any,
+        },
+        tx
+      );
+
+      await this.auditService.log({
+        tenantId: params.tenantId,
+        actor: { id: params.actor.id, type: "user" },
+        action: "ORDER_READY_FOR_DELIVERY",
+        entity: { collection: "orders", id: params.orderId },
+        requestId: params.actor.requestId,
+      });
+
+      return toAdminOrderDto(updated);
+    });
+  }
+
+  async createPaymentOrder(params: {
+    tenantId: string;
+    orderId: string;
+    milestoneIndex?: number;
+    notes?: Record<string, string>;
+    isClient?: boolean;
+    clientId?: string;
+  }): Promise<any> {
+    const order = await this.ordersRepo.findById(params.tenantId, params.orderId);
+    if (!order) throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+
+    if (params.isClient && params.clientId && String(order.clientId) !== params.clientId) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+    }
+
+    const milestones = order.financials?.milestones || [];
+    let mIndex = params.milestoneIndex;
+    if (mIndex === undefined) {
+      mIndex = milestones.findIndex((m: any) => m.status !== "received");
+      if (mIndex === -1) mIndex = 0;
+    }
+
+    const milestone = milestones[mIndex];
+    if (!milestone) {
+      throw new AppError(ErrorCode.NOT_FOUND, `Milestone index ${mIndex} not found on order`, 404);
+    }
+
+    const receivedPaise = milestone.receivedPaise || 0;
+    const amountDue = milestone.amountPaise - receivedPaise;
+    if (amountDue <= 0) {
+      throw new AppError(ErrorCode.VALIDATION_FAILED, "Milestone is already fully paid", 400);
+    }
+
+    const gatewayResult = await this.getPaymentGateway().createOrder({
+      amountPaise: amountDue,
+      currency: "INR",
+      receipt: `order_${order._id}_m${mIndex}`,
+      notes: {
+        orderId: params.orderId,
+        tenantId: params.tenantId,
+        milestoneIndex: String(mIndex),
+        ...(params.notes || {}),
+      },
+    });
+
+    await this.ordersRepo.setMilestoneRazorpayOrderId(
+      params.tenantId,
+      params.orderId,
+      mIndex,
+      gatewayResult.gatewayOrderId
+    );
+
+    const env = getContainer().env;
+    return {
+      gatewayOrderId: gatewayResult.gatewayOrderId,
+      amountPaise: gatewayResult.amountPaise,
+      currency: gatewayResult.currency,
+      status: gatewayResult.status,
+      milestoneIndex: mIndex,
+      keyId: env.RAZORPAY_KEY_ID || "rzp_test_key",
+    };
+  }
+
+  async recordManualReceipt(params: {
+    tenantId: string;
+    orderId: string;
+    milestoneIndex: number;
+    amountPaise: number;
+    method?: "razorpay" | "neft" | "rtgs" | "upi" | "cheque" | "cash";
+    mode?: "razorpay" | "neft" | "rtgs" | "upi" | "cheque" | "cash";
+    ref: string;
+    date?: string;
+    notes?: string;
+    actor: { id: string; email?: string; ip?: string; requestId?: string; type: "user" };
+  }): Promise<any> {
+    const order = await this.ordersRepo.findById(params.tenantId, params.orderId);
+    if (!order) throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+
+    const milestone = order.financials?.milestones?.[params.milestoneIndex];
+    if (!milestone) {
+      throw new AppError(
+        ErrorCode.NOT_FOUND,
+        `Milestone index ${params.milestoneIndex} not found`,
+        404
+      );
+    }
+
+    const currentReceived = milestone.receivedPaise || 0;
+    if (currentReceived + params.amountPaise > milestone.amountPaise) {
+      throw new AppError(
+        ErrorCode.OVERPAYMENT,
+        `Payment amount of ₹${(params.amountPaise / 100).toFixed(
+          2
+        )} exceeds remaining due of ₹${(
+          (milestone.amountPaise - currentReceived) /
+          100
+        ).toFixed(2)} for milestone '${milestone.milestone}'`,
+        400
+      );
+    }
+
+    const paymentMethod = params.method || params.mode || "neft";
+    const paymentDate = params.date || getTodayBusinessDate();
+
+    return this.getUnitOfWork().withTransaction(async (tx) => {
+      const updated = await this.ordersRepo.recordPaymentReceipt(
+        params.tenantId,
+        params.orderId,
+        params.milestoneIndex,
+        {
+          amountPaise: params.amountPaise,
+          method: paymentMethod,
+          ref: params.ref,
+          date: paymentDate,
+          by: params.actor.id as any,
+        },
+        tx
+      );
+
+      if (updated.status === OrderStatus.DELIVERED) {
+        const allReceived = (updated.financials?.milestones || []).every(
+          (m: any) => m.status === "received"
+        );
+        if (allReceived) {
+          const activeRes = (updated.reservations || []).filter((r: any) => r.status === "active");
+          for (const res of activeRes) {
+            await this.materialRepo.releaseStock(
+              params.tenantId,
+              String(res.materialId),
+              res.qty,
+              tx
+            );
+            await this.stockMovementRepo.recordMovement(
+              params.tenantId,
+              {
+                materialId: String(res.materialId),
+                type: "release",
+                qty: res.qty,
+                qtyAfter: 0,
+                orderId: params.orderId,
+              },
+              tx
+            );
+          }
+          await this.ordersRepo.releaseReservations(params.tenantId, params.orderId, tx);
+          await this.ordersRepo.updateStatus(
+            params.tenantId,
+            params.orderId,
+            OrderStatus.COMPLETED,
+            {
+              role: "admin",
+              reason: "All milestone payments received upon delivery completion",
+              by: params.actor.id as any,
+            },
+            tx
+          );
+        }
+      }
+
+      await this.auditService.log({
+        tenantId: params.tenantId,
+        actor: { id: params.actor.id, type: "user" },
+        action: "PAYMENT_RECEIPT_RECORDED",
+        entity: { collection: "orders", id: params.orderId },
+        after: {
+          milestoneIndex: params.milestoneIndex,
+          amountPaise: params.amountPaise,
+          method: paymentMethod,
+          ref: params.ref,
+        },
+        requestId: params.actor.requestId,
+      });
+
+      const adminUser = await this.userRepo.findOne(params.tenantId, { role: "admin" }, tx);
+      await this.notificationRepo.createNotification(
+        params.tenantId,
+        {
+          recipient: { userId: adminUser ? String(adminUser._id) : undefined },
+          kind: "notification",
+          type: "payment_received",
+          channel: "in_app",
+          title: `Payment Received for Order ${order.orderNumber}`,
+          body: `Receipt of ₹${(params.amountPaise / 100).toFixed(2)} recorded for milestone '${
+            milestone.milestone
+          }' (${paymentMethod.toUpperCase()})`,
+          entity: { collection: "orders", id: params.orderId },
+          dedupeKey: `receipt_${params.orderId}_${params.ref}`,
+        },
+        tx
+      );
+
+      const freshOrder = await this.ordersRepo.findById(params.tenantId, params.orderId);
+      return toAdminOrderDto(freshOrder);
+    });
+  }
+
+  async reverseReceipt(params: {
+    tenantId: string;
+    orderId: string;
+    milestoneIndex: number;
+    receiptIndex?: number;
+    receiptRef?: string;
+    reason: string;
+    actor: { id: string; email?: string; ip?: string; requestId?: string; type: "user" };
+  }): Promise<any> {
+    const order = await this.ordersRepo.findById(params.tenantId, params.orderId);
+    if (!order) throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+
+    const milestone = order.financials?.milestones?.[params.milestoneIndex];
+    if (!milestone) {
+      throw new AppError(
+        ErrorCode.NOT_FOUND,
+        `Milestone index ${params.milestoneIndex} not found`,
+        404
+      );
+    }
+
+    let rIndex = params.receiptIndex;
+    if (rIndex === undefined && params.receiptRef) {
+      rIndex = milestone.receipts?.findIndex(
+        (r: any) => r.ref === params.receiptRef && !r.reversedAt
+      );
+    }
+    if (rIndex === undefined || rIndex < 0 || !milestone.receipts?.[rIndex]) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Receipt not found for reversal", 404);
+    }
+
+    return this.getUnitOfWork().withTransaction(async (tx) => {
+      const updated = await this.ordersRepo.reversePaymentReceipt(
+        params.tenantId,
+        params.orderId,
+        params.milestoneIndex,
+        rIndex!,
+        params.reason,
+        tx
+      );
+
+      await this.auditService.log({
+        tenantId: params.tenantId,
+        actor: { id: params.actor.id, type: "user" },
+        action: "PAYMENT_RECEIPT_REVERSED",
+        entity: { collection: "orders", id: params.orderId },
+        after: {
+          milestoneIndex: params.milestoneIndex,
+          receiptIndex: rIndex,
+          reason: params.reason,
+        },
+        requestId: params.actor.requestId,
+      });
+
+      return toAdminOrderDto(updated);
+    });
+  }
+
+  async processRazorpayWebhook(
+    payload: any,
+    signatureHeader?: string
+  ): Promise<{ received: boolean; deduplicated?: boolean }> {
+    const event = this.getPaymentGateway().parseWebhook(payload, signatureHeader);
+
+    if (event.eventType === "payment.captured") {
+      const paymentId = event.paymentId;
+      const gatewayOrderId = event.gatewayOrderId;
+      const orderId = event.notes?.orderId;
+      const tenantId = event.notes?.tenantId;
+
+      let order: any = null;
+      if (tenantId && orderId) {
+        order = await this.ordersRepo.findById(tenantId, orderId);
+      }
+      if (!order && gatewayOrderId) {
+        order = await this.ordersRepo.findByRazorpayOrderId(gatewayOrderId);
+      }
+
+      if (!order) {
+        logger.warn({ gatewayOrderId, paymentId }, "Razorpay webhook order not found");
+        return { received: true };
+      }
+
+      let mIndex = event.notes?.milestoneIndex ? Number(event.notes.milestoneIndex) : -1;
+      if (mIndex < 0 && gatewayOrderId) {
+        mIndex = (order.financials?.milestones || []).findIndex(
+          (m: any) => m.razorpayOrderId === gatewayOrderId
+        );
+      }
+      if (mIndex < 0) mIndex = 0;
+
+      const milestone = order.financials?.milestones?.[mIndex];
+      if (!milestone) {
+        logger.warn({ orderNumber: order.orderNumber, mIndex }, "Milestone not found for webhook");
+        return { received: true };
+      }
+
+      // Check deduplication
+      const alreadyRecorded = milestone.receipts?.some(
+        (r: any) => r.razorpayPaymentId === paymentId
+      );
+      if (alreadyRecorded) {
+        return { received: true, deduplicated: true };
+      }
+
+      const paymentDate = getTodayBusinessDate();
+
+      await this.getUnitOfWork().withTransaction(async (tx) => {
+        const updated = await this.ordersRepo.recordPaymentReceipt(
+          order.tenantId,
+          String(order._id),
+          mIndex,
+          {
+            amountPaise: event.amountPaise,
+            method: "razorpay",
+            ref: paymentId,
+            razorpayPaymentId: paymentId,
+            date: paymentDate,
+          },
+          tx
+        );
+
+        if (updated.status === OrderStatus.DELIVERED) {
+          const allReceived = (updated.financials?.milestones || []).every(
+            (m: any) => m.status === "received"
+          );
+          if (allReceived) {
+            const activeRes = (updated.reservations || []).filter((r: any) => r.status === "active");
+            for (const res of activeRes) {
+              await this.materialRepo.releaseStock(
+                order.tenantId,
+                String(res.materialId),
+                res.qty,
+                tx
+              );
+              await this.stockMovementRepo.recordMovement(
+                order.tenantId,
+                {
+                  materialId: String(res.materialId),
+                  type: "release",
+                  qty: res.qty,
+                  qtyAfter: 0,
+                  orderId: String(order._id),
+                },
+                tx
+              );
+            }
+            await this.ordersRepo.releaseReservations(order.tenantId, String(order._id), tx);
+            await this.ordersRepo.updateStatus(
+              order.tenantId,
+              String(order._id),
+              OrderStatus.COMPLETED,
+              {
+                role: "admin",
+                reason: "All milestone payments completed via Razorpay",
+              },
+              tx
+            );
+          }
+        }
+
+        await this.auditService.log({
+          tenantId: order.tenantId,
+          actor: { id: "razorpay_webhook", type: "system" },
+          action: "RAZORPAY_PAYMENT_CAPTURED",
+          entity: { collection: "orders", id: String(order._id) },
+          after: {
+            milestoneIndex: mIndex,
+            amountPaise: event.amountPaise,
+            paymentId,
+            gatewayOrderId,
+          },
+        });
+
+        const adminUser = await this.userRepo.findOne(order.tenantId, { role: "admin" }, tx);
+        await this.notificationRepo.createNotification(
+          order.tenantId,
+          {
+            recipient: { userId: adminUser ? String(adminUser._id) : undefined },
+            kind: "notification",
+            type: "razorpay_payment_captured",
+            channel: "in_app",
+            title: `Razorpay Payment Received: ${order.orderNumber}`,
+            body: `₹${(event.amountPaise / 100).toFixed(
+              2
+            )} received via Razorpay for milestone '${milestone.milestone}'`,
+            entity: { collection: "orders", id: String(order._id) },
+            dedupeKey: `rzp_receipt_${paymentId}`,
+          },
+          tx
+        );
+      });
+
+      return { received: true };
+    }
+
+    if (event.eventType === "payment.failed") {
+      logger.warn({ event }, "Razorpay payment failed webhook received");
+      return { received: true };
+    }
+
+    return { received: true };
+  }
+
+  async recordDelivery(params: {
+    tenantId: string;
+    orderId: string;
+    deliveryDate: string;
+    qty: number;
+    invoiceNo: string;
+    invoiceAmountPaise: number;
+    notes?: string;
+    actor: { id: string; email?: string; ip?: string; requestId?: string; type: "user" };
+  }): Promise<any> {
+    const order = await this.ordersRepo.findById(params.tenantId, params.orderId);
+    if (!order) throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+
+    const allowedStatuses: OrderStatus[] = [
+      OrderStatus.IN_PRODUCTION,
+      OrderStatus.READY_FOR_DELIVERY,
+      OrderStatus.PARTIALLY_DELIVERED,
+    ];
+    if (!allowedStatuses.includes(order.status)) {
+      throw new AppError(
+        ErrorCode.INVALID_TRANSITION,
+        `Cannot record delivery on order with status '${order.status}'; must be in_production, ready_for_delivery or partially_delivered`,
+        400
+      );
+    }
+
+    const alreadyDelivered = order.production?.deliveredQty || 0;
+    const remaining = order.quantity - alreadyDelivered;
+    if (params.qty > remaining) {
+      throw new AppError(
+        ErrorCode.VALIDATION_FAILED,
+        `Delivery quantity ${params.qty} exceeds remaining unfulfilled quantity (${remaining})`,
+        400
+      );
+    }
+
+    const previousInvoicedPaise = (order.deliveries || []).reduce(
+      (sum: number, d: any) => sum + (d.invoiceAmountPaise || 0),
+      0
+    );
+    const orderTotalPaise = order.quotation?.totalPaise || 0;
+    if (orderTotalPaise > 0 && previousInvoicedPaise + params.invoiceAmountPaise > orderTotalPaise) {
+      throw new AppError(
+        ErrorCode.INVOICE_EXCEEDS_ORDER_VALUE,
+        `Cumulative invoice amount ₹${(
+          (previousInvoicedPaise + params.invoiceAmountPaise) /
+          100
+        ).toFixed(2)} exceeds total order value ₹${(orderTotalPaise / 100).toFixed(2)}`,
+        400
+      );
+    }
+
+    // Compute onTime and delayDays from business dates
+    const deliveryMs = new Date(params.deliveryDate).getTime();
+    const deadlineMs = new Date(order.deliveryDeadline).getTime();
+    const onTime = deliveryMs <= deadlineMs;
+    const delayDays = onTime
+      ? 0
+      : Math.max(0, Math.ceil((deliveryMs - deadlineMs) / (1000 * 60 * 60 * 24)));
+
+    const newDeliveredQty = alreadyDelivered + params.qty;
+    const isFullyDelivered = newDeliveredQty >= order.quantity;
+
+    return this.getUnitOfWork().withTransaction(async (tx) => {
+      await this.ordersRepo.addDelivery(
+        params.tenantId,
+        params.orderId,
+        {
+          deliveryDate: params.deliveryDate,
+          qty: params.qty,
+          invoiceNo: params.invoiceNo,
+          invoiceAmountPaise: params.invoiceAmountPaise,
+          onTime,
+          delayDays,
+          recordedBy: params.actor.id as any,
+        },
+        tx
+      );
+
+      let nextStatus: OrderStatus;
+      if (!isFullyDelivered) {
+        nextStatus = OrderStatus.PARTIALLY_DELIVERED;
+      } else {
+        const allMilestonesReceived =
+          (order.financials?.milestones || []).length > 0 &&
+          (order.financials?.milestones || []).every((m: any) => m.status === "received");
+
+        if (allMilestonesReceived) {
+          nextStatus = OrderStatus.COMPLETED;
+          const activeRes = (order.reservations || []).filter((r: any) => r.status === "active");
+          for (const res of activeRes) {
+            await this.materialRepo.releaseStock(
+              params.tenantId,
+              String(res.materialId),
+              res.qty,
+              tx
+            );
+            await this.stockMovementRepo.recordMovement(
+              params.tenantId,
+              {
+                materialId: String(res.materialId),
+                type: "release",
+                qty: res.qty,
+                qtyAfter: 0,
+                orderId: params.orderId,
+              },
+              tx
+            );
+          }
+          await this.ordersRepo.releaseReservations(params.tenantId, params.orderId, tx);
+        } else {
+          nextStatus = OrderStatus.DELIVERED;
+        }
+      }
+
+      const updated = await this.ordersRepo.updateStatus(
+        params.tenantId,
+        params.orderId,
+        nextStatus,
+        {
+          role: "admin",
+          reason: `Delivery recorded: ${params.qty} units dispatched on invoice ${params.invoiceNo}`,
+          by: params.actor.id as any,
+        },
+        tx
+      );
+
+      await this.auditService.log({
+        tenantId: params.tenantId,
+        actor: { id: params.actor.id, type: "user" },
+        action: "DELIVERY_RECORDED",
+        entity: { collection: "orders", id: params.orderId },
+        after: {
+          qty: params.qty,
+          invoiceNo: params.invoiceNo,
+          invoiceAmountPaise: params.invoiceAmountPaise,
+          onTime,
+          delayDays,
+          nextStatus,
+        },
+        requestId: params.actor.requestId,
+      });
+
+      await this.notificationRepo.createNotification(
+        params.tenantId,
+        {
+          recipient: { clientId: String(order.clientId) },
+          kind: "notification",
+          type: "shipment_dispatched",
+          channel: "in_app",
+          title: `Shipment Dispatched: Order ${order.orderNumber}`,
+          body: `${params.qty} units have been dispatched on invoice ${params.invoiceNo}.`,
+          entity: { collection: "orders", id: params.orderId },
+          dedupeKey: `delivery_${params.orderId}_${params.invoiceNo}`,
+        },
+        tx
+      );
+
+      await this.outboxRepo.createMessage(
+        params.tenantId,
+        {
+          recipient: { clientId: String(order.clientId) },
+          channel: "email",
+          payload: {
+            subject: `Shipment Dispatched: Order ${order.orderNumber}`,
+            orderNumber: order.orderNumber,
+            qty: params.qty,
+            invoiceNo: params.invoiceNo,
+          },
+        },
+        tx
+      );
+
+      return toAdminOrderDto(updated);
+    });
+  }
+
+  async checkOverduePayments(tenantId?: string): Promise<number> {
+    const today = getTodayBusinessDate();
+    const orders = await this.ordersRepo.findOrdersWithOverdueMilestones(tenantId, today);
+    let overdueCount = 0;
+
+    for (const order of orders) {
+      const milestones = order.financials?.milestones || [];
+      for (let i = 0; i < milestones.length; i++) {
+        const m = milestones[i]!;
+        if ((m.status === "pending" || m.status === "partial") && m.dueDate && m.dueDate < today) {
+          await this.ordersRepo.setMilestoneOverdue(order.tenantId, String(order._id), i);
+          overdueCount++;
+
+          const adminUser = await this.userRepo.findOne(order.tenantId, { role: "admin" });
+          await this.notificationRepo.createNotification(order.tenantId, {
+            recipient: { userId: adminUser ? String(adminUser._id) : undefined },
+            kind: "alert",
+            type: "payment_overdue",
+            channel: "in_app",
+            title: `Payment Overdue: Order ${order.orderNumber}`,
+            body: `Milestone '${m.milestone}' of ₹${(m.amountPaise / 100).toFixed(
+              2
+            )} is overdue since ${m.dueDate}`,
+            entity: { collection: "orders", id: String(order._id) },
+            dedupeKey: `overdue_${order._id}_m${i}_${m.dueDate}`,
+          });
+        }
+      }
+    }
+
+    return overdueCount;
   }
 }

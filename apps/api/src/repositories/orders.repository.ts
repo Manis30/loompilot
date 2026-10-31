@@ -623,7 +623,7 @@ export class OrdersRepository {
         { tenantId, _id: orderId },
         {
           $push: { deliveries: delivery },
-          $inc: { version: 1 },
+          $inc: { "production.deliveredQty": delivery.qty, version: 1 },
         },
         { new: true, session: session ?? null }
       )
@@ -722,6 +722,329 @@ export class OrdersRepository {
       referenceFiles: new Types.ObjectId(fileId),
     });
     return count > 0;
+  }
+
+  async assignSupervisors(
+    tenantId: string,
+    orderId: string | Types.ObjectId,
+    assignedSupervisors: Array<{ supervisorId: Types.ObjectId; processArea: string; assignedAt?: Date }>,
+    assignedBy?: Types.ObjectId,
+    tx?: TxContext
+  ): Promise<IOrder> {
+    const session = this.getSession(tx);
+    const updated = await this.model
+      .findOneAndUpdate(
+        { tenantId, _id: orderId },
+        {
+          $set: {
+            "production.assignedSupervisors": assignedSupervisors,
+            "production.assignedBy": assignedBy,
+            "production.assignedAt": new Date(),
+          },
+          $inc: { version: 1 },
+        },
+        { new: true, session: session ?? null }
+      )
+      .lean<IOrder>()
+      .exec();
+
+    if (!updated) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+    }
+    return updated;
+  }
+
+  async assignProduction(
+    tenantId: string,
+    orderId: string | Types.ObjectId,
+    data: {
+      assignedSupervisors: Array<{ supervisorId: Types.ObjectId; processes: string[]; acknowledgedAt?: Date }>;
+      processPlan: any[];
+      assignedBy?: Types.ObjectId;
+    },
+    tx?: TxContext
+  ): Promise<IOrder> {
+    const session = this.getSession(tx);
+    const updated = await this.model
+      .findOneAndUpdate(
+        { tenantId, _id: orderId },
+        {
+          $set: {
+            "production.assignedSupervisors": data.assignedSupervisors,
+            "production.processPlan": data.processPlan,
+            "production.assignmentStatus": "assigned",
+            "production.assignedBy": data.assignedBy,
+            "production.assignedAt": new Date(),
+          },
+          $inc: { version: 1 },
+        },
+        { new: true, session: session ?? null }
+      )
+      .lean<IOrder>()
+      .exec();
+
+    if (!updated) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+    }
+    return updated;
+  }
+
+  async acknowledgeAndStartProduction(
+    tenantId: string,
+    orderId: string | Types.ObjectId,
+    supervisorId?: string | Types.ObjectId,
+    tx?: TxContext
+  ): Promise<IOrder> {
+    const session = this.getSession(tx);
+    if (supervisorId) {
+      const sId = typeof supervisorId === "string" ? new Types.ObjectId(supervisorId) : supervisorId;
+      const updated = await this.model
+        .findOneAndUpdate(
+          {
+            tenantId,
+            _id: orderId,
+            "production.assignedSupervisors.supervisorId": sId,
+          },
+          {
+            $set: {
+              "production.assignmentStatus": "started",
+              "production.assignedSupervisors.$.acknowledgedAt": new Date(),
+            },
+            $inc: { version: 1 },
+          },
+          { new: true, session: session ?? null }
+        )
+        .lean<IOrder>()
+        .exec();
+
+      if (updated) return updated;
+    }
+
+    const updated = await this.model
+      .findOneAndUpdate(
+        { tenantId, _id: orderId },
+        {
+          $set: { "production.assignmentStatus": "started" },
+          $inc: { version: 1 },
+        },
+        { new: true, session: session ?? null }
+      )
+      .lean<IOrder>()
+      .exec();
+
+    if (!updated) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+    }
+    return updated;
+  }
+
+  async setMilestoneRazorpayOrderId(
+    tenantId: string,
+    orderId: string | Types.ObjectId,
+    milestoneIndex: number,
+    razorpayOrderId: string,
+    tx?: TxContext
+  ): Promise<IOrder> {
+    const session = this.getSession(tx);
+    const updated = await this.model
+      .findOneAndUpdate(
+        { tenantId, _id: orderId },
+        {
+          $set: {
+            [`financials.milestones.${milestoneIndex}.razorpayOrderId`]: razorpayOrderId,
+          },
+          $inc: { version: 1 },
+        },
+        { new: true, session: session ?? null }
+      )
+      .lean<IOrder>()
+      .exec();
+
+    if (!updated) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+    }
+    return updated;
+  }
+
+  async reversePaymentReceipt(
+    tenantId: string,
+    orderId: string | Types.ObjectId,
+    milestoneIndex: number,
+    receiptIndex: number,
+    reason: string,
+    tx?: TxContext
+  ): Promise<IOrder> {
+    const session = this.getSession(tx);
+    const order = await this.model
+      .findOne({ tenantId, _id: orderId })
+      .session(session ?? null)
+      .exec();
+
+    if (!order) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+    }
+
+    const milestone = order.financials?.milestones?.[milestoneIndex];
+    if (!milestone) {
+      throw new AppError(ErrorCode.NOT_FOUND, `Milestone index ${milestoneIndex} not found`, 404);
+    }
+
+    const receipt = milestone.receipts?.[receiptIndex];
+    if (!receipt) {
+      throw new AppError(
+        ErrorCode.NOT_FOUND,
+        `Receipt index ${receiptIndex} not found on milestone`,
+        404
+      );
+    }
+
+    if (receipt.reversedAt) {
+      throw new AppError(ErrorCode.VALIDATION_FAILED, "Payment receipt is already reversed", 400);
+    }
+
+    const revAmount = receipt.amountPaise;
+    const isAdvance = milestone.trigger === "advance";
+    const currentReceived = milestone.receivedPaise || 0;
+    const newReceived = Math.max(0, currentReceived - revAmount);
+    const newStatus = newReceived <= 0 ? "pending" : "partial";
+
+    const updateOps: Record<string, any> = {
+      $set: {
+        [`financials.milestones.${milestoneIndex}.receipts.${receiptIndex}.reversedAt`]: new Date(),
+        [`financials.milestones.${milestoneIndex}.receipts.${receiptIndex}.reversalReason`]: reason,
+        [`financials.milestones.${milestoneIndex}.status`]: newStatus,
+        [`financials.milestones.${milestoneIndex}.receivedPaise`]: newReceived,
+      },
+      $inc: {
+        "financials.totalPaidPaise": -revAmount,
+        version: 1,
+      },
+    };
+
+    if (isAdvance) {
+      updateOps.$inc["financials.advanceReceivedPaise"] = -revAmount;
+    }
+
+    const updated = await this.model
+      .findOneAndUpdate({ tenantId, _id: orderId }, updateOps, {
+        new: true,
+        session: session ?? null,
+      })
+      .lean<IOrder>()
+      .exec();
+
+    return updated!;
+  }
+
+  async findByRazorpayOrderId(razorpayOrderId: string): Promise<IOrder | null> {
+    return this.model
+      .findOne({ "financials.milestones.razorpayOrderId": razorpayOrderId })
+      .lean<IOrder>()
+      .exec();
+  }
+
+  async findOrdersWithOverdueMilestones(tenantId?: string, todayDate?: string): Promise<IOrder[]> {
+    const today = todayDate || new Date().toISOString().split("T")[0]!;
+    const filter: Record<string, any> = {
+      status: {
+        $in: ["client_accepted", "assigned", "in_production", "ready_for_delivery", "partially_delivered"],
+      },
+      "financials.milestones": {
+        $elemMatch: {
+          status: { $in: ["pending", "partial"] },
+          dueDate: { $lt: today },
+        },
+      },
+    };
+    if (tenantId) filter.tenantId = tenantId;
+    return this.model.find(filter).lean<IOrder[]>().exec();
+  }
+
+  async setMilestoneOverdue(
+    tenantId: string,
+    orderId: string | Types.ObjectId,
+    milestoneIndex: number,
+    tx?: TxContext
+  ): Promise<IOrder | null> {
+    const session = this.getSession(tx);
+    return this.model
+      .findOneAndUpdate(
+        {
+          tenantId,
+          _id: orderId,
+          [`financials.milestones.${milestoneIndex}.status`]: { $in: ["pending", "partial"] },
+        },
+        {
+          $set: {
+            [`financials.milestones.${milestoneIndex}.status`]: "overdue",
+          },
+          $inc: { version: 1 },
+        },
+        { new: true, session: session ?? null }
+      )
+      .lean<IOrder>()
+      .exec();
+  }
+
+  async updateFinancials(
+    tenantId: string,
+    orderId: string | Types.ObjectId,
+    updates: {
+      advanceReceivedPaise?: number;
+      totalPaidPaise?: number;
+      totalInvoicedPaise?: number;
+    },
+    tx?: TxContext
+  ): Promise<IOrder> {
+    const session = this.getSession(tx);
+    const setFields: Record<string, any> = {};
+    if (updates.advanceReceivedPaise !== undefined) {
+      setFields["financials.advanceReceivedPaise"] = updates.advanceReceivedPaise;
+    }
+    if (updates.totalPaidPaise !== undefined) {
+      setFields["financials.totalPaidPaise"] = updates.totalPaidPaise;
+    }
+    if (updates.totalInvoicedPaise !== undefined) {
+      setFields["financials.totalInvoicedPaise"] = updates.totalInvoicedPaise;
+    }
+
+    const updated = await this.model
+      .findOneAndUpdate(
+        { tenantId, _id: orderId },
+        { $set: setFields, $inc: { version: 1 } },
+        { new: true, session: session ?? null }
+      )
+      .lean<IOrder>()
+      .exec();
+
+    if (!updated) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+    }
+    return updated;
+  }
+
+  async releaseReservations(
+    tenantId: string,
+    orderId: string | Types.ObjectId,
+    tx?: TxContext
+  ): Promise<IOrder> {
+    const session = this.getSession(tx);
+    const updated = await this.model
+      .findOneAndUpdate(
+        { tenantId, _id: orderId },
+        {
+          $set: { "reservations.$[].status": "released" },
+          $inc: { version: 1 },
+        },
+        { new: true, session: session ?? null }
+      )
+      .lean<IOrder>()
+      .exec();
+
+    if (!updated) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+    }
+    return updated;
   }
 
   async isProcessAreaUsedInActiveOrders(tenantId: string, area: string): Promise<boolean> {

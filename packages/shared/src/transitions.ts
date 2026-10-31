@@ -17,10 +17,10 @@ export const TRANSITION_TABLES = {
     quotation_sent: ["client_accepted", "declined_by_client", "expired", "cancelled"],
     client_accepted: ["assigned", "cancelled"],
     assigned: ["in_production", "on_hold", "cancelled"],
-    in_production: ["ready_for_delivery", "partially_delivered", "on_hold", "cancelled"],
+    in_production: ["ready_for_delivery", "delivered", "completed", "partially_delivered", "on_hold", "cancelled"],
     on_hold: ["assigned", "in_production", "cancelled"],
-    ready_for_delivery: ["partially_delivered", "delivered", "cancelled"],
-    partially_delivered: ["delivered", "in_production", "cancelled"],
+    ready_for_delivery: ["partially_delivered", "delivered", "completed", "cancelled"],
+    partially_delivered: ["delivered", "completed", "in_production", "cancelled"],
     delivered: ["completed"],
     completed: [],
     declined_by_client: [],
@@ -74,8 +74,8 @@ export const TRANSITION_TABLES = {
   milestone: {
     pending: ["partial", "received", "overdue"],
     overdue: ["partial", "received"],
-    partial: ["received"],
-    received: [],
+    partial: ["received", "pending"],
+    received: ["partial", "pending"],
   },
 
   ticket: {

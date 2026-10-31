@@ -98,4 +98,27 @@ export class ClientOrderController {
 
     res.json({ data: result });
   };
+
+  createPaymentOrder = async (req: Request, res: Response): Promise<void> => {
+    const actor = req.actor!;
+    const clientId = actor.clientId || actor.subjectId;
+
+    const milestoneIndex =
+      req.params.milestoneIndex !== undefined
+        ? Number(req.params.milestoneIndex)
+        : req.body.milestoneIndex !== undefined
+        ? Number(req.body.milestoneIndex)
+        : undefined;
+
+    const result = await this.orderService.createPaymentOrder({
+      tenantId: actor.tenantId,
+      orderId: req.params.id as string,
+      milestoneIndex,
+      notes: req.body.notes,
+      isClient: true,
+      clientId,
+    });
+
+    res.json({ data: result });
+  };
 }

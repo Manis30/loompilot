@@ -91,7 +91,11 @@ Enforced strictly at the API gateway layer via `authenticate` and `authorize` mi
 | **POST** | `/api/v1/orders/:id/hold` | Authenticated | `user` | `admin` | Yes | Put active order on hold |
 | **POST** | `/api/v1/orders/:id/resume` | Authenticated | `user` | `admin` | Yes | Resume order from on_hold status |
 | **POST** | `/api/v1/orders/:id/cancel` | Authenticated | `user` | `admin` | Yes | Cancel order and release reserved stock |
+| **POST** | `/api/v1/orders/:id/ready-for-delivery` | Authenticated | `user` | `admin` | Yes | Mark manufacturing order ready for dispatch |
+| **POST** | `/api/v1/orders/:id/start` | Authenticated | `user` | `admin`, `supervisor` | Yes | Supervisor acknowledge assignment and start production |
 | **POST** | `/api/v1/orders/:id/payments/create-order` | Authenticated | `client`, `user` | `admin` | Yes | Create Razorpay payment order for milestone advance |
+| **POST** | `/api/v1/client/orders/:id/payments/:milestoneIndex/razorpay-order` | Authenticated | `client` | - | Yes | Create Razorpay payment order for milestone from client portal |
 | **POST** | `/api/v1/orders/:id/payments/manual-receipt` | Authenticated | `user` | `admin` | Yes | Record offline or manual payment receipt (cash, neft, cheque) |
+| **POST** | `/api/v1/orders/:id/payments/reverse` | Authenticated | `user` | `admin` | Yes | Reverse a recorded payment receipt with audit reason |
 | **POST** | `/api/v1/orders/:id/deliveries` | Authenticated | `user` | `admin` | Yes | Record shipment dispatch and delivery completion |
 | **POST** | `/webhooks/razorpay` | Public | - | - | No | Receive and process Razorpay payment webhooks |

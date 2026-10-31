@@ -269,3 +269,64 @@ export const ClientDeclineQuotationSchema = z.object({
   reason: z.string().optional(),
 });
 
+// ============================================================================
+// Phase D Validation Schemas (Handover, Payments, Deliveries)
+// ============================================================================
+
+export const OrderAssignSupervisorsSchema = z.object({
+  assignments: z
+    .array(
+      z.object({
+        supervisorId: z.string().min(1, "supervisorId is required"),
+        processes: z.array(z.string().min(1)).min(1).optional(),
+        processArea: z.string().min(1).optional(),
+      })
+    )
+    .min(1, "At least one supervisor assignment is required"),
+  overrideReason: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export const OrderHoldSchema = z.object({
+  reason: z.string().min(1, "reason is required to put an order on hold"),
+});
+
+export const OrderCancelSchema = z.object({
+  reason: z.string().min(1, "reason is required to cancel an order"),
+});
+
+export const OrderCreatePaymentOrderSchema = z.object({
+  milestoneIndex: z.number().int().nonnegative().optional(),
+  notes: z.record(z.string()).optional(),
+});
+
+export const OrderMilestoneParamSchema = z.object({
+  id: z.string().min(1),
+  milestoneIndex: z.string().regex(/^\d+$/).transform(Number),
+});
+
+export const OrderManualReceiptSchema = z.object({
+  milestoneIndex: z.number().int().nonnegative(),
+  amountPaise: z.number().int().positive("amountPaise must be positive"),
+  method: z.enum(["razorpay", "neft", "rtgs", "upi", "cheque", "cash"]).optional(),
+  mode: z.enum(["razorpay", "neft", "rtgs", "upi", "cheque", "cash"]).optional(),
+  ref: z.string().min(1, "payment reference is required"),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD").optional(),
+  notes: z.string().optional(),
+});
+
+export const OrderReverseReceiptSchema = z.object({
+  milestoneIndex: z.number().int().nonnegative(),
+  receiptIndex: z.number().int().nonnegative().optional(),
+  receiptRef: z.string().optional(),
+  reason: z.string().min(1, "reason is required for payment reversal"),
+});
+
+export const OrderDeliverySchema = z.object({
+  deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "deliveryDate must be YYYY-MM-DD"),
+  qty: z.number().int().positive("quantity must be positive"),
+  invoiceNo: z.string().min(1, "invoiceNo is required"),
+  invoiceAmountPaise: z.number().int().positive("invoiceAmountPaise must be positive"),
+  notes: z.string().optional(),
+});
+
