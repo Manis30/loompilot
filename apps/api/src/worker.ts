@@ -2,6 +2,7 @@ import { getEnv } from "./config/env.js";
 import { connectMongo, disconnectMongo } from "./config/database.js";
 import { connectRedis, disconnectRedis } from "./config/redis.js";
 import { logger } from "./utils/logger.js";
+import { createContainer } from "./container.js";
 
 async function startWorker() {
   const env = getEnv();
@@ -16,6 +17,9 @@ async function startWorker() {
     process.exit(1);
   }
 
+  const container = createContainer();
+  logger.info("Worker container initialized with job queues and adapters");
+
   // Graceful shutdown
   let isShuttingDown = false;
 
@@ -25,6 +29,7 @@ async function startWorker() {
     logger.info({ signal }, "Worker shutting down...");
 
     try {
+      await container.jobQueue.close();
       await disconnectRedis();
       await disconnectMongo();
       logger.info("Worker shut down cleanly");
@@ -47,4 +52,3 @@ if (process.argv[1]?.endsWith("worker.ts") || process.argv[1]?.endsWith("worker.
 }
 
 export { startWorker };
-

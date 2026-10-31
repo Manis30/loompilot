@@ -60,6 +60,13 @@ const envSchema = z.object({
   AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900000), // 15 minutes
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
   INVITE_TOKEN_TTL: z.string().default("7d"),
+
+  PAYMENT_GATEWAY: z.enum(["fake", "razorpay"]).default("fake"),
+  RAZORPAY_KEY_ID: z.string().default(""),
+  RAZORPAY_KEY_SECRET: z.string().default(""),
+  RAZORPAY_WEBHOOK_SECRET: z.string().default(""),
+
+  AGENTS_MODE: z.enum(["fake", "http"]).default("fake"),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -115,6 +122,13 @@ export function validateEnv(raw: Record<string, string | undefined> = process.en
     AUTH_RATE_LIMIT_WINDOW_MS: raw["AUTH_RATE_LIMIT_WINDOW_MS"] ?? 900000,
     AUTH_RATE_LIMIT_MAX: raw["AUTH_RATE_LIMIT_MAX"] ?? 20,
     INVITE_TOKEN_TTL: raw["INVITE_TOKEN_TTL"] ?? "7d",
+
+    PAYMENT_GATEWAY: raw["PAYMENT_GATEWAY"] ?? "fake",
+    RAZORPAY_KEY_ID: raw["RAZORPAY_KEY_ID"] ?? "",
+    RAZORPAY_KEY_SECRET: raw["RAZORPAY_KEY_SECRET"] ?? "",
+    RAZORPAY_WEBHOOK_SECRET: raw["RAZORPAY_WEBHOOK_SECRET"] ?? "",
+
+    AGENTS_MODE: raw["AGENTS_MODE"] ?? "fake",
   };
 
   const parsed = envSchema.safeParse(prepared);

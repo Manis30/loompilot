@@ -4,6 +4,7 @@ import { SettingsModel } from "../models/identity/settings.model.js";
 import { AuditLogModel } from "../models/platform/audit-log.model.js";
 import { hashPassword, validatePasswordPolicy } from "../utils/password.js";
 import { getEnv } from "../config/env.js";
+import { DEFAULT_SETTINGS, DEFAULT_PROCESS_CONFIG } from "../config/tenant-defaults.js";
 
 function parseArgs(args: string[]): Record<string, string | boolean> {
   const result: Record<string, string | boolean> = {};
@@ -62,24 +63,7 @@ export async function createAdmin(options?: {
       {
         $setOnInsert: {
           tenantId,
-          timezone: env.TENANT_TIMEZONE || "Asia/Kolkata",
-          minMarginPct: 12,
-          defaultMarginPct: 18,
-          riskBuffer: { k: 1.5, minPct: 3, maxPct: 10, windowDays: 30 },
-          behindThresholdPct: 10,
-          maxBackdateDays: 7,
-          weeklyOffs: [0], // Sunday
-          holidays: [],
-          safetyDays: 3,
-          quoteValidityDays: 14,
-          priceThresholds: { daily: 5, sevenday: 10, vol: 15 },
-          processConfig: [
-            { area: "winding", stages: ["winding"], hours: 8, overlap: 0, fallbackOut: 100 },
-            { area: "warping", stages: ["warping"], hours: 8, overlap: 0, fallbackOut: 100 },
-            { area: "weaving", stages: ["weaving"], hours: 8, overlap: 0, fallbackOut: 100 },
-          ],
-          marketRuntime: "18:00",
-          reportCutoff: "20:00",
+          ...DEFAULT_SETTINGS,
         },
       },
       { upsert: true }
@@ -96,7 +80,7 @@ export async function createAdmin(options?: {
       passwordHash,
       role: "admin",
       status: "active",
-      processAreas: ["winding", "warping", "weaving"],
+      processAreas: DEFAULT_PROCESS_CONFIG.map((p) => p.area),
       notificationPrefs: {
         inApp: true,
         email: true,

@@ -16,10 +16,14 @@
     "test:watch": "vitest",
     "db:indexes": "tsx src/scripts/sync-indexes.ts",
     "create-admin": "tsx src/scripts/create-admin.ts",
-    "seed": "echo 'Seed will be implemented in Stage 3'"
+    "seed": "tsx src/seed/dev-seed.ts",
+    "db:reset-dev": "tsx src/scripts/reset-dev.ts"
   },
   "dependencies": {
     "@loompilot/shared": "workspace:*",
+    "@types/multer": "^2.3.0",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pdfmake": "^0.3.3",
     "bcrypt": "^5.1.1",
     "bullmq": "^5.40.4",
     "cookie-parser": "^1.4.7",
@@ -31,6 +35,9 @@
     "ioredis": "^5.4.2",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.9.5",
+    "multer": "^2.5.0",
+    "nodemailer": "^10.3.1",
+    "pdfmake": "^0.3.13",
     "pino": "^9.6.0",
     "pino-http": "^10.4.0",
     "socket.io": "^4.8.1",
@@ -56,4 +63,3 @@
     "vitest": "^3.0.5"
   }
 }
-

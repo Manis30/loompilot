@@ -13,4 +13,5 @@ export * from "./schema/schema-v4.manifest.js";
 export * from "./transitions.js";
 export * from "./payment-schedule.js";
 export * from "./rbac.js";
+export * from "./contracts/index.js";
 

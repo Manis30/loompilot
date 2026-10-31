@@ -3,6 +3,7 @@ import pino from "pino";
 const redactPaths = [
   "req.headers.authorization",
   'req.headers["x-service-token"]',
+  'req.headers["x-razorpay-signature"]',
   "req.headers.cookie",
   "req.headers['set-cookie']",
   "password",
@@ -12,6 +13,9 @@ const redactPaths = [
   "secret",
   "apiKey",
   "serviceToken",
+  "razorpayKeySecret",
+  "razorpay_signature",
+  "razorpayWebhookSecret",
   "*.password",
   "*.passwordHash",
   "*.token",
@@ -19,6 +23,9 @@ const redactPaths = [
   "*.secret",
   "*.apiKey",
   "*.serviceToken",
+  "*.razorpayKeySecret",
+  "*.razorpay_signature",
+  "*.razorpayWebhookSecret",
 ];
 
 export interface SerializedSubError {

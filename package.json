@@ -12,6 +12,7 @@
     "test": "pnpm -r --filter=!./agents test",
     "gen:agents-client": "pnpm --filter @loompilot/agents-client generate",
     "seed": "pnpm --filter @loompilot/api seed",
+    "db:reset-dev": "pnpm --filter @loompilot/api db:reset-dev",
     "dev:api": "pnpm --filter @loompilot/api dev",
     "dev:web": "pnpm --filter @loompilot/web dev",
     "docker:up": "docker compose up -d",
