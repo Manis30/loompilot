@@ -12,7 +12,6 @@ export interface Actor {
   tenantId: string;
   role?: "admin" | "supervisor";
   clientId?: string;
-  clientAccountId?: string;
   processAreas?: string[];
   requestId?: string;
 }
@@ -112,7 +111,6 @@ export async function authenticate(
       tenantId: claims.tenantId,
       role: claims.role,
       clientId: claims.clientId,
-      clientAccountId: claims.clientAccountId,
       processAreas,
       requestId: (req as any).id,
     };

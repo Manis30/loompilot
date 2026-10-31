@@ -1,12 +1,12 @@
 import { Request, Response, NextFunction } from "express";
-import { ClientAccountService } from "../services/client-account.service.js";
+import { ClientPortalService } from "../services/client-portal.service.js";
 
-const clientAccountService = new ClientAccountService();
+const clientPortalService = new ClientPortalService();
 
-export class ClientAccountController {
+export class ClientPortalController {
   static async list(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const accounts = await clientAccountService.listAccounts(req.actor!.tenantId);
+      const accounts = await clientPortalService.listAccounts(req.actor!.tenantId);
       res.status(200).json({ items: accounts, total: accounts.length });
     } catch (err) {
       next(err);
@@ -19,7 +19,7 @@ export class ClientAccountController {
       const clientId = (req.params.id as string) || req.body.clientId;
       const { email, name, phone } = req.body;
 
-      const result = await clientAccountService.inviteClientAccount({
+      const result = await clientPortalService.inviteClientAccount({
         tenantId: actor.tenantId,
         actorUserId: actor.subjectId,
         clientId,
@@ -45,10 +45,10 @@ export class ClientAccountController {
       const actor = req.actor!;
       const { id } = req.params;
 
-      const result = await clientAccountService.reinviteClientAccount({
+      const result = await clientPortalService.reinviteClientAccount({
         tenantId: actor.tenantId,
         actorUserId: actor.subjectId,
-        accountId: id as string,
+        clientId: id as string,
         ip: req.ip,
         requestId: (req as any).id,
       });
@@ -63,36 +63,15 @@ export class ClientAccountController {
     }
   }
 
-  static async accept(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const actor = req.actor!;
-      const { id } = req.params;
-      const { password } = req.body;
-
-      const result = await clientAccountService.acceptClientPortal({
-        tenantId: actor.tenantId,
-        actorUserId: actor.subjectId,
-        clientId: id as string,
-        password,
-        ip: req.ip,
-        requestId: (req as any).id,
-      });
-
-      res.status(200).json(result);
-    } catch (err) {
-      next(err);
-    }
-  }
-
   static async lock(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const actor = req.actor!;
       const { id } = req.params;
 
-      const updated = await clientAccountService.lockClientAccount({
+      const updated = await clientPortalService.lockClientAccount({
         tenantId: actor.tenantId,
         actorUserId: actor.subjectId,
-        accountId: id as string,
+        clientId: id as string,
         ip: req.ip,
         requestId: (req as any).id,
       });
@@ -108,10 +87,10 @@ export class ClientAccountController {
       const actor = req.actor!;
       const { id } = req.params;
 
-      const updated = await clientAccountService.unlockClientAccount({
+      const updated = await clientPortalService.unlockClientAccount({
         tenantId: actor.tenantId,
         actorUserId: actor.subjectId,
-        accountId: id as string,
+        clientId: id as string,
         ip: req.ip,
         requestId: (req as any).id,
       });

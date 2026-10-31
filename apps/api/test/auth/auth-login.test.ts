@@ -3,6 +3,7 @@ import request from "supertest";
 import { createApp } from "../../src/app.js";
 import { createContainer } from "../../src/container.js";
 import { UserModel } from "../../src/models/identity/user.model.js";
+import { ClientModel } from "../../src/models/identity/client.model.js";
 import { createTestUser, createTestClientAccount, generateTestAuthHeader } from "../helpers/auth-helper.js";
 
 describe("Stage 3: Authentication & Login Flow", () => {
@@ -183,6 +184,42 @@ describe("Stage 3: Authentication & Login Flow", () => {
 
     expect(loginRes.status).toBe(200);
     expect(loginRes.body.accessToken).toBeDefined();
+  });
+
+  it("Enforces client portal account lockout after 5 failed attempts for 15 minutes", async () => {
+    const { account } = await createTestClientAccount({
+      email: "client.lockout@acme.local",
+    });
+
+    // 5 consecutive failed attempts on client login
+    for (let i = 1; i <= 5; i++) {
+      const res = await request(app)
+        .post("/api/v1/client/auth/login")
+        .send({
+          tenantId: account.tenantId,
+          email: account.email,
+          password: "WrongClientPassword999!",
+        });
+      expect(res.status).toBe(401);
+    }
+
+    // 6th attempt: Client portal account is locked (403)
+    const resLocked = await request(app)
+      .post("/api/v1/client/auth/login")
+      .send({
+        tenantId: account.tenantId,
+        email: account.email,
+        password: "WrongClientPassword999!",
+      });
+
+    expect(resLocked.status).toBe(403);
+    expect(resLocked.body.error.code).toBe("ACCOUNT_LOCKED");
+
+    // Verify DB client portalAccess state
+    const dbClient = await ClientModel.findById(account.clientId);
+    expect(dbClient?.portalAccess?.status).toBe("locked");
+    expect(dbClient?.portalAccess?.lockout?.failedCount).toBe(5);
+    expect(dbClient?.portalAccess?.lockout?.lockedUntil).toBeDefined();
   });
 });
 

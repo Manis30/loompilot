@@ -1,9 +1,9 @@
 import { Request, Response, NextFunction } from "express";
 import { UserService } from "../services/user.service.js";
-import { ClientAccountService } from "../services/client-account.service.js";
+import { ClientPortalService } from "../services/client-portal.service.js";
 
 const userService = new UserService();
-const clientAccountService = new ClientAccountService();
+const clientPortalService = new ClientPortalService();
 
 export class MeController {
   static async getMe(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -14,7 +14,7 @@ export class MeController {
         const user = await userService.getProfile(actor.tenantId, actor.subjectId);
         res.status(200).json({ realm: "user", profile: user });
       } else {
-        const account = await clientAccountService.getProfile(actor.tenantId, actor.subjectId);
+        const account = await clientPortalService.getProfile(actor.tenantId, actor.subjectId);
         res.status(200).json({ realm: "client", profile: account });
       }
     } catch (err) {
@@ -36,7 +36,7 @@ export class MeController {
         const updated = await userService.updateProfile(actor.tenantId, actor.subjectId, updates);
         res.status(200).json({ realm: "user", profile: updated });
       } else {
-        const updated = await clientAccountService.updateProfile(actor.tenantId, actor.subjectId, updates);
+        const updated = await clientPortalService.updateProfile(actor.tenantId, actor.subjectId, updates);
         res.status(200).json({ realm: "client", profile: updated });
       }
     } catch (err) {

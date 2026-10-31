@@ -185,17 +185,6 @@ export const swaggerSpec = {
         },
       },
     },
-    "/api/v1/client-accounts": {
-      get: {
-        summary: "List client portal accounts",
-        tags: ["Client Management"],
-        security: [{ BearerAuth: [] }],
-        responses: {
-          "200": { description: "List of client accounts" },
-          "403": { description: "Admin permission required" },
-        },
-      },
-    },
     "/api/v1/audit": {
       get: {
         summary: "Query audit logs",
@@ -357,17 +346,6 @@ export const swaggerSpec = {
         security: [{ BearerAuth: [] }],
         responses: {
           "200": { description: "List of staff users" },
-          "403": { description: "Admin permission required" },
-        },
-      },
-    },
-    "/api/v1/client-accounts": {
-      get: {
-        summary: "List client portal accounts",
-        tags: ["Client Management"],
-        security: [{ BearerAuth: [] }],
-        responses: {
-          "200": { description: "List of client accounts" },
           "403": { description: "Admin permission required" },
         },
       },

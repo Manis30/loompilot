@@ -19,8 +19,9 @@ describe("Stage 3: Idempotency Middleware", () => {
     });
 
     const inviteToken = TokenService.generateInviteToken({
-      accountId: String(account._id),
+      clientId: String(account.clientId),
       tenantId,
+      invitedAt: account.portalAccess?.invitedAt,
     });
 
     const idempotencyKey = `idemp-key-${Date.now()}`;

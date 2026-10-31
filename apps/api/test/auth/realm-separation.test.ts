@@ -35,7 +35,6 @@ describe("Stage 3: Realm Separation (user vs client)", () => {
       realm: "client",
       tenantId: account.tenantId,
       clientId: String(account.clientId),
-      clientAccountId: String(account._id),
     });
 
     // 1. Attempt to access staff user management
@@ -72,7 +71,6 @@ describe("Stage 3: Realm Separation (user vs client)", () => {
       realm: "client",
       tenantId: account.tenantId,
       clientId: String(account.clientId),
-      clientAccountId: String(account._id),
     });
 
     // Staff access /me

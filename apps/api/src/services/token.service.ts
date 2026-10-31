@@ -10,7 +10,6 @@ export interface AccessTokenClaims {
   tenantId: string;
   role?: "admin" | "supervisor";
   clientId?: string;
-  clientAccountId?: string;
   jti: string;
   aud: "loompilot-user" | "loompilot-client";
   iss: string;
@@ -21,6 +20,7 @@ export interface InviteTokenClaims {
   purpose: "invite";
   tenantId: string;
   email?: string;
+  invitedAtMs: number;
   jti: string;
   iss: string;
 }
@@ -37,7 +37,6 @@ export class TokenService {
     tenantId: string;
     role?: "admin" | "supervisor";
     clientId?: string;
-    clientAccountId?: string;
   }): { token: string; jti: string; expiresIn: string } {
     const env = getEnv();
     const jti = crypto.randomUUID();
@@ -50,7 +49,6 @@ export class TokenService {
       jti,
       ...(params.role ? { role: params.role } : {}),
       ...(params.clientId ? { clientId: params.clientId } : {}),
-      ...(params.clientAccountId ? { clientAccountId: params.clientAccountId } : {}),
     };
 
     const token = jwt.sign(payload, env.JWT_ACCESS_SECRET, {
@@ -116,12 +114,15 @@ export class TokenService {
 
   /**
    * Generates a signed one-time client invite token (7-day validity).
+   * Binds the invite token cryptographically to portalAccess.invitedAt epoch ms.
    */
   static generateInviteToken(params: {
     clientId?: string;
     accountId?: string;
     tenantId: string;
     email?: string;
+    invitedAtMs?: number;
+    invitedAt?: Date;
   }): string {
     const clientId = params.clientId || params.accountId;
     if (!clientId) {
@@ -133,10 +134,14 @@ export class TokenService {
     }
     const env = getEnv();
     const jti = crypto.randomUUID();
-    const payload = {
+    const invitedAtMs =
+      params.invitedAtMs ?? (params.invitedAt ? params.invitedAt.getTime() : Date.now());
+
+    const payload: Omit<InviteTokenClaims, "iss"> = {
       sub: clientId,
       purpose: "invite",
       tenantId: params.tenantId,
+      invitedAtMs,
       ...(params.email ? { email: params.email } : {}),
       jti,
     };
@@ -164,6 +169,14 @@ export class TokenService {
         throw new AppError(
           ErrorCode.VALIDATION_FAILED,
           "Invalid token purpose; expected invite token",
+          400
+        );
+      }
+
+      if (typeof decoded.invitedAtMs !== "number") {
+        throw new AppError(
+          ErrorCode.VALIDATION_FAILED,
+          "Invalid invitation token: missing invitedAt binding",
           400
         );
       }

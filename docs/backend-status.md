@@ -1,6 +1,6 @@
 # LoomPilot Backend Status Report (Generated)
 
-**Generated At:** `2026-10-30T13:05:25.908Z`  
+**Generated At:** `2026-10-31T05:35:06.587Z`  
 **Monorepo:** pnpm workspace (`apps/api`, `packages/shared`, `packages/agents-client`, `apps/web`)  
 **TypeScript Typecheck:** Passing (0 errors)  
 **Architectural Decoupling (`depcruise`):** Passing (0 violations across 122 modules, 346 dependencies)  
@@ -40,7 +40,7 @@ Total Model Files: **22**
 
 ## 2. API Routes & RBAC Matrix
 
-Total Registered Route Endpoints: **34**
+Total Registered Route Endpoints: **28**
 
 | Method | Route Path | Allowed Realms | Allowed Roles | Idempotent |
 | :--- | :--- | :--- | :--- | :---: |
@@ -61,15 +61,9 @@ Total Registered Route Endpoints: **34**
 | `PATCH` | `/api/v1/users/:id` | `user` | `admin` | No |
 | `POST` | `/api/v1/users/:id/lock` | `user` | `admin` | No |
 | `POST` | `/api/v1/users/:id/unlock` | `user` | `admin` | No |
-| `GET` | `/api/v1/client-accounts` | `user` | `admin` | No |
-| `POST` | `/api/v1/client-accounts/invite` | `user` | `admin` | No |
-| `POST` | `/api/v1/client-accounts/:id/reinvite` | `user` | `admin` | No |
-| `POST` | `/api/v1/client-accounts/:id/lock` | `user` | `admin` | No |
-| `POST` | `/api/v1/client-accounts/:id/unlock` | `user` | `admin` | No |
 | `POST` | `/api/v1/clients/:id/portal/invite` | `user` | `admin` | No |
 | `POST` | `/api/v1/clients/:id/portal/re-invite` | `user` | `admin` | No |
 | `POST` | `/api/v1/clients/:id/portal/reinvite` | `user` | `admin` | No |
-| `POST` | `/api/v1/clients/:id/portal/accept` | `user` | `admin` | Yes |
 | `POST` | `/api/v1/clients/:id/portal/lock` | `user` | `admin` | No |
 | `POST` | `/api/v1/clients/:id/portal/unlock` | `user` | `admin` | No |
 | `GET` | `/api/v1/audit` | `user` | `admin` | No |
@@ -102,18 +96,18 @@ Total Repositories: **10**
 
 ## 4. Test Suite Summary (`apps/api/test`)
 
-Total Test Files: **29**  
-Total Test Declarations: **165**
+Total Test Files: **30**  
+Total Test Declarations: **182**
 
 | Test File | Test Count |
 | :--- | :---: |
 | `audit/audit-logging.test.ts` | 2 |
-| `auth/auth-login.test.ts` | 6 |
-| `auth/client-portal-security.test.ts` | 1 |
-| `auth/invite-flow.test.ts` | 1 |
+| `auth/auth-login.test.ts` | 7 |
+| `auth/client-portal-security.test.ts` | 3 |
+| `auth/invite-flow.test.ts` | 7 |
 | `auth/last-admin.test.ts` | 3 |
 | `auth/realm-separation.test.ts` | 3 |
-| `auth/refresh-rotation.test.ts` | 3 |
+| `auth/refresh-rotation.test.ts` | 5 |
 | `auth/tenant-isolation.test.ts` | 1 |
 | `config/env.test.ts` | 6 |
 | `middleware/auth-rate-limiter.test.ts` | 1 |
@@ -122,6 +116,7 @@ Total Test Declarations: **165**
 | `middleware/rate-limiter.test.ts` | 4 |
 | `middleware/rbac-matrix.test.ts` | 5 |
 | `middleware/request-id.test.ts` | 2 |
+| `models/database-views.test.ts` | 6 |
 | `models/paise-validation.test.ts` | 4 |
 | `models/partial-indexes.test.ts` | 6 |
 | `models/ref-types.test.ts` | 2 |

@@ -22,15 +22,9 @@ Enforced strictly at the API gateway layer via `authenticate` and `authorize` mi
 | **PATCH** | `/api/v1/users/:id` | Authenticated | `user` | `admin` | No | Update staff user |
 | **POST** | `/api/v1/users/:id/lock` | Authenticated | `user` | `admin` | No | Lock staff user and revoke sessions |
 | **POST** | `/api/v1/users/:id/unlock` | Authenticated | `user` | `admin` | No | Unlock staff user |
-| **GET** | `/api/v1/client-accounts` | Authenticated | `user` | `admin` | No | List client accounts |
-| **POST** | `/api/v1/client-accounts/invite` | Authenticated | `user` | `admin` | No | Invite client contact with one-time invite token |
-| **POST** | `/api/v1/client-accounts/:id/reinvite` | Authenticated | `user` | `admin` | No | Re-issue invitation for client account and revoke sessions |
-| **POST** | `/api/v1/client-accounts/:id/lock` | Authenticated | `user` | `admin` | No | Lock client account and revoke sessions |
-| **POST** | `/api/v1/client-accounts/:id/unlock` | Authenticated | `user` | `admin` | No | Unlock client account |
 | **POST** | `/api/v1/clients/:id/portal/invite` | Authenticated | `user` | `admin` | No | Invite client contact with one-time invite token |
 | **POST** | `/api/v1/clients/:id/portal/re-invite` | Authenticated | `user` | `admin` | No | Re-issue invitation for client portal and revoke active sessions |
 | **POST** | `/api/v1/clients/:id/portal/reinvite` | Authenticated | `user` | `admin` | No | Re-issue invitation for client portal and revoke active sessions |
-| **POST** | `/api/v1/clients/:id/portal/accept` | Authenticated | `user` | `admin` | Yes | Admin or portal activation of client portal access |
 | **POST** | `/api/v1/clients/:id/portal/lock` | Authenticated | `user` | `admin` | No | Lock client portal access and revoke sessions |
 | **POST** | `/api/v1/clients/:id/portal/unlock` | Authenticated | `user` | `admin` | No | Unlock client portal access |
 | **GET** | `/api/v1/audit` | Authenticated | `user` | `admin` | No | Query immutable audit logs |

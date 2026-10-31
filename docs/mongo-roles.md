@@ -1,11 +1,12 @@
-# MongoDB Atlas Security Roles & Read Views Configuration
+# MongoDB Atlas Security Roles & Read Views Configuration (Stage 3.5 Step 4)
 
 ## 1. Overview
-In MongoDB Atlas, database users and custom roles cannot be created via the standard `mongosh` shell commands (`db.createUser` / `db.createRole`) because Atlas manages authentication credentials through its central control plane.
+In MongoDB Atlas, database users and custom roles are managed securely through Atlas control planes (Web UI, Atlas CLI, or Atlas Administration API).
 
-This document provides step-by-step instructions to configure the read-only database users using the **Atlas Web UI**, the **Atlas CLI (`atlas`)**, or the **Atlas Administration REST API**:
-- **`agents_ro`**: Read-only user for analytical Python backend agents (`agents/`). Configured via a strict **ALLOWLIST** of domain collections plus `agentSafeUsers`. Never has access to authentication credentials, internal audit logs, job queues, or confidential costing collections.
-- **`chat_ro`**: Read-only user for client-facing conversational LLM tools. Scoped strictly to the client-safe views (`clientSafeOrders`, `clientSafeQuotations`, and `clientSafeRevisions`).
+This document establishes the least-privilege security boundaries and read-only views for external consumers:
+- **`chat_ro`**: Read-only user for client-facing conversational LLM tools. Scoped strictly to the two client-safe views (`clientSafeOrders` and `clientSafeProducts`).
+- **`agents_ro`**: Read-only user for analytical Python backend agents (`agents/`). Configured via a strict **ALLOWLIST** of 10 domain collections plus 3 agent-safe views (`agentSafeOrders`, `agentSafeUsers`, `agentSafeClients`). Never granted base `orders`, `users`, `clients`, or any platform collection.
+- **`admin_assistant_ro`**: Documented (uncreated) future role for executive/admin assistant workflows requiring operational audit and costing access.
 
 ---
 
@@ -13,13 +14,14 @@ This document provides step-by-step instructions to configure the read-only data
 
 | Role / User | Database Scope | Allowed Resources (Strict Allowlist) | Denied / Excluded Resources |
 |---|---|---|---|
-| **`agents_ro`** | `loompilot` only | **Explicit Collection Allowlist (Schema v4 Domain Collections)**:<br>• `machines`<br>• `materials`<br>• `products`<br>• `marketPrices`<br>• `orders`<br>• `supervisorDailyReports`<br>• `conversations`<br>• `maintenanceTickets`<br>• `stockMovements`<br>• `agentRuns`<br>• `settings`<br>• `clients`<br>• `suppliers`<br>• **`agentSafeUsers`** (read-only view exposing id, name, role, processAreas, status) | **Strictly Forbidden** (never granted):<br>❌ `users`<br>❌ `auditLogs`<br>❌ `refreshTokens`<br>❌ `idempotencyKeys`<br>❌ `outboxMessages`<br>❌ `notifications`<br>❌ `files`<br>❌ `importJobs` |
-| **`chat_ro`** | `loompilot` only | **Views only**:<br>• `clientSafeOrders`<br>• `clientSafeQuotations`<br>• `clientSafeRevisions` | All base collections and administrative costing/job collections. |
+| **`chat_ro`** | `loompilot` only | **Views only**:<br>• `clientSafeOrders`<br>• `clientSafeProducts` | All base collections (`orders`, `products`, `materials`, `users`, `clients`), costing, and platform collections. |
+| **`agents_ro`** | `loompilot` only | **Explicit Allowlist (13 Resources)**:<br>• `agentSafeOrders` (view)<br>• `agentSafeUsers` (view)<br>• `agentSafeClients` (view)<br>• `materials`<br>• `machines`<br>• `products`<br>• `suppliers`<br>• `marketPrices`<br>• `supervisorDailyReports`<br>• `stockMovements`<br>• `maintenanceTickets`<br>• `settings`<br>• `agentRuns` | **Strictly Forbidden** (never granted):<br>❌ `orders` (base collection)<br>❌ `users` (base collection)<br>❌ `clients` (base collection)<br>❌ `auditLogs`<br>❌ `refreshTokens`<br>❌ `idempotencyKeys`<br>❌ `outboxMessages`<br>❌ `notifications`<br>❌ `files`<br>❌ `importJobs`<br>❌ `counters` |
+| **`admin_assistant_ro`**<br>*(Documented Only)* | `loompilot` only | *Planned Future Scope*:<br>• `orders`<br>• `auditLogs`<br>• `agentSafeUsers`<br>• `clients`<br>• Selected catalog/operational collections | Direct modifications (write actions), auth tokens, secrets. |
 
 > [!IMPORTANT]
-> **Client Isolation Warning**:
-> MongoDB Atlas RBAC enforces collection- and view-level access boundaries, but cannot enforce row/document-level tenant filtering natively.
-> **Per-client and per-tenant isolation MUST be strictly enforced by the Agent Tools and Application Gateway** by including mandatory `tenantId` and `clientId` query filters on all view queries.
+> **Tenant & Client Isolation**:
+> MongoDB Atlas RBAC enforces database- and collection/view-level boundaries.
+> Document-level multi-tenancy (`tenantId` and `clientId`) is enforced strictly at the API and agent query generation layers.
 
 ---
 
@@ -28,111 +30,63 @@ This document provides step-by-step instructions to configure the read-only data
 ### Step 1: Create Custom Roles
 1. In the Atlas Console, navigate to **Security** > **Database Access** > **Custom Roles**.
 2. Click **Add Custom Role**:
-   - **Role Name**: `LoomPilotAgentsAllowlistReadOnly`
-     - **Database**: `loompilot`
-     - **Actions**: `find` on the exact Schema v4 domain collections: `machines`, `materials`, `products`, `marketPrices`, `orders`, `supervisorDailyReports`, `stockMovements`, `conversations`, `maintenanceTickets`, `agentRuns`, `settings`, `clients`, `suppliers`, and `agentSafeUsers`.
    - **Role Name**: `LoomPilotChatReadOnly`
      - **Database**: `loompilot`
-     - **Actions**: `find` on views: `clientSafeOrders`, `clientSafeQuotations`, `clientSafeRevisions`.
+     - **Actions**: `find` on `clientSafeOrders` and `clientSafeProducts`.
+   - **Role Name**: `LoomPilotAgentsAllowlistReadOnly`
+     - **Database**: `loompilot`
+     - **Actions**: `find` on the exact 13 allowlisted resources:
+       `agentSafeOrders`, `agentSafeUsers`, `agentSafeClients`, `materials`, `machines`, `products`, `suppliers`, `marketPrices`, `supervisorDailyReports`, `stockMovements`, `maintenanceTickets`, `settings`, and `agentRuns`.
 
 ### Step 2: Create Database Users
 1. Go to **Security** > **Database Access** > **Database Users**.
 2. Click **Add New Database User**:
-   - **Authentication Method**: Password (or AWS IAM / X.509).
-   - **Username**: `agents_ro`
-   - **Password**: Generate secure 32+ character passphrase.
-   - **Database User Privileges**: Assign `LoomPilotAgentsAllowlistReadOnly`.
-3. Repeat for `chat_ro`:
    - **Username**: `chat_ro`
    - **Password**: Generate secure 32+ character passphrase.
    - **Database User Privileges**: Assign `LoomPilotChatReadOnly`.
+3. Repeat for `agents_ro`:
+   - **Username**: `agents_ro`
+   - **Password**: Generate secure 32+ character passphrase.
+   - **Database User Privileges**: Assign `LoomPilotAgentsAllowlistReadOnly`.
 
 ---
 
 ## 4. Provisioning Method B: Atlas CLI (`atlas`)
 
-Ensure you have the MongoDB Atlas CLI installed and authenticated (`atlas auth login`).
-
-### Step 1: Create Custom Roles
 ```bash
-# Custom role for chat_ro
+# 1. Custom role for chat_ro (views only)
 atlas customDbRoles create LoomPilotChatReadOnly \
   --privilege find@loompilot.clientSafeOrders \
-  --privilege find@loompilot.clientSafeQuotations \
-  --privilege find@loompilot.clientSafeRevisions \
+  --privilege find@loompilot.clientSafeProducts \
   --projectId "<ATLAS_PROJECT_ID>"
 
-# Custom role for agents_ro (explicit collection allowlist)
+# 2. Custom role for agents_ro (strict 13-resource allowlist)
 atlas customDbRoles create LoomPilotAgentsAllowlistReadOnly \
-  --privilege find@loompilot.machines \
-  --privilege find@loompilot.materials \
-  --privilege find@loompilot.products \
-  --privilege find@loompilot.marketPrices \
-  --privilege find@loompilot.orders \
-  --privilege find@loompilot.supervisorDailyReports \
-  --privilege find@loompilot.conversations \
-  --privilege find@loompilot.maintenanceTickets \
-  --privilege find@loompilot.stockMovements \
-  --privilege find@loompilot.agentRuns \
-  --privilege find@loompilot.settings \
-  --privilege find@loompilot.clients \
-  --privilege find@loompilot.suppliers \
+  --privilege find@loompilot.agentSafeOrders \
   --privilege find@loompilot.agentSafeUsers \
+  --privilege find@loompilot.agentSafeClients \
+  --privilege find@loompilot.materials \
+  --privilege find@loompilot.machines \
+  --privilege find@loompilot.products \
+  --privilege find@loompilot.suppliers \
+  --privilege find@loompilot.marketPrices \
+  --privilege find@loompilot.supervisorDailyReports \
+  --privilege find@loompilot.stockMovements \
+  --privilege find@loompilot.maintenanceTickets \
+  --privilege find@loompilot.settings \
+  --privilege find@loompilot.agentRuns \
   --projectId "<ATLAS_PROJECT_ID>"
-```
 
-### Step 2: Create Database Users
-```bash
-atlas dbusers create \
-  --username agents_ro \
-  --password "<SECURE_PASSWORD>" \
-  --role LoomPilotAgentsAllowlistReadOnly@loompilot \
-  --projectId "<ATLAS_PROJECT_ID>"
-
+# 3. Create database users
 atlas dbusers create \
   --username chat_ro \
   --password "<SECURE_PASSWORD>" \
   --role LoomPilotChatReadOnly@loompilot \
   --projectId "<ATLAS_PROJECT_ID>"
+
+atlas dbusers create \
+  --username agents_ro \
+  --password "<SECURE_PASSWORD>" \
+  --role LoomPilotAgentsAllowlistReadOnly@loompilot \
+  --projectId "<ATLAS_PROJECT_ID>"
 ```
-
----
-
-## 5. Provisioning Method C: Atlas Administration REST API
-
-Use the Atlas Administration API endpoint `/groups/{GROUP-ID}/databaseUsers`:
-
-```bash
-curl --user "{PUBLIC_KEY}:{PRIVATE_KEY}" --digest \
-  --header "Accept: application/vnd.atlas.2023-01-01+json" \
-  --header "Content-Type: application/json" \
-  --include \
-  --request POST "https://cloud.mongodb.com/api/atlas/v2/groups/{GROUP-ID}/databaseUsers" \
-  --data '{
-    "databaseName": "admin",
-    "password": "<SECURE_PASSWORD>",
-    "roles": [
-      {
-        "databaseName": "loompilot",
-        "roleName": "LoomPilotChatReadOnly"
-      }
-    ],
-    "username": "chat_ro"
-  }'
-```
-
----
-
-## 6. Client-Safe and Agent-Safe Aggregation Views Setup
-
-Before client queries can be routed to `clientSafeOrders`, `clientSafeQuotations`, `clientSafeRevisions`, and `agentSafeUsers`, the views must be created in the database. Run the migration script via Node.js:
-
-```bash
-pnpm --filter @loompilot/api tsx src/seed/migrations/create-views.ts
-```
-
-The migration defines:
-- **`clientSafeOrders`**: Computed client status (`received`, `under_review`, `quotation_ready`, `confirmed`, `in_production`, `ready`, `delivered`, `closed`, `declined`) and public timeline/progress metrics.
-- **`clientSafeQuotations`**: Filtering `$match` admitting only customer-visible states (`sent`, `accepted`, `declined`, `expired`) and whitelist projection of pricing, valid-until, and `clientExplanation`. Internal explanation, assumptions, costings, and margins are strictly excluded.
-- **`clientSafeRevisions`**: Customer-visible revisions (`sent`, `accepted`, `declined`) exposing agreed price changes and reasons without internal cost drivers.
-- **`agentSafeUsers`**: Sanitized projection of `users` exposing `_id`, `tenantId`, `name`, `role`, `processAreas`, and `status`, while hiding password hashes and contact/lockout secrets.

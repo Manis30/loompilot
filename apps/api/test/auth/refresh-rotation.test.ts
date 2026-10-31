@@ -4,7 +4,7 @@ import { createApp } from "../../src/app.js";
 import { createContainer } from "../../src/container.js";
 import { RefreshTokenModel } from "../../src/models/platform/refresh-token.model.js";
 import { AuditLogModel } from "../../src/models/platform/audit-log.model.js";
-import { createTestUser } from "../helpers/auth-helper.js";
+import { createTestUser, createTestClientAccount } from "../helpers/auth-helper.js";
 
 function extractRefreshToken(res: request.Response): string {
   const cookies = res.headers["set-cookie"];
@@ -153,5 +153,122 @@ describe("Stage 3: Refresh Token Rotation & Family Reuse Detection", () => {
       revokedAt: { $exists: false },
     });
     expect(activeTokens.length).toBe(1);
+  });
+
+  it("Enforces Origin check on cookie refresh and logout, blocking unauthorized cross-origin requests with 403", async () => {
+    const { user, plainPassword } = await createTestUser({ email: "origin.test@mill.local" });
+
+    const loginRes = await request(app)
+      .post("/api/v1/auth/login")
+      .send({
+        tenantId: user.tenantId,
+        email: user.email,
+        password: plainPassword,
+      });
+
+    const loginCookies = loginRes.headers["set-cookie"] as unknown as string[];
+
+    // 1. Refresh with unauthorized Origin header is blocked with 403 FORBIDDEN
+    const blockedRefresh = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", loginCookies)
+      .set("Origin", "https://malicious-attacker.com");
+
+    expect(blockedRefresh.status).toBe(403);
+    expect(blockedRefresh.body.error.code).toBe("FORBIDDEN");
+    expect(blockedRefresh.body.error.message).toContain("Cross-Origin request from origin");
+
+    // 2. Logout with unauthorized Origin header is blocked with 403 FORBIDDEN
+    const blockedLogout = await request(app)
+      .post("/api/v1/auth/logout")
+      .set("Cookie", loginCookies)
+      .set("Origin", "https://malicious-attacker.com");
+
+    expect(blockedLogout.status).toBe(403);
+    expect(blockedLogout.body.error.code).toBe("FORBIDDEN");
+    expect(blockedLogout.body.error.message).toContain("Cross-Origin request from origin");
+
+    // 3. Client realm: Refresh and logout with unauthorized Origin header
+    const { account, plainPassword: clientPass } = await createTestClientAccount({
+      email: "client.origin@acme.local",
+    });
+
+    const clientLoginRes = await request(app)
+      .post("/api/v1/client/auth/login")
+      .send({
+        tenantId: account.tenantId,
+        email: account.email,
+        password: clientPass,
+      });
+
+    const clientCookies = clientLoginRes.headers["set-cookie"] as unknown as string[];
+
+    const clientBlockedRefresh = await request(app)
+      .post("/api/v1/client/auth/refresh")
+      .set("Cookie", clientCookies)
+      .set("Origin", "https://malicious-attacker.com");
+
+    expect(clientBlockedRefresh.status).toBe(403);
+    expect(clientBlockedRefresh.body.error.code).toBe("FORBIDDEN");
+
+    const clientBlockedLogout = await request(app)
+      .post("/api/v1/client/auth/logout")
+      .set("Cookie", clientCookies)
+      .set("Origin", "https://malicious-attacker.com");
+
+    expect(clientBlockedLogout.status).toBe(403);
+    expect(clientBlockedLogout.body.error.code).toBe("FORBIDDEN");
+  });
+
+  it("Asserts refreshToken is strictly absent from the body of every login and refresh route across both realms", async () => {
+    // 1. Staff User Login and Refresh
+    const { user, plainPassword } = await createTestUser({ email: "nobody.user@mill.local" });
+
+    const userLoginRes = await request(app)
+      .post("/api/v1/auth/login")
+      .send({
+        tenantId: user.tenantId,
+        email: user.email,
+        password: plainPassword,
+      });
+
+    expect(userLoginRes.status).toBe(200);
+    expect(userLoginRes.body.refreshToken).toBeUndefined();
+    expect(userLoginRes.body.refresh_token).toBeUndefined();
+
+    const userCookies = userLoginRes.headers["set-cookie"] as unknown as string[];
+    const userRefreshRes = await request(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", userCookies);
+
+    expect(userRefreshRes.status).toBe(200);
+    expect(userRefreshRes.body.refreshToken).toBeUndefined();
+    expect(userRefreshRes.body.refresh_token).toBeUndefined();
+
+    // 2. Client Realm Login and Refresh
+    const { account, plainPassword: clientPass } = await createTestClientAccount({
+      email: "nobody.client@acme.local",
+    });
+
+    const clientLoginRes = await request(app)
+      .post("/api/v1/client/auth/login")
+      .send({
+        tenantId: account.tenantId,
+        email: account.email,
+        password: clientPass,
+      });
+
+    expect(clientLoginRes.status).toBe(200);
+    expect(clientLoginRes.body.refreshToken).toBeUndefined();
+    expect(clientLoginRes.body.refresh_token).toBeUndefined();
+
+    const clientCookies = clientLoginRes.headers["set-cookie"] as unknown as string[];
+    const clientRefreshRes = await request(app)
+      .post("/api/v1/client/auth/refresh")
+      .set("Cookie", clientCookies);
+
+    expect(clientRefreshRes.status).toBe(200);
+    expect(clientRefreshRes.body.refreshToken).toBeUndefined();
+    expect(clientRefreshRes.body.refresh_token).toBeUndefined();
   });
 });

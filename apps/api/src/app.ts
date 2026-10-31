@@ -9,13 +9,13 @@ import { logger } from "./utils/logger.js";
 import { requestIdMiddleware } from "./middleware/request-id.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { createRateLimiter } from "./middleware/rate-limiter.js";
-import { NotFoundError } from "./errors/app-error.js";
+import { NotFoundError, AppError } from "./errors/app-error.js";
+import { ErrorCode } from "@loompilot/shared";
 import { swaggerSpec } from "./config/swagger.js";
 import { createHealthRoutes } from "./routes/health.routes.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { meRouter } from "./routes/me.routes.js";
 import { userRouter } from "./routes/user.routes.js";
-import { clientAccountRouter } from "./routes/client-account.routes.js";
 import { clientPortalRouter } from "./routes/client-portal.routes.js";
 import { auditRouter } from "./routes/audit.routes.js";
 import { AppContainer, getContainer } from "./container.js";
@@ -47,7 +47,13 @@ export function createApp(container: AppContainer = getContainer()): Express {
         if (!origin || allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
           callback(null, true);
         } else {
-          callback(new Error(`Origin '${origin}' not permitted by CORS policy`));
+          callback(
+            new AppError(
+              ErrorCode.FORBIDDEN,
+              `Cross-Origin request from origin '${origin}' is not allowed`,
+              403
+            )
+          );
         }
       },
       credentials: true,
@@ -98,7 +104,6 @@ export function createApp(container: AppContainer = getContainer()): Express {
   app.use("/api/v1/me", meRouter);
   app.use("/api/v1/users", userRouter);
   app.use("/api/v1/clients", clientPortalRouter);
-  app.use("/api/v1/client-accounts", clientAccountRouter);
   app.use("/api/v1/audit", auditRouter);
 
   // 10. Unmatched routes -> 404

@@ -97,7 +97,6 @@ describe("Stage 3: RBAC Route Permission Matrix", () => {
     const protectedRoutes = [
       { method: "get", path: "/api/v1/me" },
       { method: "get", path: "/api/v1/users" },
-      { method: "get", path: "/api/v1/client-accounts" },
       { method: "get", path: "/api/v1/audit" },
       { method: "post", path: "/api/v1/auth/logout-all" },
       { method: "post", path: "/api/v1/client/auth/logout-all" },
@@ -122,9 +121,9 @@ describe("Stage 3: RBAC Route Permission Matrix", () => {
     const adminOnlyRoutes = [
       { method: "get", path: "/api/v1/users" },
       { method: "post", path: "/api/v1/users", body: { name: "X", email: "x@x.com", password: "p", role: "supervisor" } },
-      { method: "get", path: "/api/v1/client-accounts" },
-      { method: "post", path: "/api/v1/client-accounts/invite", body: { clientId: "c", email: "c@c.com", name: "C" } },
       { method: "post", path: "/api/v1/clients/c/portal/invite", body: { email: "c@c.com" } },
+      { method: "post", path: "/api/v1/clients/c/portal/lock" },
+      { method: "post", path: "/api/v1/clients/c/portal/unlock" },
       { method: "get", path: "/api/v1/audit" },
     ];
 
@@ -149,9 +148,6 @@ describe("Stage 3: RBAC Route Permission Matrix", () => {
 
     const resUsers = await request(app).get("/api/v1/users").set("Authorization", adminHeader);
     expect(resUsers.status).toBe(200);
-
-    const resAccounts = await request(app).get("/api/v1/client-accounts").set("Authorization", adminHeader);
-    expect(resAccounts.status).toBe(200);
 
     const resAudit = await request(app).get("/api/v1/audit").set("Authorization", adminHeader);
     expect(resAudit.status).toBe(200);

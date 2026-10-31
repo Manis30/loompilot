@@ -193,11 +193,12 @@ export class AuthController {
 
   static async acceptInvite(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { token, password } = req.body;
+      const { token, password, tenantId } = req.body;
 
       const result = await authService.acceptInvite({
         token,
         password,
+        tenantId,
         ip: req.ip,
         requestId: (req as any).id,
       });

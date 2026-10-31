@@ -161,53 +161,6 @@ export const ROUTE_PERMISSION_MATRIX: Record<string, RoutePermission> = {
     idempotent: false,
   },
 
-  // Client Account Management (Admin Only)
-  "GET /api/v1/client-accounts": {
-    routeKey: "GET /api/v1/client-accounts",
-    method: "GET",
-    path: "/api/v1/client-accounts",
-    description: "List client accounts",
-    allowedRealms: ["user"],
-    allowedRoles: ["admin"],
-    idempotent: false,
-  },
-  "POST /api/v1/client-accounts/invite": {
-    routeKey: "POST /api/v1/client-accounts/invite",
-    method: "POST",
-    path: "/api/v1/client-accounts/invite",
-    description: "Invite client contact with one-time invite token",
-    allowedRealms: ["user"],
-    allowedRoles: ["admin"],
-    idempotent: false,
-  },
-  "POST /api/v1/client-accounts/:id/reinvite": {
-    routeKey: "POST /api/v1/client-accounts/:id/reinvite",
-    method: "POST",
-    path: "/api/v1/client-accounts/:id/reinvite",
-    description: "Re-issue invitation for client account and revoke sessions",
-    allowedRealms: ["user"],
-    allowedRoles: ["admin"],
-    idempotent: false,
-  },
-  "POST /api/v1/client-accounts/:id/lock": {
-    routeKey: "POST /api/v1/client-accounts/:id/lock",
-    method: "POST",
-    path: "/api/v1/client-accounts/:id/lock",
-    description: "Lock client account and revoke sessions",
-    allowedRealms: ["user"],
-    allowedRoles: ["admin"],
-    idempotent: false,
-  },
-  "POST /api/v1/client-accounts/:id/unlock": {
-    routeKey: "POST /api/v1/client-accounts/:id/unlock",
-    method: "POST",
-    path: "/api/v1/client-accounts/:id/unlock",
-    description: "Unlock client account",
-    allowedRealms: ["user"],
-    allowedRoles: ["admin"],
-    idempotent: false,
-  },
-
   // Client Portal Access Management (Admin Only, /api/v1/clients/:id/portal/...)
   "POST /api/v1/clients/:id/portal/invite": {
     routeKey: "POST /api/v1/clients/:id/portal/invite",
@@ -235,15 +188,6 @@ export const ROUTE_PERMISSION_MATRIX: Record<string, RoutePermission> = {
     allowedRealms: ["user"],
     allowedRoles: ["admin"],
     idempotent: false,
-  },
-  "POST /api/v1/clients/:id/portal/accept": {
-    routeKey: "POST /api/v1/clients/:id/portal/accept",
-    method: "POST",
-    path: "/api/v1/clients/:id/portal/accept",
-    description: "Admin or portal activation of client portal access",
-    allowedRealms: ["user"],
-    allowedRoles: ["admin"],
-    idempotent: true,
   },
   "POST /api/v1/clients/:id/portal/lock": {
     routeKey: "POST /api/v1/clients/:id/portal/lock",

@@ -103,41 +103,54 @@ export class ClientRepository {
     clientId: string | Types.ObjectId,
     email: string,
     actorUserId: string | Types.ObjectId,
+    invitedAt: Date = new Date(),
     tx?: TxContext
   ): Promise<IClient> {
     const session = this.getSession(tx);
-    const updated = await this.model
-      .findOneAndUpdate(
-        { tenantId, _id: clientId },
-        {
-          $set: {
-            "portalAccess.email": email.toLowerCase().trim(),
-            "portalAccess.status": "invited",
-            "portalAccess.invitedBy": new Types.ObjectId(actorUserId),
-            "portalAccess.invitedAt": new Date(),
-            "portalAccess.lockout.failedCount": 0,
-            "portalAccess.lockout.lockedUntil": null,
+    try {
+      const updated = await this.model
+        .findOneAndUpdate(
+          { tenantId, _id: clientId },
+          {
+            $set: {
+              "portalAccess.email": email.toLowerCase().trim(),
+              "portalAccess.status": "invited",
+              "portalAccess.invitedBy": new Types.ObjectId(actorUserId),
+              "portalAccess.invitedAt": invitedAt,
+              "portalAccess.lockout.failedCount": 0,
+              "portalAccess.lockout.lockedUntil": null,
+            },
+            $unset: {
+              "portalAccess.passwordHash": 1,
+              "portalAccess.acceptedAt": 1,
+            },
+            $inc: { version: 1 },
           },
-          $unset: {
-            "portalAccess.passwordHash": 1,
-            "portalAccess.acceptedAt": 1,
-          },
-          $inc: { version: 1 },
-        },
-        { new: true, session: session ?? null }
-      )
-      .exec();
+          { new: true, session: session ?? null }
+        )
+        .exec();
 
-    if (!updated) {
-      throw new AppError(ErrorCode.NOT_FOUND, "Client not found", 404);
+      if (!updated) {
+        throw new AppError(ErrorCode.NOT_FOUND, "Client not found", 404);
+      }
+      return updated;
+    } catch (err: any) {
+      if (err.code === 11000) {
+        throw new AppError(
+          ErrorCode.DUPLICATE,
+          `Client portal account with email '${email}' already exists`,
+          409
+        );
+      }
+      throw err;
     }
-    return updated;
   }
 
   async reinvitePortal(
     tenantId: string,
     clientId: string | Types.ObjectId,
     actorUserId: string | Types.ObjectId,
+    invitedAt: Date = new Date(),
     tx?: TxContext
   ): Promise<IClient> {
     const client = await this.findById(tenantId, clientId, false, tx);
@@ -154,22 +167,26 @@ export class ClientRepository {
       );
     }
 
-    return this.invitePortal(tenantId, clientId, email, actorUserId, tx);
+    return this.invitePortal(tenantId, clientId, email, actorUserId, invitedAt, tx);
   }
 
   async acceptInvite(
     tenantId: string,
     clientId: string | Types.ObjectId,
     passwordHash: string,
+    invitedAtMs: number,
     tx?: TxContext
   ): Promise<IClient> {
     const session = this.getSession(tx);
+    const expectedDate = new Date(invitedAtMs);
+
     const updated = await this.model
       .findOneAndUpdate(
         {
           tenantId,
           _id: clientId,
           "portalAccess.status": "invited",
+          "portalAccess.invitedAt": expectedDate,
         },
         {
           $set: {
@@ -190,10 +207,27 @@ export class ClientRepository {
       if (!existing) {
         throw new AppError(ErrorCode.NOT_FOUND, "Invited client does not exist", 404);
       }
+      if (existing.portalAccess?.status === "locked") {
+        throw new AppError(
+          ErrorCode.ACCOUNT_LOCKED,
+          "Client account is locked and cannot accept invitations",
+          403
+        );
+      }
       if (existing.portalAccess?.status === "active") {
         throw new AppError(
           ErrorCode.INVITE_ALREADY_ACCEPTED,
           "Invitation has already been accepted or is no longer valid",
+          400
+        );
+      }
+      if (
+        existing.portalAccess?.invitedAt &&
+        existing.portalAccess.invitedAt.getTime() !== invitedAtMs
+      ) {
+        throw new AppError(
+          ErrorCode.INVITE_EXPIRED,
+          "Invitation token has been superseded by a newer invitation",
           400
         );
       }

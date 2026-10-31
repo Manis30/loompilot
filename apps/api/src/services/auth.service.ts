@@ -288,7 +288,6 @@ export class AuthService {
       realm: "client",
       tenantId,
       clientId,
-      clientAccountId: clientId,
     });
 
     const rawRefreshToken = TokenService.generateRefreshToken();
@@ -449,7 +448,6 @@ export class AuthService {
       tenantId: existing.tenantId,
       role,
       clientId,
-      ...(existing.realm === "client" ? { clientAccountId: String(existing.subjectId) } : {}),
     });
 
     await this.auditService.log({
@@ -602,11 +600,20 @@ export class AuthService {
   async acceptInvite(params: {
     token: string;
     password: string;
+    tenantId?: string;
     ip?: string;
     requestId?: string;
   }) {
-    const { token, password, ip, requestId } = params;
+    const { token, password, tenantId, ip, requestId } = params;
     const claims = TokenService.verifyInviteToken(token);
+
+    if (tenantId && claims.tenantId && tenantId !== claims.tenantId) {
+      throw new AppError(
+        ErrorCode.FORBIDDEN,
+        "Tenant mismatch: invitation token does not belong to this tenant",
+        403
+      );
+    }
 
     validatePasswordPolicy(password);
     const passwordHash = await hashPassword(password);
@@ -614,7 +621,8 @@ export class AuthService {
     const updated = await this.clientRepo.acceptInvite(
       claims.tenantId,
       claims.sub,
-      passwordHash
+      passwordHash,
+      claims.invitedAtMs
     );
 
     await StatusCacheService.setStatus(

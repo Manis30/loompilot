@@ -151,7 +151,6 @@ export function generateTestAuthHeader(params: {
   tenantId?: string;
   role?: "admin" | "supervisor";
   clientId?: string;
-  clientAccountId?: string;
 }): string {
   const { token } = TokenService.generateAccessToken({
     subjectId: params.subjectId,
@@ -159,7 +158,6 @@ export function generateTestAuthHeader(params: {
     tenantId: params.tenantId || "test_tenant",
     role: params.role || (params.realm === "user" ? "admin" : undefined),
     clientId: params.clientId,
-    clientAccountId: params.clientAccountId,
   });
   return `Bearer ${token}`;
 }
