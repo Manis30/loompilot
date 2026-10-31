@@ -1,4 +1,10 @@
-import { APP_NAME } from "@loompilot/shared";
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import './index.css'
+import App from './App.tsx'
 
-console.log(`${APP_NAME} web client`);
-
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)

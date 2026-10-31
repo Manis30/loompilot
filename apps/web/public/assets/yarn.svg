@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 140" fill="none">
+  <!-- 3D Textile Yarn Cone -->
+  <defs>
+    <linearGradient id="yarnConeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#4a90e2" />
+      <stop offset="50%" stop-color="#6ba4eb" />
+      <stop offset="100%" stop-color="#3570b5" />
+    </linearGradient>
+    <linearGradient id="coneCoreGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#e89e3a" />
+      <stop offset="100%" stop-color="#c4781d" />
+    </linearGradient>
+  </defs>
+
+  <!-- Top protruding plastic cone tip -->
+  <polygon points="76,16 84,16 82,26 78,26" fill="url(#coneCoreGrad)" />
+  <ellipse cx="80" cy="16" rx="4" ry="1.5" fill="#fbd085" />
+
+  <!-- Yarn Cone Main Body (Trapezoid with curved base) -->
+  <path d="M66 26 L94 26 L118 108 C118 116 80 120 42 108 Z" fill="url(#yarnConeGrad)" />
+  <ellipse cx="80" cy="26" rx="14" ry="3" fill="#6ba4eb" />
+
+  <!-- Crossed Yarn Winding Patterns -->
+  <path d="M68 32 Q95 55 112 85" stroke="#ffffff" stroke-width="1.2" opacity="0.35" />
+  <path d="M92 32 Q65 60 48 90" stroke="#ffffff" stroke-width="1.2" opacity="0.35" />
+  <path d="M72 45 Q100 70 116 100" stroke="#ffffff" stroke-width="1.2" opacity="0.35" />
+  <path d="M88 45 Q60 75 44 102" stroke="#ffffff" stroke-width="1.2" opacity="0.35" />
+
+  <!-- Base Tube Rim -->
+  <ellipse cx="80" cy="108" rx="38" ry="10" fill="#2d5e99" opacity="0.4" />
+  <ellipse cx="80" cy="111" rx="20" ry="5" fill="url(#coneCoreGrad)" />
+
+  <!-- Yarn Strand Leading Off -->
+  <path d="M98 62 C115 50 135 65 145 92" stroke="#6ba4eb" stroke-width="2" stroke-linecap="round" fill="none" />
+</svg>
+
