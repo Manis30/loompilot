@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useGetClientOrdersQuery } from '../../../store/api/ordersApi';
+import { useGetClientProductsQuery } from '../../../store/api/catalogApi';
+import { mapApiClientOrder } from '../../../utils/orderMapper';
 import { formatCurrency, formatLakhs, formatMetres, formatNumber } from '../../utils/formatters';
 import {
   Package,
@@ -21,7 +25,46 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'rec
 
 export const OverviewPage: React.FC = () => {
   const { user } = useAuth();
-  const { metrics, orders, invoices, activities } = useApp();
+  const { metrics: localMetrics, orders: localOrders, invoices, activities } = useApp();
+  const { data: ordersResponse } = useGetClientOrdersQuery(undefined);
+  const { data: productsResponse } = useGetClientProductsQuery(undefined);
+
+  const productsMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const raw = productsResponse?.data || [];
+    if (Array.isArray(raw)) {
+      raw.forEach((p: any) => {
+        if (p.id || p._id) map.set(String(p.id || p._id), p);
+      });
+    }
+    return map;
+  }, [productsResponse]);
+
+  const orders = useMemo(() => {
+    const raw = ordersResponse?.data || [];
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw.map((item) => mapApiClientOrder(item, productsMap));
+    }
+    return localOrders;
+  }, [ordersResponse, productsMap, localOrders]);
+
+  const metrics = useMemo(() => {
+    const activeOrders = orders.filter((o) => o.status === 'In Production' || o.status === 'Awaiting Quotation').length;
+    const totalOrders = orders.length;
+    const productionInProgressMetres = orders
+      .filter((o) => o.status === 'In Production')
+      .reduce((sum, o) => sum + (o.orderedMetres || 0), 0);
+    const pendingPaymentsAmount = invoices
+      .filter((i) => i.status === 'Pending' || (i.status as any) === 'pending')
+      .reduce((sum, i) => sum + (i.amount || 0), 0);
+
+    return {
+      activeOrders,
+      totalOrders,
+      productionInProgressMetres,
+      pendingPaymentsAmount,
+    };
+  }, [orders, invoices]);
   const navigate = useNavigate();
 
   const [payingInvoiceNumber, setPayingInvoiceNumber] = useState<string | null>(null);

@@ -1,0 +1,209 @@
+[
+  {
+    "_id": "668005000000000000000001",
+    "tenantId": "tenant_loompilot_tn_01",
+    "materialName": "100% Combed Cotton Yarn 30s",
+    "type": "yarn",
+    "unit": "kg",
+    "stockQty": 18500,
+    "reservedQty": 2500,
+    "reorderLevel": 5000,
+    "currentRatePaise": 31000,
+    "watchlist": true,
+    "preferredSupplierId": "668004000000000000000001",
+    "supplierOffers": [
+      {
+        "supplierId": "668004000000000000000001",
+        "ratePaise": 31000,
+        "leadDays": 4
+      }
+    ],
+    "createdAt": "2026-01-01T08:00:00.000Z",
+    "updatedAt": "2026-10-01T08:00:00.000Z",
+    "version": 1
+  },
+  {
+    "_id": "668005000000000000000002",
+    "tenantId": "tenant_loompilot_tn_01",
+    "materialName": "100% Carded Cotton Yarn 24s",
+    "type": "yarn",
+    "unit": "kg",
+    "stockQty": 14200,
+    "reservedQty": 2000,
+    "reorderLevel": 4000,
+    "currentRatePaise": 27500,
+    "watchlist": true,
+    "preferredSupplierId": "668004000000000000000002",
+    "supplierOffers": [
+      {
+        "supplierId": "668004000000000000000002",
+        "ratePaise": 27500,
+        "leadDays": 4
+      }
+    ],
+    "createdAt": "2026-01-01T08:00:00.000Z",
+    "updatedAt": "2026-10-01T08:00:00.000Z",
+    "version": 1
+  },
+  {
+    "_id": "668005000000000000000003",
+    "tenantId": "tenant_loompilot_tn_01",
+    "materialName": "Cotton-Elastane Spandex Core Yarn",
+    "type": "yarn",
+    "unit": "kg",
+    "stockQty": 6200,
+    "reservedQty": 800,
+    "reorderLevel": 2000,
+    "currentRatePaise": 42000,
+    "watchlist": true,
+    "preferredSupplierId": "668004000000000000000001",
+    "supplierOffers": [
+      {
+        "supplierId": "668004000000000000000001",
+        "ratePaise": 42000,
+        "leadDays": 4
+      }
+    ],
+    "createdAt": "2026-01-01T08:00:00.000Z",
+    "updatedAt": "2026-10-01T08:00:00.000Z",
+    "version": 1
+  },
+  {
+    "_id": "668005000000000000000004",
+    "tenantId": "tenant_loompilot_tn_01",
+    "materialName": "Knitted Single Jersey 180 GSM Greige",
+    "type": "fabric",
+    "unit": "kg",
+    "stockQty": 8500,
+    "reservedQty": 1500,
+    "reorderLevel": 3000,
+    "currentRatePaise": 34000,
+    "watchlist": false,
+    "preferredSupplierId": "668004000000000000000002",
+    "supplierOffers": [
+      {
+        "supplierId": "668004000000000000000002",
+        "ratePaise": 34000,
+        "leadDays": 4
+      }
+    ],
+    "createdAt": "2026-01-01T08:00:00.000Z",
+    "updatedAt": "2026-10-01T08:00:00.000Z",
+    "version": 1
+  },
+  {
+    "_id": "668005000000000000000005",
+    "tenantId": "tenant_loompilot_tn_01",
+    "materialName": "Reactive Dyes - Black / Navy Concentrate",
+    "type": "dye_chemical",
+    "unit": "kg",
+    "stockQty": 2400,
+    "reservedQty": 400,
+    "reorderLevel": 800,
+    "currentRatePaise": 68000,
+    "watchlist": false,
+    "preferredSupplierId": "668004000000000000000003",
+    "supplierOffers": [
+      {
+        "supplierId": "668004000000000000000003",
+        "ratePaise": 68000,
+        "leadDays": 4
+      }
+    ],
+    "createdAt": "2026-01-01T08:00:00.000Z",
+    "updatedAt": "2026-10-01T08:00:00.000Z",
+    "version": 1
+  },
+  {
+    "_id": "668005000000000000000006",
+    "tenantId": "tenant_loompilot_tn_01",
+    "materialName": "Soda Ash & Auxiliary Wetting Chemicals",
+    "type": "dye_chemical",
+    "unit": "kg",
+    "stockQty": 4500,
+    "reservedQty": 600,
+    "reorderLevel": 1200,
+    "currentRatePaise": 8500,
+    "watchlist": false,
+    "preferredSupplierId": "668004000000000000000004",
+    "supplierOffers": [
+      {
+        "supplierId": "668004000000000000000004",
+        "ratePaise": 8500,
+        "leadDays": 4
+      }
+    ],
+    "createdAt": "2026-01-01T08:00:00.000Z",
+    "updatedAt": "2026-10-01T08:00:00.000Z",
+    "version": 1
+  },
+  {
+    "_id": "668005000000000000000007",
+    "tenantId": "tenant_loompilot_tn_01",
+    "materialName": "High-Tenacity Spun Polyester Sewing Thread",
+    "type": "trim",
+    "unit": "cone",
+    "stockQty": 1800,
+    "reservedQty": 300,
+    "reorderLevel": 500,
+    "currentRatePaise": 16000,
+    "watchlist": false,
+    "preferredSupplierId": "668004000000000000000005",
+    "supplierOffers": [
+      {
+        "supplierId": "668004000000000000000005",
+        "ratePaise": 16000,
+        "leadDays": 4
+      }
+    ],
+    "createdAt": "2026-01-01T08:00:00.000Z",
+    "updatedAt": "2026-10-01T08:00:00.000Z",
+    "version": 1
+  },
+  {
+    "_id": "668005000000000000000008",
+    "tenantId": "tenant_loompilot_tn_01",
+    "materialName": "Woven Brand & Care Labels",
+    "type": "trim",
+    "unit": "pcs",
+    "stockQty": 120000,
+    "reservedQty": 20000,
+    "reorderLevel": 30000,
+    "currentRatePaise": 120,
+    "watchlist": false,
+    "preferredSupplierId": "668004000000000000000005",
+    "supplierOffers": [
+      {
+        "supplierId": "668004000000000000000005",
+        "ratePaise": 120,
+        "leadDays": 4
+      }
+    ],
+    "createdAt": "2026-01-01T08:00:00.000Z",
+    "updatedAt": "2026-10-01T08:00:00.000Z",
+    "version": 1
+  },
+  {
+    "_id": "668005000000000000000009",
+    "tenantId": "tenant_loompilot_tn_01",
+    "materialName": "Eco Polybags & 5-Ply Master Cartons",
+    "type": "packing",
+    "unit": "set",
+    "stockQty": 15000,
+    "reservedQty": 2500,
+    "reorderLevel": 5000,
+    "currentRatePaise": 2400,
+    "watchlist": false,
+    "preferredSupplierId": "668004000000000000000006",
+    "supplierOffers": [
+      {
+        "supplierId": "668004000000000000000006",
+        "ratePaise": 2400,
+        "leadDays": 4
+      }
+    ],
+    "createdAt": "2026-01-01T08:00:00.000Z",
+    "updatedAt": "2026-10-01T08:00:00.000Z",
+    "version": 1
+  }
+]

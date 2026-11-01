@@ -189,6 +189,7 @@ export interface OrderItemProduct {
 
 export interface Order {
   id: string;
+  backendId?: string;
   clientName: string;
   clientEmail: string;
   productName: string;

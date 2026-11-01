@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction, ErrorRequestHandler } from "express";
 import { ZodError } from "zod";
-import { ErrorCode, ApiErrorEnvelope } from "@loompilot/shared";
+import { ErrorCode, ApiErrorEnvelope, TransitionError } from "@loompilot/shared";
 import { AppError } from "../errors/app-error.js";
 import { logger } from "../utils/logger.js";
 import { getEnv } from "../config/env.js";
@@ -33,6 +33,20 @@ export const errorHandler: ErrorRequestHandler = (
     };
 
     res.status(err.statusCode).json(payload);
+    return;
+  }
+
+  // 1.5. State Transition Error
+  if (err instanceof TransitionError) {
+    logger.warn({ errCode: err.code, message: err.message, requestId, path: req.path }, "Handled transition error");
+    const payload: ApiErrorEnvelope = {
+      error: {
+        code: err.code || ErrorCode.INVALID_TRANSITION,
+        message: err.message,
+        requestId,
+      },
+    };
+    res.status(err.statusCode || 400).json(payload);
     return;
   }
 

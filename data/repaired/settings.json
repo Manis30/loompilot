@@ -1,0 +1,101 @@
+[
+  {
+    "_id": "668000000000000000000001",
+    "tenantId": "tenant_loompilot_tn_01",
+    "timezone": "Asia/Kolkata",
+    "minMarginPct": 12,
+    "defaultMarginPct": 18,
+    "riskBuffer": {
+      "minPct": 5,
+      "maxPct": 10,
+      "k": 1.5,
+      "windowDays": 30
+    },
+    "behindThresholdPct": 10,
+    "maxBackdateDays": 2,
+    "weeklyOffs": [
+      0
+    ],
+    "safetyDays": 2,
+    "quoteValidityDays": 7,
+    "priceThresholds": {
+      "daily": 3,
+      "sevenDay": 5,
+      "vol": 0.15
+    },
+    "processConfig": [
+      {
+        "area": "yarn_procurement_stock",
+        "hours": 8,
+        "overlap": false,
+        "fallbackOut": 15000,
+        "workerAllocationPct": 5
+      },
+      {
+        "area": "knitting",
+        "hours": 16,
+        "overlap": true,
+        "fallbackOut": 12000,
+        "workerAllocationPct": 15
+      },
+      {
+        "area": "dyeing_fabric_processing",
+        "hours": 16,
+        "overlap": true,
+        "fallbackOut": 10000,
+        "workerAllocationPct": 15
+      },
+      {
+        "area": "cutting",
+        "hours": 10,
+        "overlap": true,
+        "fallbackOut": 12000,
+        "workerAllocationPct": 15
+      },
+      {
+        "area": "stitching",
+        "hours": 10,
+        "overlap": true,
+        "fallbackOut": 8000,
+        "workerAllocationPct": 30
+      },
+      {
+        "area": "checking",
+        "hours": 10,
+        "overlap": true,
+        "fallbackOut": 9000,
+        "workerAllocationPct": 10
+      },
+      {
+        "area": "ironing_finishing",
+        "hours": 10,
+        "overlap": true,
+        "fallbackOut": 10000,
+        "workerAllocationPct": 5
+      },
+      {
+        "area": "packing",
+        "hours": 8,
+        "overlap": true,
+        "fallbackOut": 12000,
+        "workerAllocationPct": 5
+      }
+    ],
+    "holidays": [
+      "2026-08-15",
+      "2026-08-26",
+      "2026-09-07",
+      "2026-10-02",
+      "2026-10-19",
+      "2026-10-20"
+    ],
+    "marketRuntime": "08:00",
+    "reportCutoff": "19:00",
+    "advancePct": 30,
+    "quoteReminderDays": 1,
+    "paymentReminderLeadDays": 1,
+    "createdAt": "2026-06-01T00:00:00.000Z",
+    "updatedAt": "2026-10-01T00:00:00.000Z",
+    "version": 1
+  }
+]

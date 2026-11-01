@@ -1,11 +1,31 @@
 import React, { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useApp } from '../../context/AppContext';
 import { formatNumber, formatMetres } from '../../utils/formatters';
-import { Search, PlusCircle, ArrowRight, Eye, Activity, Filter } from 'lucide-react';
+import { Search, PlusCircle, ArrowRight, Eye, Activity, Filter, RefreshCw, AlertCircle } from 'lucide-react';
+import { useGetClientOrdersQuery } from '../../../store/api/ordersApi';
+import { useGetClientProductsQuery } from '../../../store/api/catalogApi';
+import { mapApiClientOrder } from '../../../utils/orderMapper';
 
 export const MyOrdersPage: React.FC = () => {
-  const { orders } = useApp();
+  const { data: clientOrdersRes, isLoading, isError, error, refetch } = useGetClientOrdersQuery();
+  const { data: clientProductsRes } = useGetClientProductsQuery(undefined);
+
+  const productsMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const raw = clientProductsRes?.data || [];
+    if (Array.isArray(raw)) {
+      raw.forEach((p: any) => {
+        if (p.id || p._id) map.set(String(p.id || p._id), p);
+      });
+    }
+    return map;
+  }, [clientProductsRes]);
+
+  const orders = useMemo(() => {
+    const rawList = clientOrdersRes?.data || [];
+    if (!Array.isArray(rawList)) return [];
+    return rawList.map((ord: any) => mapApiClientOrder(ord, productsMap));
+  }, [clientOrdersRes, productsMap]);
   const navigate = useNavigate();
 
   const [activeFilter, setActiveFilter] = useState<string>('all');
@@ -60,14 +80,48 @@ export const MyOrdersPage: React.FC = () => {
           </p>
         </div>
 
-        <Link
-          to="/client/orders/new"
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-vermilion text-white text-xs font-bold shadow-vermilion hover:bg-vermilion-hover transition-colors flex-shrink-0"
-        >
-          <PlusCircle size={16} />
-          <span>Create New Order</span>
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => refetch()}
+            disabled={isLoading}
+            className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-muted-border bg-white text-charcoal text-xs font-bold hover:bg-ivory transition-colors flex-shrink-0"
+            title="Reload orders from backend API"
+          >
+            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+            <span>{isLoading ? 'Syncing...' : 'Sync Orders'}</span>
+          </button>
+          <Link
+            to="/client/orders/new"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-vermilion text-white text-xs font-bold shadow-vermilion hover:bg-vermilion-hover transition-colors flex-shrink-0"
+          >
+            <PlusCircle size={16} />
+            <span>Create New Order</span>
+          </Link>
+        </div>
       </div>
+
+      {/* API Status Banners */}
+      {isLoading && (
+        <div className="p-4 rounded-2xl bg-ivory border border-muted-border flex items-center gap-3 text-xs text-charcoal font-semibold">
+          <RefreshCw size={16} className="animate-spin text-vermilion" />
+          <span>Loading client orders from live backend API...</span>
+        </div>
+      )}
+
+      {isError && (
+        <div className="p-4 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-between text-xs text-red-800">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={16} className="text-red-600" />
+            <span>Failed to load live client orders: {String((error as any)?.data?.message || (error as any)?.error || 'Network error')}</span>
+          </div>
+          <button
+            onClick={() => refetch()}
+            className="px-3.5 py-1.5 rounded-xl bg-red-600 text-white font-bold text-xs hover:bg-red-700"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Filters Toolbar */}
       <div className="bg-white p-4 rounded-2xl border border-muted-border shadow-card space-y-4">

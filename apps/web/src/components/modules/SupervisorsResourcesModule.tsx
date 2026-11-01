@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   HardHat,
   Check,
@@ -13,9 +13,15 @@ import {
   CheckCircle2,
   X,
   MoreHorizontal,
-  ArrowUpDown
+  ArrowUpDown,
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
 import type { AppUser, Order } from '../../types';
+import { useGetMachinesQuery } from '../../store/api/catalogApi';
+import { useCreateMachineMutation, useUpdateMachineStatusMutation } from '../../store/api/machinesApi';
+import { useCreateMaintenanceTicketMutation } from '../../store/api/productionApi';
+import { mapApiMachineToMachineItem } from '../../client-supervisor/pages/supervisor/machineMapper';
 
 // =========================================================================
 // DATA MODELS & TYPES
@@ -274,118 +280,7 @@ const INITIAL_SHEDS: FactoryShed[] = [
   }
 ];
 
-const INITIAL_MACHINES: MachineItem[] = [
-  {
-    id: 'MCH-AJ-12',
-    name: 'Toyota JAT810 Airjet Loom #12',
-    type: 'Airjet Loom',
-    shedId: 'shed_a',
-    shedName: 'Shed A',
-    status: 'Running',
-    assignedOrderId: 'LP-901',
-    assignedStage: 'Loom Weaving',
-    operatingHours: 1420,
-    operatingSpeed: '850 RPM',
-    lastMaintenanceDate: '15 Oct 2026',
-    nextScheduledMaintenance: '15 Nov 2026'
-  },
-  {
-    id: 'MCH-AJ-14',
-    name: 'Toyota JAT810 Airjet Loom #14',
-    type: 'Airjet Loom',
-    shedId: 'shed_a',
-    shedName: 'Shed A',
-    status: 'Running',
-    assignedOrderId: 'LP-902',
-    assignedStage: 'Loom Weaving',
-    operatingHours: 1890,
-    operatingSpeed: '850 RPM',
-    lastMaintenanceDate: '10 Oct 2026',
-    nextScheduledMaintenance: '10 Nov 2026'
-  },
-  {
-    id: 'MCH-AJ-07',
-    name: 'Toyota JAT810 Airjet Loom #07',
-    type: 'Airjet Loom',
-    shedId: 'shed_a',
-    shedName: 'Shed A',
-    status: 'Breakdown',
-    operatingHours: 2340,
-    operatingSpeed: '0 RPM',
-    lastMaintenanceDate: '01 Oct 2026',
-    nextScheduledMaintenance: 'Under Repair',
-    breakdownReason: 'Warp tension sensor signal fault. Spare circuit board ordered from dealer.',
-    assignedTechnician: 'K. Selvaraj (Lead Maintenance Engineer)'
-  },
-  {
-    id: 'MCH-AJ-04',
-    name: 'Toyota JAT810 Airjet Loom #04',
-    type: 'Airjet Loom',
-    shedId: 'shed_a',
-    shedName: 'Shed A',
-    status: 'Idle',
-    operatingHours: 920,
-    operatingSpeed: '0 RPM (Ready)',
-    lastMaintenanceDate: '20 Oct 2026',
-    nextScheduledMaintenance: '20 Nov 2026'
-  },
-  {
-    id: 'MCH-DY-02',
-    name: 'Monforts 8-Chamber Stenter #2',
-    type: 'Continuous Stenter',
-    shedId: 'shed_b',
-    shedName: 'Shed B',
-    status: 'Running',
-    assignedOrderId: 'TX-1024',
-    assignedStage: 'Dyeing & Finishing',
-    operatingHours: 3100,
-    operatingSpeed: '120 m/min',
-    lastMaintenanceDate: '18 Oct 2026',
-    nextScheduledMaintenance: '18 Nov 2026'
-  },
-  {
-    id: 'MCH-DY-04',
-    name: 'Fong’s Eco Soft-Flow Dyeing Vat #4',
-    type: 'Jigger Dyeing Vat',
-    shedId: 'shed_b',
-    shedName: 'Shed B',
-    status: 'Running',
-    assignedOrderId: 'TX-1025',
-    assignedStage: 'Dyeing & Finishing',
-    operatingHours: 1650,
-    operatingSpeed: '150 kg/batch',
-    lastMaintenanceDate: '22 Oct 2026',
-    nextScheduledMaintenance: '22 Nov 2026'
-  },
-  {
-    id: 'MCH-WP-01',
-    name: 'Karl Mayer Direct Warper #1',
-    type: 'Direct Warper',
-    shedId: 'shed_c',
-    shedName: 'Shed C',
-    status: 'Running',
-    assignedOrderId: 'LP-903',
-    assignedStage: 'Warping & Sizing',
-    operatingHours: 1120,
-    operatingSpeed: '650 m/min',
-    lastMaintenanceDate: '12 Oct 2026',
-    nextScheduledMaintenance: '12 Nov 2026'
-  },
-  {
-    id: 'MCH-QA-01',
-    name: 'Daro 4-Point Illuminated QA Table #1',
-    type: 'Inspection QA Table',
-    shedId: 'shed_c',
-    shedName: 'Shed C',
-    status: 'Running',
-    assignedOrderId: 'LP-901',
-    assignedStage: 'Quality Inspection',
-    operatingHours: 840,
-    operatingSpeed: '40 m/min inspection',
-    lastMaintenanceDate: '25 Oct 2026',
-    nextScheduledMaintenance: '25 Nov 2026'
-  }
-];
+const INITIAL_MACHINES: MachineItem[] = [];
 
 const INITIAL_WORKFORCE: WorkerItem[] = [
   {
@@ -536,7 +431,57 @@ export const SupervisorsResourcesModule: React.FC<SupervisorsResourcesModuleProp
   // Master State
   const [supervisors, setSupervisors] = useState<SupervisorProfile[]>(INITIAL_SUPERVISORS);
   const [sheds, setSheds] = useState<FactoryShed[]>(INITIAL_SHEDS);
-  const [machines, setMachines] = useState<MachineItem[]>(INITIAL_MACHINES);
+  // Live API Machines Query
+  const {
+    data: machinesApiResponse,
+    isLoading: isLoadingMachines,
+    isFetching: isFetchingMachines,
+    isError: isMachinesError,
+    error: machinesError,
+    refetch: refetchMachines,
+  } = useGetMachinesQuery(undefined);
+
+  const liveMachines: MachineItem[] = useMemo(() => {
+    if (!machinesApiResponse) return [];
+    const list = Array.isArray(machinesApiResponse)
+      ? machinesApiResponse
+      : Array.isArray(machinesApiResponse?.data)
+      ? machinesApiResponse.data
+      : [];
+    return list.map(mapApiMachineToMachineItem);
+  }, [machinesApiResponse]);
+
+  const [machines, setMachines] = useState<MachineItem[]>([]);
+  const [hasLoadedMachinesApi, setHasLoadedMachinesApi] = useState(false);
+
+  useEffect(() => {
+    if (liveMachines.length > 0 && !hasLoadedMachinesApi) {
+      setMachines(liveMachines);
+      setHasLoadedMachinesApi(true);
+    }
+  }, [liveMachines, hasLoadedMachinesApi]);
+
+  const handleRefreshMachines = async () => {
+    const res = await refetchMachines();
+    if (res.data) {
+      const list = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data.data)
+        ? res.data.data
+        : [];
+      setMachines(list.map(mapApiMachineToMachineItem));
+      showToast('Machinery telemetry refreshed from API.');
+    }
+  };
+
+  const getMachineErrorMessage = (err: any): string => {
+    if (!err) return 'Failed to fetch machines from server';
+    if (typeof err === 'string') return err;
+    if (err.data?.message) return err.data.message;
+    if (err.error) return err.error;
+    if (err.message) return err.message;
+    return 'Unable to fetch machines from API. Please verify server connectivity.';
+  };
   const [workforce, setWorkforce] = useState<WorkerItem[]>(INITIAL_WORKFORCE);
   const [overtimeRequests, setOvertimeRequests] = useState<OvertimeRequest[]>(INITIAL_OVERTIME_REQUESTS);
   const [auditLogs, setAuditLogs] = useState<ResourceAuditEntry[]>(INITIAL_AUDIT_LOGS);
@@ -577,6 +522,15 @@ export const SupervisorsResourcesModule: React.FC<SupervisorsResourcesModuleProp
     operatingSpeed: '850 RPM'
   });
 
+  const [createMachine, { isLoading: isRegisteringMachine }] = useCreateMachineMutation();
+  const [registerMachineError, setRegisterMachineError] = useState<string | null>(null);
+
+  const [updateMachineStatus, { isLoading: isUpdatingMachineStatus }] = useUpdateMachineStatusMutation();
+  const [updatingMachineId, setUpdatingMachineId] = useState<string | null>(null);
+  const [machineStatusError, setMachineStatusError] = useState<string | null>(null);
+
+  const [createMaintenanceTicket, { isLoading: isReportingBreakdown }] = useCreateMaintenanceTicketMutation();
+  const [breakdownError, setBreakdownError] = useState<string | null>(null);
   const [breakdownForm, setBreakdownForm] = useState({
     reason: 'Weft insertion nozzle clogging and air pressure leakage.',
     technician: 'K. Selvaraj (Lead Maintenance Engineer)'
@@ -746,84 +700,168 @@ export const SupervisorsResourcesModule: React.FC<SupervisorsResourcesModuleProp
   };
 
   // Register Machine (Section 4B)
-  const handleRegisterMachine = (e: React.FormEvent) => {
+  const handleRegisterMachine = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isRegisteringMachine) return;
+    setRegisterMachineError(null);
+
     const shed = sheds.find((s) => s.id === newMachineForm.shedId);
-    const newId = `MCH-${newMachineForm.shedId.toUpperCase()}-${machines.length + 10}`;
-
-    const newMachine: MachineItem = {
-      id: newId,
-      name: newMachineForm.name,
-      type: newMachineForm.type,
-      shedId: newMachineForm.shedId,
-      shedName: shed?.name.split(' ')[0] || 'Shed A',
-      status: 'Idle',
-      operatingHours: 0,
-      operatingSpeed: newMachineForm.operatingSpeed,
-      lastMaintenanceDate: 'Today',
-      nextScheduledMaintenance: '30 Days'
+    const shedToProcessArea: Record<string, string> = {
+      shed_a: 'knitting',
+      shed_b: 'dyeing_processing',
+      shed_c: 'cutting',
+      shed_d: 'stitching',
     };
+    const processArea = shedToProcessArea[newMachineForm.shedId] || 'knitting';
+    const machineCode = `MCH-${newMachineForm.shedId.toUpperCase()}-${Date.now().toString().slice(-4)}`;
 
-    setMachines((prev) => [newMachine, ...prev]);
-    showToast(`Machine ${newMachine.name} registered in ${shed?.name}!`);
-    setShowRegisterMachineModal(false);
+    try {
+      await createMachine({
+        machineCode,
+        machineName: newMachineForm.name,
+        processArea,
+        capacityUnitsPerDay: 1000,
+        machineType: newMachineForm.type,
+      }).unwrap();
+
+      const newMachine: MachineItem = {
+        id: machineCode,
+        name: newMachineForm.name,
+        type: newMachineForm.type,
+        shedId: newMachineForm.shedId,
+        shedName: shed?.name.split(' ')[0] || 'Shed A',
+        status: 'Idle',
+        operatingHours: 0,
+        operatingSpeed: newMachineForm.operatingSpeed,
+        lastMaintenanceDate: 'Today',
+        nextScheduledMaintenance: '30 Days'
+      };
+
+      setMachines((prev) => [newMachine, ...prev]);
+      showToast(`Machine ${newMachine.name} registered in ${shed?.name || 'facility'}!`);
+      setShowRegisterMachineModal(false);
+      refetchMachines();
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.message || 'Failed to register machine asset';
+      setRegisterMachineError(errMsg);
+    }
   };
 
   // Record Breakdown (Section 4B - Rule: broken machine cannot receive new allocations!)
-  const handleRecordBreakdown = (e: React.FormEvent) => {
+  const handleRecordBreakdown = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!breakdownTargetMachine) return;
+    if (!breakdownTargetMachine || isReportingBreakdown) return;
+    setBreakdownError(null);
 
-    setMachines((prev) =>
-      prev.map((m) => {
-        if (m.id === breakdownTargetMachine.id) {
-          return {
-            ...m,
-            status: 'Breakdown',
-            breakdownReason: breakdownForm.reason,
-            assignedTechnician: breakdownForm.technician
-          };
-        }
-        return m;
-      })
+    // Resolve real backend machine ID
+    const rawList = Array.isArray(machinesApiResponse?.data)
+      ? machinesApiResponse.data
+      : Array.isArray(machinesApiResponse)
+      ? machinesApiResponse
+      : [];
+    const rawMachine = rawList.find(
+      (rm: any) =>
+        String(rm._id) === breakdownTargetMachine.id ||
+        rm.id === breakdownTargetMachine.id ||
+        rm.machineCode === breakdownTargetMachine.id
     );
+    const realMachineId = rawMachine ? String(rawMachine._id || rawMachine.id) : breakdownTargetMachine.id;
 
-    // Update shed breakdown count
-    setSheds((prev) =>
-      prev.map((s) => {
-        if (s.id === breakdownTargetMachine.shedId) {
-          return {
-            ...s,
-            runningMachines: Math.max(0, s.runningMachines - 1),
-            breakdownMachines: s.breakdownMachines + 1
-          };
-        }
-        return s;
-      })
-    );
+    try {
+      await createMaintenanceTicket({
+        machineId: realMachineId,
+        issue: breakdownForm.reason || 'Machine breakdown reported on floor',
+        notes: breakdownForm.technician ? `Assigned Technician: ${breakdownForm.technician}` : undefined,
+      }).unwrap();
 
-    showToast(`Machine ${breakdownTargetMachine.id} logged as BREAKDOWN. Disallowed from production allocations.`);
-    setShowBreakdownModal(false);
-    setBreakdownTargetMachine(null);
+      setMachines((prev) =>
+        prev.map((m) => {
+          if (m.id === breakdownTargetMachine.id) {
+            return {
+              ...m,
+              status: 'Breakdown',
+              breakdownReason: breakdownForm.reason,
+              assignedTechnician: breakdownForm.technician,
+            };
+          }
+          return m;
+        })
+      );
+
+      // Update shed breakdown count
+      setSheds((prev) =>
+        prev.map((s) => {
+          if (s.id === breakdownTargetMachine.shedId) {
+            return {
+              ...s,
+              runningMachines: Math.max(0, s.runningMachines - 1),
+              breakdownMachines: s.breakdownMachines + 1,
+            };
+          }
+          return s;
+        })
+      );
+
+      showToast(`Machine ${breakdownTargetMachine.id} logged as BREAKDOWN & ticket submitted to maintenance.`);
+      setShowBreakdownModal(false);
+      setBreakdownTargetMachine(null);
+      refetchMachines();
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.message || 'Failed to submit breakdown ticket to server';
+      setBreakdownError(errMsg);
+    }
   };
 
   // Mark Machine as Available (Section 4B)
-  const handleMarkMachineAvailable = (machineId: string) => {
-    setMachines((prev) =>
-      prev.map((m) => {
-        if (m.id === machineId) {
-          return {
-            ...m,
-            status: 'Idle',
-            breakdownReason: undefined,
-            assignedTechnician: undefined
-          };
-        }
-        return m;
-      })
-    );
+  const handleMarkMachineAvailable = async (machineId: string) => {
+    if (isUpdatingMachineStatus) return;
+    setMachineStatusError(null);
+    setUpdatingMachineId(machineId);
 
-    showToast(`Machine ${machineId} repair certified! Now Available for production allocation.`);
+    // Resolve real backend machine ID
+    const rawList = Array.isArray(machinesApiResponse?.data)
+      ? machinesApiResponse.data
+      : Array.isArray(machinesApiResponse)
+      ? machinesApiResponse
+      : [];
+    const rawMachine = rawList.find(
+      (rm: any) =>
+        String(rm._id) === machineId ||
+        rm.id === machineId ||
+        rm.machineCode === machineId
+    );
+    const realMachineId = rawMachine ? String(rawMachine._id || rawMachine.id) : machineId;
+
+    try {
+      await updateMachineStatus({
+        id: realMachineId,
+        status: 'available',
+        notes: 'Repair certified and marked available for production allocation.',
+      }).unwrap();
+
+      setMachines((prev) =>
+        prev.map((m) => {
+          if (m.id === machineId) {
+            return {
+              ...m,
+              status: 'Idle',
+              breakdownReason: undefined,
+              assignedTechnician: undefined
+            };
+          }
+          return m;
+        })
+      );
+
+      showToast(`Machine ${machineId} repair certified! Now Available for production allocation.`);
+      refetchMachines();
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.message || 'Failed to update machine status on server';
+      setMachineStatusError(errMsg);
+      showToast(`Error: ${errMsg}`);
+    } finally {
+      setUpdatingMachineId(null);
+    }
   };
 
   // Update Worker Attendance (Section 4C)
@@ -917,6 +955,30 @@ export const SupervisorsResourcesModule: React.FC<SupervisorsResourcesModuleProp
               Add Supervisor
             </button>
           ) : (
+            <>
+              <button
+                onClick={handleRefreshMachines}
+              disabled={isLoadingMachines || isFetchingMachines}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: 9999,
+                padding: '6px 13px',
+                fontSize: 11,
+                fontWeight: 700,
+                color: '#334155',
+                cursor: 'pointer',
+                opacity: (isLoadingMachines || isFetchingMachines) ? 0.6 : 1,
+              }}
+              title="Refresh machinery telemetry"
+            >
+              <RefreshCw size={13} className={(isLoadingMachines || isFetchingMachines) ? 'animate-spin' : ''} color="#18191B" />
+              Refresh
+            </button>
+
             <button
               className="admin-btn-primary"
               onClick={() => setShowRegisterMachineModal(true)}
@@ -924,7 +986,8 @@ export const SupervisorsResourcesModule: React.FC<SupervisorsResourcesModuleProp
             >
               <Plus size={13} />
               Register Machine
-            </button>
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -1597,6 +1660,31 @@ export const SupervisorsResourcesModule: React.FC<SupervisorsResourcesModuleProp
                 </div>
               </div>
 
+              {/* Error Alert */}
+              {isMachinesError && (
+                <div style={{
+                  background: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: 12,
+                  padding: '10px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#991b1b', fontSize: 11 }}>
+                    <AlertTriangle size={15} />
+                    <span>Failed to fetch machinery: {getMachineErrorMessage(machinesError)}</span>
+                  </div>
+                  <button
+                    onClick={() => refetchMachines()}
+                    style={{ padding: '4px 10px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 6, fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
               {/* Machines Table (Unified Modern Design) */}
               <div className="modern-data-table-wrapper">
                 <table className="modern-data-table">
@@ -1631,7 +1719,31 @@ export const SupervisorsResourcesModule: React.FC<SupervisorsResourcesModuleProp
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredMachines.map((m) => {
+                    {isLoadingMachines && (
+                      <tr>
+                        <td colSpan={8} style={{ textAlign: 'center', padding: '32px 16px', color: '#64748b' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600 }}>
+                            <RefreshCw size={14} className="animate-spin" color="#18191B" />
+                            <span>Loading live machinery telemetry...</span>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {!isLoadingMachines && filteredMachines.length === 0 && (
+                      <tr>
+                        <td colSpan={8} style={{ textAlign: 'center', padding: '32px 16px', color: '#64748b' }}>
+                          <div style={{ fontSize: 12.5, fontWeight: 700, color: '#101828' }}>
+                            {machines.length === 0 ? 'No Machines Found in Database' : 'No Machines Match Filter'}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>
+                            {machines.length === 0
+                              ? 'No factory machinery records were returned by the API.'
+                              : 'Try adjusting your search keywords or resetting the shed filter.'}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {!isLoadingMachines && filteredMachines.map((m) => {
                       const isSelected = selectedMachineIds.includes(m.id);
                       const isBroken = m.status === 'Breakdown';
                       const isRunning = m.status === 'Running';
@@ -1687,6 +1799,7 @@ export const SupervisorsResourcesModule: React.FC<SupervisorsResourcesModuleProp
                               type="button"
                               className="modern-table-row-action"
                               title={isBroken ? "Mark Repaired" : "Breakdown / Options"}
+                              disabled={isUpdatingMachineStatus && updatingMachineId === m.id}
                               onClick={() => {
                                 if (isBroken) {
                                   handleMarkMachineAvailable(m.id);
@@ -1696,7 +1809,11 @@ export const SupervisorsResourcesModule: React.FC<SupervisorsResourcesModuleProp
                                 }
                               }}
                             >
-                              <MoreHorizontal size={15} />
+                              {isUpdatingMachineStatus && updatingMachineId === m.id ? (
+                                <Loader2 size={13} className="animate-spin" />
+                              ) : (
+                                <MoreHorizontal size={15} />
+                              )}
                             </button>
                           </td>
                         </tr>
@@ -2137,10 +2254,20 @@ export const SupervisorsResourcesModule: React.FC<SupervisorsResourcesModuleProp
                   {breakdownTargetMachine.name} &bull; {breakdownTargetMachine.shedName}
                 </div>
               </div>
-              <button className="modal-close-btn" onClick={() => setShowBreakdownModal(false)}>
+              <button className="modal-close-btn" disabled={isReportingBreakdown} onClick={() => !isReportingBreakdown && setShowBreakdownModal(false)}>
                 <X size={15} />
               </button>
             </div>
+
+            {breakdownError && (
+              <div style={{ padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 10, color: '#B91C1C', fontSize: 12, marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <AlertTriangle size={14} />
+                  <span>{breakdownError}</span>
+                </div>
+                <button type="button" onClick={() => setBreakdownError(null)} style={{ background: 'transparent', border: 'none', color: '#B91C1C', cursor: 'pointer', fontWeight: 600 }}>&times;</button>
+              </div>
+            )}
 
             <form onSubmit={handleRecordBreakdown} style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
               <div>
@@ -2177,23 +2304,37 @@ export const SupervisorsResourcesModule: React.FC<SupervisorsResourcesModuleProp
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                 <button
                   type="submit"
+                  disabled={isReportingBreakdown}
                   style={{
                     flex: 1,
                     background: '#dc2626',
-                    color: '#18191B',
+                    color: '#ffffff',
                     border: 'none',
                     borderRadius: 9999,
                     padding: '10px 14px',
                     fontSize: 12,
                     fontWeight: 700,
-                    cursor: 'pointer'
+                    cursor: isReportingBreakdown ? 'not-allowed' : 'pointer',
+                    opacity: isReportingBreakdown ? 0.7 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
                   }}
                 >
-                  Confirm Breakdown Status
+                  {isReportingBreakdown ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" />
+                      <span>Submitting Breakdown...</span>
+                    </>
+                  ) : (
+                    <span>Confirm Breakdown Status</span>
+                  )}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowBreakdownModal(false)}
+                  disabled={isReportingBreakdown}
+                  onClick={() => !isReportingBreakdown && setShowBreakdownModal(false)}
                   style={{
                     background: '#ffffff',
                     border: '1px solid #cbd5e1',
@@ -2201,7 +2342,8 @@ export const SupervisorsResourcesModule: React.FC<SupervisorsResourcesModuleProp
                     padding: '10px 14px',
                     fontSize: 12,
                     color: '#64748b',
-                    cursor: 'pointer'
+                    cursor: isReportingBreakdown ? 'not-allowed' : 'pointer',
+                    opacity: isReportingBreakdown ? 0.6 : 1,
                   }}
                 >
                   Cancel
@@ -2222,10 +2364,20 @@ export const SupervisorsResourcesModule: React.FC<SupervisorsResourcesModuleProp
               <h2 className="modal-title" style={{ fontSize: 16, fontWeight: 800, color: '#0a0d10', margin: 0 }}>
                 Register Machinery Asset
               </h2>
-              <button className="modal-close-btn" onClick={() => setShowRegisterMachineModal(false)}>
+              <button className="modal-close-btn" disabled={isRegisteringMachine} onClick={() => !isRegisteringMachine && setShowRegisterMachineModal(false)}>
                 <X size={15} />
               </button>
             </div>
+
+            {registerMachineError && (
+              <div style={{ padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 10, color: '#B91C1C', fontSize: 12, marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <AlertTriangle size={14} />
+                  <span>{registerMachineError}</span>
+                </div>
+                <button type="button" onClick={() => setRegisterMachineError(null)} style={{ background: 'transparent', border: 'none', color: '#B91C1C', cursor: 'pointer', fontWeight: 600 }}>&times;</button>
+              </div>
+            )}
 
             <form onSubmit={handleRegisterMachine} style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
               <div>
@@ -2286,15 +2438,33 @@ export const SupervisorsResourcesModule: React.FC<SupervisorsResourcesModuleProp
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                 <button
                   type="submit"
+                  disabled={isRegisteringMachine}
                   className="admin-btn-primary"
-                  style={{ flex: 1, padding: '10px 14px', fontSize: 12, justifyContent: 'center' }}
+                  style={{
+                    flex: 1,
+                    padding: '10px 14px',
+                    fontSize: 12,
+                    justifyContent: 'center',
+                    opacity: isRegisteringMachine ? 0.6 : 1,
+                    cursor: isRegisteringMachine ? 'not-allowed' : 'pointer'
+                  }}
                 >
-                  <Plus size={14} />
-                  <span>Register Machine</span>
+                  {isRegisteringMachine ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" />
+                      <span>Registering Machine...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={14} />
+                      <span>Register Machine</span>
+                    </>
+                  )}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowRegisterMachineModal(false)}
+                  disabled={isRegisteringMachine}
+                  onClick={() => !isRegisteringMachine && setShowRegisterMachineModal(false)}
                   style={{
                     background: '#ffffff',
                     border: '1px solid #cbd5e1',
@@ -2302,7 +2472,8 @@ export const SupervisorsResourcesModule: React.FC<SupervisorsResourcesModuleProp
                     padding: '10px 14px',
                     fontSize: 12,
                     color: '#64748b',
-                    cursor: 'pointer'
+                    cursor: isRegisteringMachine ? 'not-allowed' : 'pointer',
+                    opacity: isRegisteringMachine ? 0.6 : 1
                   }}
                 >
                   Cancel

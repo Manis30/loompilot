@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   UserPlus,
   Copy,
@@ -12,6 +12,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import type { AppUser, UserInvite, UserRole } from '../../types';
+import { useGetClientsQuery } from '../../store/api/catalogApi';
 
 interface UserManagementModuleProps {
   users: AppUser[];
@@ -41,6 +42,40 @@ export const UserManagementModule: React.FC<UserManagementModuleProps> = ({
   const [activeRegisterInvite, setActiveRegisterInvite] = useState<UserInvite | null>(null);
   const [regPassword, setRegPassword] = useState<string>('textile2026!');
   const [regSuccessMsg, setRegSuccessMsg] = useState<string | null>(null);
+
+  // 1. Fetch real client records from backend API
+  const {
+    data: clientsResponse,
+    isLoading: isClientsLoading,
+    isError: isClientsError,
+    error: clientsError
+  } = useGetClientsQuery({ limit: 100 });
+
+  // 2. Map API clients to AppUser shape
+  const clientUsers: AppUser[] = useMemo(() => {
+    const rawList = clientsResponse?.data;
+    if (!rawList || !Array.isArray(rawList)) return [];
+    return rawList.map((c: any) => ({
+      id: c._id || c.id,
+      name: c.contactPerson || c.clientName || 'Client Contact',
+      email: c.email || c.portalAccess?.email || '',
+      role: 'client' as const,
+      title: c.contactPerson ? `${c.clientName} (Contact)` : 'Procurement Partner',
+      departmentOrCompany: c.clientName || c.customerType || 'Contract Client',
+      status: (c.portalAccess?.status === 'invited' ? 'invited' : c.status === 'active' ? 'active' : 'suspended') as 'active' | 'invited' | 'suspended',
+      joinedAt: c.createdAt ? String(c.createdAt).slice(0, 10) : '2026-06-01',
+      avatar: '/assets/avatar.svg',
+    }));
+  }, [clientsResponse]);
+
+  // 3. Combine staff users (admin, supervisor) with real client users, replacing mock client records
+  const staffUsers = useMemo(() => users.filter((u) => u.role !== 'client'), [users]);
+  const activeUsers = useMemo(() => {
+    if (clientUsers.length > 0) {
+      return [...staffUsers, ...clientUsers];
+    }
+    return isClientsLoading ? staffUsers : (isClientsError ? users : [...staffUsers, ...clientUsers]);
+  }, [staffUsers, clientUsers, isClientsLoading, isClientsError, users]);
 
   const handleCreateInvite = (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,7 +122,7 @@ export const UserManagementModule: React.FC<UserManagementModuleProps> = ({
   };
 
   // Filter logic
-  const filteredUsers = users.filter((u) => {
+  const filteredUsers = activeUsers.filter((u) => {
     if (filterRole === 'all') return true;
     if (filterRole === 'pending') return false;
     return u.role === filterRole;
@@ -122,10 +157,10 @@ export const UserManagementModule: React.FC<UserManagementModuleProps> = ({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {[
-            { key: 'all', label: `All Active (${users.length})` },
-            { key: 'supervisor', label: `Supervisors (${users.filter(u => u.role === 'supervisor').length})` },
-            { key: 'client', label: `Clients (${users.filter(u => u.role === 'client').length})` },
-            { key: 'admin', label: `Admins (${users.filter(u => u.role === 'admin').length})` },
+            { key: 'all', label: `All Active (${activeUsers.length})` },
+            { key: 'supervisor', label: `Supervisors (${activeUsers.filter(u => u.role === 'supervisor').length})` },
+            { key: 'client', label: isClientsLoading ? 'Clients (Loading...)' : `Clients (${clientUsers.length > 0 ? clientUsers.length : activeUsers.filter(u => u.role === 'client').length})` },
+            { key: 'admin', label: `Admins (${activeUsers.filter(u => u.role === 'admin').length})` },
             { key: 'pending', label: `Pending Invites (${pendingInvites.length})` }
           ].map((pill) => {
             const isActive = filterRole === pill.key;
@@ -189,87 +224,162 @@ export const UserManagementModule: React.FC<UserManagementModuleProps> = ({
               <span>Joined</span>
             </div>
 
-            {/* Rows List */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {filteredUsers.map((u) => (
-                <div
-                  key={u.id}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1.4fr 1.3fr 100px 1.4fr 100px 80px',
-                    gap: 12,
-                    padding: '10px 6px',
-                    borderBottom: '1px solid #edf1f5',
-                    alignItems: 'center',
-                    fontSize: 11.5
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: '50%',
-                      background: u.role === 'admin' ? '#F8F0DF' : (u.role === 'supervisor' ? '#e0f2fe' : '#ede9fe'),
-                      color: u.role === 'admin' ? '#18191B' : (u.role === 'supervisor' ? '#0369a1' : '#5b21b6'),
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontWeight: 800,
-                      fontSize: 12
-                    }}>
-                      {u.name.charAt(0)}
-                    </div>
-                    <div>
-                      <div style={{ fontWeight: 700, color: '#0a0d10' }}>{u.name}</div>
-                      {u.title && <div style={{ fontSize: 10, color: '#64748b' }}>{u.title}</div>}
-                    </div>
-                  </div>
-
-                  <div style={{ color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Mail size={13} color="#94a3b8" />
-                    <span>{u.email}</span>
-                  </div>
-
-                  <div>
-                    <span style={{
-                      background: u.role === 'admin' ? '#F8F0DF' : (u.role === 'supervisor' ? '#e0f2fe' : '#ede9fe'),
-                      color: u.role === 'admin' ? '#18191B' : (u.role === 'supervisor' ? '#0369a1' : '#5b21b6'),
-                      fontSize: 9,
-                      padding: '3px 8px',
-                      borderRadius: 9999,
-                      fontWeight: 700
-                    }}>
-                      {u.role.toUpperCase()}
-                    </span>
-                  </div>
-
-                  <div style={{ color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Building size={13} color="#94a3b8" />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {u.departmentOrCompany}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      fontSize: 10.5,
-                      fontWeight: 700,
-                      color: '#16a34a'
-                    }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16a34a' }} />
-                      Active
-                    </span>
-                  </div>
-
-                  <div style={{ fontSize: 10.5, color: '#94a3b8' }}>
-                    {u.joinedAt || '2026-10-15'}
-                  </div>
+            {/* Loading State for Clients */}
+            {filterRole === 'client' && isClientsLoading ? (
+              <div style={{
+                padding: '48px 16px',
+                textAlign: 'center',
+                color: '#64748b',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 10
+              }}>
+                <div style={{
+                  width: 24,
+                  height: 24,
+                  border: '2.5px solid #e2e8f0',
+                  borderTopColor: '#18191B',
+                  borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite'
+                }} />
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#18191B' }}>
+                  Loading Client Records...
+                </span>
+                <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                  Fetching live client portfolio from LoomPilot database
+                </span>
+              </div>
+            ) : filterRole === 'client' && isClientsError ? (
+              /* Error State for Clients */
+              <div style={{
+                padding: '16px 20px',
+                margin: '12px 0',
+                borderRadius: 16,
+                background: '#fef2f2',
+                border: '1px solid #fecdd3',
+                color: '#991b1b',
+                fontSize: 12,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4
+              }}>
+                <strong style={{ fontSize: 13 }}>Failed to load clients</strong>
+                <span>
+                  {(clientsError as any)?.data?.error?.message ||
+                   (clientsError as any)?.data?.message ||
+                   (clientsError as any)?.error ||
+                   'Could not retrieve clients from backend API.'}
+                </span>
+              </div>
+            ) : filteredUsers.length === 0 ? (
+              /* Empty State */
+              <div style={{
+                padding: '48px 16px',
+                textAlign: 'center',
+                color: '#64748b',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 8
+              }}>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#0a0d10' }}>
+                  No {filterRole === 'client' ? 'client' : filterRole === 'all' ? 'active' : filterRole} records found
                 </div>
-              ))}
-            </div>
+                <div style={{ fontSize: 11 }}>
+                  {filterRole === 'client'
+                    ? 'No registered clients found in the database.'
+                    : 'Try switching filters or inviting a new user.'}
+                </div>
+              </div>
+            ) : (
+              /* Rows List */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {filteredUsers.map((u) => (
+                  <div
+                    key={u.id}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1.4fr 1.3fr 100px 1.4fr 100px 80px',
+                      gap: 12,
+                      padding: '10px 6px',
+                      borderBottom: '1px solid #edf1f5',
+                      alignItems: 'center',
+                      fontSize: 11.5
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: '50%',
+                        background: u.role === 'admin' ? '#F8F0DF' : (u.role === 'supervisor' ? '#e0f2fe' : '#ede9fe'),
+                        color: u.role === 'admin' ? '#18191B' : (u.role === 'supervisor' ? '#0369a1' : '#5b21b6'),
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 800,
+                        fontSize: 12
+                      }}>
+                        {u.name.charAt(0)}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 700, color: '#0a0d10' }}>{u.name}</div>
+                        {u.title && <div style={{ fontSize: 10, color: '#64748b' }}>{u.title}</div>}
+                      </div>
+                    </div>
+
+                    <div style={{ color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Mail size={13} color="#94a3b8" />
+                      <span>{u.email}</span>
+                    </div>
+
+                    <div>
+                      <span style={{
+                        background: u.role === 'admin' ? '#F8F0DF' : (u.role === 'supervisor' ? '#e0f2fe' : '#ede9fe'),
+                        color: u.role === 'admin' ? '#18191B' : (u.role === 'supervisor' ? '#0369a1' : '#5b21b6'),
+                        fontSize: 9,
+                        padding: '3px 8px',
+                        borderRadius: 9999,
+                        fontWeight: 700
+                      }}>
+                        {u.role.toUpperCase()}
+                      </span>
+                    </div>
+
+                    <div style={{ color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Building size={13} color="#94a3b8" />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {u.departmentOrCompany}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        color: u.status === 'active' ? '#16a34a' : '#94a3b8'
+                      }}>
+                        <span style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: '50%',
+                          background: u.status === 'active' ? '#16a34a' : '#94a3b8'
+                        }} />
+                        {u.status === 'active' ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: 10.5, color: '#94a3b8' }}>
+                      {u.joinedAt || '2026-10-15'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         ) : (
           /* Pending Invites View */

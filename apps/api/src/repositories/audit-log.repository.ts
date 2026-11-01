@@ -66,7 +66,9 @@ export class AuditLogRepository {
       query["entity.collection"] = filters.entity;
     }
     if (filters.actorId) {
-      query["actor.id"] = new Types.ObjectId(filters.actorId);
+      query["actor.id"] = Types.ObjectId.isValid(filters.actorId)
+        ? new Types.ObjectId(filters.actorId)
+        : null;
     }
     if (filters.actorType) {
       query["actor.type"] = filters.actorType;

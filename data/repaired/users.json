@@ -1,0 +1,114 @@
+[
+  {
+    "_id": "668001000000000000000001",
+    "tenantId": "tenant_loompilot_tn_01",
+    "role": "admin",
+    "name": "Rajesh Kumar Sundaram",
+    "email": "admin@loompilot.com",
+    "phone": "+919842100001",
+    "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+    "status": "active",
+    "lockout": {
+      "attempts": 0,
+      "lockedUntil": null
+    },
+    "notificationPrefs": {
+      "email": true,
+      "inApp": true,
+      "sms": true
+    },
+    "processAreas": [
+      "yarn_procurement_stock",
+      "knitting",
+      "dyeing_fabric_processing",
+      "cutting",
+      "stitching",
+      "checking",
+      "ironing_finishing",
+      "packing"
+    ],
+    "createdAt": "2026-06-01T09:00:00.000Z",
+    "updatedAt": "2026-06-01T09:00:00.000Z",
+    "version": 1
+  },
+  {
+    "_id": "668001000000000000000002",
+    "tenantId": "tenant_loompilot_tn_01",
+    "role": "supervisor",
+    "name": "Murugan Shanmugam",
+    "email": "murugan.s@loompilot.com",
+    "phone": "+919842100002",
+    "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+    "status": "active",
+    "lockout": {
+      "attempts": 0,
+      "lockedUntil": null
+    },
+    "notificationPrefs": {
+      "email": true,
+      "inApp": true,
+      "sms": true
+    },
+    "processAreas": [
+      "yarn_procurement_stock",
+      "knitting"
+    ],
+    "createdAt": "2026-06-05T08:00:00.000Z",
+    "updatedAt": "2026-06-05T08:00:00.000Z",
+    "version": 1
+  },
+  {
+    "_id": "668001000000000000000003",
+    "tenantId": "tenant_loompilot_tn_01",
+    "role": "supervisor",
+    "name": "Karthik Rangasamy",
+    "email": "karthik.r@loompilot.com",
+    "phone": "+919842100003",
+    "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+    "status": "active",
+    "lockout": {
+      "attempts": 0,
+      "lockedUntil": null
+    },
+    "notificationPrefs": {
+      "email": true,
+      "inApp": true,
+      "sms": true
+    },
+    "processAreas": [
+      "dyeing_fabric_processing",
+      "cutting"
+    ],
+    "createdAt": "2026-06-05T08:00:00.000Z",
+    "updatedAt": "2026-06-05T08:00:00.000Z",
+    "version": 1
+  },
+  {
+    "_id": "668001000000000000000004",
+    "tenantId": "tenant_loompilot_tn_01",
+    "role": "supervisor",
+    "name": "Selvam Periasamy",
+    "email": "selvam.p@loompilot.com",
+    "phone": "+919842100004",
+    "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+    "status": "active",
+    "lockout": {
+      "attempts": 0,
+      "lockedUntil": null
+    },
+    "notificationPrefs": {
+      "email": true,
+      "inApp": true,
+      "sms": true
+    },
+    "processAreas": [
+      "stitching",
+      "checking",
+      "ironing_finishing",
+      "packing"
+    ],
+    "createdAt": "2026-06-05T08:00:00.000Z",
+    "updatedAt": "2026-06-05T08:00:00.000Z",
+    "version": 1
+  }
+]

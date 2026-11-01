@@ -1,34 +1,90 @@
 import React, { useState } from 'react';
 import { Shield, Lock, Mail, ArrowRight, CheckCircle2, Layers } from 'lucide-react';
 import type { AdminUser } from '../../types';
-import { INITIAL_ADMIN_USER } from '../../data/mockData';
+import { useLoginStaffMutation } from '../../store/api/authApi';
+import { useAppDispatch } from '../../store/hooks';
+import { setCredentials } from '../../store/slices/authSlice';
 
 interface AdminLoginProps {
   onLogin: (user: AdminUser) => void;
 }
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin }) => {
-  const [email, setEmail] = useState('admin@loompilot.com');
-  const [password, setPassword] = useState('••••••••••••');
+  const [loginStaff, { isLoading }] = useLoginStaffMutation();
+  const dispatch = useAppDispatch();
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) {
       setError('Please provide an authorized administrator email.');
       return;
     }
+    if (!password) {
+      setError('Please enter your administrator password.');
+      return;
+    }
     setError(null);
-    onLogin({
-      ...INITIAL_ADMIN_USER,
-      email: email.trim()
-    });
+
+    try {
+      const configuredTenantId =
+        (import.meta as any).env?.VITE_DEFAULT_TENANT_ID ||
+        (import.meta as any).env?.VITE_TENANT_ID ||
+        undefined;
+
+      const res = await loginStaff({
+        email: email.trim(),
+        password,
+        ...(configuredTenantId ? { tenantId: configuredTenantId } : {}),
+      }).unwrap();
+
+      if (!res?.accessToken || !res?.user?.id) {
+        throw new Error('Authentication response is missing credentials or user profile.');
+      }
+
+      const authUser = res.user;
+
+      // Only establish the admin session if the authenticated backend response explicitly identifies an authorized admin
+      if (authUser.role !== 'admin') {
+        throw new Error('Access denied: account does not have administrator privileges.');
+      }
+
+      dispatch(
+        setCredentials({
+          user: authUser,
+          token: res.accessToken,
+          realm: 'user',
+        })
+      );
+
+      // Session established with verified backend admin identity
+      onLogin({
+        id: authUser.id,
+        name: authUser.name || 'Managing Director',
+        email: authUser.email || email.trim(),
+        role: 'admin',
+        title: 'Managing Director & Operations Head',
+        unit: 'LoomPilot Textile Mills',
+        avatar: authUser.avatarUrl || '/assets/avatar.svg',
+      });
+    } catch (err: any) {
+      const message =
+        err?.data?.error?.message ||
+        err?.data?.message ||
+        err?.error ||
+        err?.message ||
+        'Authentication failed. Invalid email or password.';
+      setError(message);
+    }
   };
 
   const handleFillDemo = () => {
-    setEmail('admin@loompilot.com');
-    setPassword('admin2026!secure');
+    setEmail('admin@mill.loompilot.local');
+    setPassword('AdminSecret123!');
     setError(null);
   };
 
@@ -125,7 +181,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin }) => {
                 style={{ width: '100%', paddingLeft: 36 }}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@loompilot.com"
+                placeholder="admin@mill.loompilot.local"
                 required
               />
               <Mail size={15} style={{ position: 'absolute', left: 14, top: 11, color: '#94a3b8' }} />
@@ -163,8 +219,19 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin }) => {
             <span style={{ color: '#18191B', fontWeight: 600, cursor: 'pointer' }}>Forgot Password?</span>
           </div>
 
-          <button type="submit" className="admin-btn-primary" style={{ width: '100%', padding: '10px 16px', justifyContent: 'center' }}>
-            <span>Sign In to Admin Dashboard</span>
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="admin-btn-primary"
+            style={{
+              width: '100%',
+              padding: '10px 16px',
+              justifyContent: 'center',
+              opacity: isLoading ? 0.75 : 1,
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+            }}
+          >
+            <span>{isLoading ? 'Signing In...' : 'Sign In to Admin Dashboard'}</span>
             <ArrowRight size={15} />
           </button>
         </form>
@@ -189,7 +256,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin }) => {
             <span>Click to Autofill Demo Credentials</span>
           </div>
           <div style={{ color: '#64748b', fontSize: 10 }}>
-            User: <strong>admin@loompilot.com</strong> &bull; Role: Managing Director (John Doe)
+            User: <strong>admin@mill.loompilot.local</strong> &bull; Role: Managing Director (System Admin)
           </div>
         </div>
       </div>

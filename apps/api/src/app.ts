@@ -32,9 +32,15 @@ import { clientOrderRouter } from "./routes/client-order.routes.js";
 import { orderRouter } from "./routes/order.routes.js";
 import { internalGatewayRouter } from "./routes/internal-gateway.routes.js";
 import { webhookRouter } from "./routes/webhook.routes.js";
-import { AppContainer, getContainer } from "./container.js";
+import { supervisorRouter } from "./routes/supervisor.routes.js";
+import { supervisorAdminRouter } from "./routes/supervisor-admin.routes.js";
+import { maintenanceTicketRouter } from "./routes/maintenance-ticket.routes.js";
+import { productionRouter } from "./routes/production.routes.js";
+import { procurementRouter } from "./routes/procurement.routes.js";
+import { AppContainer, getContainer, setContainer } from "./container.js";
 
 export function createApp(container: AppContainer = getContainer()): Express {
+  setContainer(container);
   const env = container.env || getEnv();
   const app = express();
 
@@ -146,6 +152,15 @@ export function createApp(container: AppContainer = getContainer()): Express {
 
   // Phase D: Razorpay Webhooks
   app.use("/webhooks", webhookRouter);
+
+  // Phase 6: Production & Supervisor Operations
+  app.use("/api/v1/supervisor", supervisorRouter);
+  app.use("/api/v1/supervisor-reports", supervisorAdminRouter);
+  app.use("/api/v1/maintenance-tickets", maintenanceTicketRouter);
+  app.use("/api/v1/production", productionRouter);
+
+  // Phase 7: Inventory & Procurement
+  app.use("/api/v1/purchase-decisions", procurementRouter);
 
   // 10. Unmatched routes -> 404
   app.use((req) => {

@@ -2,7 +2,7 @@
  * LoomPilot — TypeScript Domain Models & Interfaces
  */
 
-export type OrderStatus = 'Awaiting Quotation' | 'In Production' | 'Delivered' | 'Cancelled';
+export type OrderStatus = 'Awaiting Quotation' | 'In Production' | 'Delivered' | 'Cancelled' | 'Quote Accepted';
 
 export type StageStatus = 'completed' | 'active' | 'upcoming' | 'delayed';
 
@@ -85,6 +85,7 @@ export interface FabricSpecs {
 
 export interface Order {
   id: string;
+  backendId?: string;
   productId: string;
   productName: string;
   category: string;
@@ -113,6 +114,8 @@ export interface Order {
 export interface Invoice {
   invoiceNumber: string;
   orderId: string;
+  backendOrderId?: string;
+  milestoneIndex?: number;
   productName: string;
   milestonePhase: string;
   issueDate: string;

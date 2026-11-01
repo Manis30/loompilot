@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useGetClientOrderByIdQuery } from '../../../store/api/ordersApi';
+import { useGetClientProductsQuery } from '../../../store/api/catalogApi';
+import { mapApiClientOrder } from '../../../utils/orderMapper';
 import { PRODUCTION_STAGES_MASTER } from '../../data/mockData';
 import { formatNumber, formatMetres } from '../../utils/formatters';
 import {
@@ -28,8 +32,28 @@ export const ProductionTrackingPage: React.FC = () => {
   const { orders, addToast } = useApp();
   const navigate = useNavigate();
 
+  const { data: productsResponse } = useGetClientProductsQuery(undefined);
+  const productsMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const raw = productsResponse?.data || [];
+    if (Array.isArray(raw)) {
+      raw.forEach((p: any) => {
+        if (p.id || p._id) map.set(String(p.id || p._id), p);
+      });
+    }
+    return map;
+  }, [productsResponse]);
+
+  const { data: orderResponse } = useGetClientOrderByIdQuery(id || '', { skip: !id });
+  const liveOrder = useMemo(() => {
+    if (orderResponse?.data) {
+      return mapApiClientOrder(orderResponse.data, productsMap);
+    }
+    return null;
+  }, [orderResponse, productsMap]);
+
   // Find order or default to first in production
-  const activeOrder = orders.find((o) => o.id === id) || orders.find((o) => o.status === 'In Production') || orders[0];
+  const activeOrder = liveOrder || orders.find((o) => o.id === id) || orders.find((o) => o.status === 'In Production') || orders[0];
 
   const [selectedStageStep, setSelectedStageStep] = useState<number>(
     activeOrder?.currentStageNumber || 4

@@ -1,0 +1,582 @@
+[
+  {
+    "_id": "668002000000000000000001",
+    "tenantId": "tenant_loompilot_tn_01",
+    "clientName": "Tirupur Knit Fashions Ltd",
+    "contactPerson": "A. Venkatachalam",
+    "email": "venkat@tirupurknitfashions.com",
+    "phone": "+919842211001",
+    "city": "Tirupur",
+    "country": "India",
+    "address": "No. 45, Avinashi Road, Tirupur, Tamil Nadu 641602",
+    "customerType": "regular",
+    "status": "active",
+    "paymentTermsDays": 30,
+    "createdAt": "2026-01-10T10:00:00.000Z",
+    "updatedAt": "2026-06-15T10:00:00.000Z",
+    "version": 1,
+    "portalAccess": {
+      "email": "venkat@tirupurknitfashions.com",
+      "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+      "status": "active",
+      "invitedBy": "668001000000000000000001",
+      "invitedAt": "2026-01-10T10:05:00.000Z",
+      "notificationPrefs": {
+        "email": true,
+        "inApp": true,
+        "sms": true
+      }
+    }
+  },
+  {
+    "_id": "668002000000000000000002",
+    "tenantId": "tenant_loompilot_tn_01",
+    "clientName": "Royal Classic Exports",
+    "contactPerson": "M. Ramakrishnan",
+    "email": "ramki@royalclassicexports.in",
+    "phone": "+919842211002",
+    "city": "Coimbatore",
+    "country": "India",
+    "address": "SF 112, Trichy Road, Singanallur, Coimbatore 641005",
+    "customerType": "regular",
+    "status": "active",
+    "paymentTermsDays": 30,
+    "createdAt": "2026-01-10T10:00:00.000Z",
+    "updatedAt": "2026-06-15T10:00:00.000Z",
+    "version": 1,
+    "portalAccess": {
+      "email": "ramki@royalclassicexports.in",
+      "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+      "status": "active",
+      "invitedBy": "668001000000000000000001",
+      "invitedAt": "2026-01-10T10:05:00.000Z",
+      "notificationPrefs": {
+        "email": true,
+        "inApp": true,
+        "sms": true
+      }
+    }
+  },
+  {
+    "_id": "668002000000000000000003",
+    "tenantId": "tenant_loompilot_tn_01",
+    "clientName": "Bangalore Urban Outfitters Pvt Ltd",
+    "contactPerson": "Priya Nambiar",
+    "email": "priya.n@urbanoutfitters.in",
+    "phone": "+919842211003",
+    "city": "Bengaluru",
+    "country": "India",
+    "address": "Plot 88, Electronic City Phase 1, Hosur Road, Bengaluru 560100",
+    "customerType": "regular",
+    "status": "active",
+    "paymentTermsDays": 15,
+    "createdAt": "2026-01-10T10:00:00.000Z",
+    "updatedAt": "2026-06-15T10:00:00.000Z",
+    "version": 1,
+    "portalAccess": {
+      "email": "priya.n@urbanoutfitters.in",
+      "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+      "status": "active",
+      "invitedBy": "668001000000000000000001",
+      "invitedAt": "2026-01-10T10:05:00.000Z",
+      "notificationPrefs": {
+        "email": true,
+        "inApp": true,
+        "sms": true
+      }
+    }
+  },
+  {
+    "_id": "668002000000000000000004",
+    "tenantId": "tenant_loompilot_tn_01",
+    "clientName": "Chennai StitchCraft Apparels",
+    "contactPerson": "S. Muthukumar",
+    "email": "muthu@chennaistitchcraft.com",
+    "phone": "+919842211004",
+    "city": "Chennai",
+    "country": "India",
+    "address": "No. 12, Industrial Estate, Guindy, Chennai 600032",
+    "customerType": "regular",
+    "status": "active",
+    "paymentTermsDays": 30,
+    "createdAt": "2026-01-10T10:00:00.000Z",
+    "updatedAt": "2026-06-15T10:00:00.000Z",
+    "version": 1,
+    "portalAccess": {
+      "email": "muthu@chennaistitchcraft.com",
+      "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+      "status": "active",
+      "invitedBy": "668001000000000000000001",
+      "invitedAt": "2026-01-10T10:05:00.000Z",
+      "notificationPrefs": {
+        "email": true,
+        "inApp": true,
+        "sms": true
+      }
+    }
+  },
+  {
+    "_id": "668002000000000000000005",
+    "tenantId": "tenant_loompilot_tn_01",
+    "clientName": "Deccan Casuals Pvt Ltd",
+    "contactPerson": "Vikram Reddy",
+    "email": "vikram@deccancasuals.com",
+    "phone": "+919842211005",
+    "city": "Hyderabad",
+    "country": "India",
+    "address": "Road No. 36, Jubilee Hills, Hyderabad 500033",
+    "customerType": "regular",
+    "status": "active",
+    "paymentTermsDays": 30,
+    "createdAt": "2026-01-10T10:00:00.000Z",
+    "updatedAt": "2026-06-15T10:00:00.000Z",
+    "version": 1,
+    "portalAccess": {
+      "email": "vikram@deccancasuals.com",
+      "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+      "status": "active",
+      "invitedBy": "668001000000000000000001",
+      "invitedAt": "2026-01-10T10:05:00.000Z",
+      "notificationPrefs": {
+        "email": true,
+        "inApp": true,
+        "sms": true
+      }
+    }
+  },
+  {
+    "_id": "668002000000000000000006",
+    "tenantId": "tenant_loompilot_tn_01",
+    "clientName": "Western Weave Retailers",
+    "contactPerson": "Rahul Mehta",
+    "email": "rahul.mehta@westernweave.in",
+    "phone": "+919842211006",
+    "city": "Mumbai",
+    "country": "India",
+    "address": "Unit 402, Trade World, Senapati Bapat Marg, Lower Parel, Mumbai 400013",
+    "customerType": "regular",
+    "status": "active",
+    "paymentTermsDays": 30,
+    "createdAt": "2026-01-10T10:00:00.000Z",
+    "updatedAt": "2026-06-15T10:00:00.000Z",
+    "version": 1,
+    "portalAccess": {
+      "email": "rahul.mehta@westernweave.in",
+      "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+      "status": "active",
+      "invitedBy": "668001000000000000000001",
+      "invitedAt": "2026-01-10T10:05:00.000Z",
+      "notificationPrefs": {
+        "email": true,
+        "inApp": true,
+        "sms": true
+      }
+    }
+  },
+  {
+    "_id": "668002000000000000000007",
+    "tenantId": "tenant_loompilot_tn_01",
+    "clientName": "Lotus Knits & Cottons",
+    "contactPerson": "K. Palanisamy",
+    "email": "palanisamy@lotusknits.com",
+    "phone": "+919842211007",
+    "city": "Erode",
+    "country": "India",
+    "address": "24/B, Perundurai Road, Erode, Tamil Nadu 638011",
+    "customerType": "regular",
+    "status": "active",
+    "paymentTermsDays": 15,
+    "createdAt": "2026-01-10T10:00:00.000Z",
+    "updatedAt": "2026-06-15T10:00:00.000Z",
+    "version": 1,
+    "portalAccess": {
+      "email": "palanisamy@lotusknits.com",
+      "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+      "status": "active",
+      "invitedBy": "668001000000000000000001",
+      "invitedAt": "2026-01-10T10:05:00.000Z",
+      "notificationPrefs": {
+        "email": true,
+        "inApp": true,
+        "sms": true
+      }
+    }
+  },
+  {
+    "_id": "668002000000000000000008",
+    "tenantId": "tenant_loompilot_tn_01",
+    "clientName": "Heritage Khadi & Garments",
+    "contactPerson": "N. Balasubramanian",
+    "email": "bala@heritagegarments.com",
+    "phone": "+919842211008",
+    "city": "Salem",
+    "country": "India",
+    "address": "78, Omalur Main Road, Salem, Tamil Nadu 636004",
+    "customerType": "regular",
+    "status": "active",
+    "paymentTermsDays": 30,
+    "createdAt": "2026-01-10T10:00:00.000Z",
+    "updatedAt": "2026-06-15T10:00:00.000Z",
+    "version": 1,
+    "portalAccess": {
+      "email": "bala@heritagegarments.com",
+      "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+      "status": "active",
+      "invitedBy": "668001000000000000000001",
+      "invitedAt": "2026-01-10T10:05:00.000Z",
+      "notificationPrefs": {
+        "email": true,
+        "inApp": true,
+        "sms": true
+      }
+    }
+  },
+  {
+    "_id": "668002000000000000000009",
+    "tenantId": "tenant_loompilot_tn_01",
+    "clientName": "Skyline Activewear India",
+    "contactPerson": "Deepa Chandran",
+    "email": "deepa@skylineactive.com",
+    "phone": "+919842211009",
+    "city": "Bengaluru",
+    "country": "India",
+    "address": "Tower B, Outer Ring Road, Bellandur, Bengaluru 560103",
+    "customerType": "regular",
+    "status": "active",
+    "paymentTermsDays": 15,
+    "createdAt": "2026-01-10T10:00:00.000Z",
+    "updatedAt": "2026-06-15T10:00:00.000Z",
+    "version": 1,
+    "portalAccess": {
+      "email": "deepa@skylineactive.com",
+      "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+      "status": "active",
+      "invitedBy": "668001000000000000000001",
+      "invitedAt": "2026-01-10T10:05:00.000Z",
+      "notificationPrefs": {
+        "email": true,
+        "inApp": true,
+        "sms": true
+      }
+    }
+  },
+  {
+    "_id": "668002000000000000000010",
+    "tenantId": "tenant_loompilot_tn_01",
+    "clientName": "Coastal Breeze Apparels",
+    "contactPerson": "Thomas Kuruvilla",
+    "email": "thomas@coastalbreeze.in",
+    "phone": "+919842211010",
+    "city": "Kochi",
+    "country": "India",
+    "address": "Plot 14, Cochin Special Economic Zone, Kakkanad, Kochi 682037",
+    "customerType": "regular",
+    "status": "active",
+    "paymentTermsDays": 30,
+    "createdAt": "2026-01-10T10:00:00.000Z",
+    "updatedAt": "2026-06-15T10:00:00.000Z",
+    "version": 1,
+    "portalAccess": {
+      "email": "thomas@coastalbreeze.in",
+      "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+      "status": "active",
+      "invitedBy": "668001000000000000000001",
+      "invitedAt": "2026-01-10T10:05:00.000Z",
+      "notificationPrefs": {
+        "email": true,
+        "inApp": true,
+        "sms": true
+      }
+    }
+  },
+  {
+    "_id": "668002000000000000000011",
+    "tenantId": "tenant_loompilot_tn_01",
+    "clientName": "Premier Threadworks Pvt Ltd",
+    "contactPerson": "Arvind Swaminathan",
+    "email": "arvind@premierthreadworks.com",
+    "phone": "+919842211011",
+    "city": "Chennai",
+    "country": "India",
+    "address": "Old Mahabalipuram Road, Sholinganallur, Chennai 600119",
+    "customerType": "regular",
+    "status": "active",
+    "paymentTermsDays": 30,
+    "createdAt": "2026-01-10T10:00:00.000Z",
+    "updatedAt": "2026-06-15T10:00:00.000Z",
+    "version": 1,
+    "portalAccess": {
+      "email": "arvind@premierthreadworks.com",
+      "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+      "status": "active",
+      "invitedBy": "668001000000000000000001",
+      "invitedAt": "2026-01-10T10:05:00.000Z",
+      "notificationPrefs": {
+        "email": true,
+        "inApp": true,
+        "sms": true
+      }
+    }
+  },
+  {
+    "_id": "668002000000000000000012",
+    "tenantId": "tenant_loompilot_tn_01",
+    "clientName": "Monarch Textiles & Polos",
+    "contactPerson": "G. Senthil Nathan",
+    "email": "senthil@monarchpolos.com",
+    "phone": "+919842211012",
+    "city": "Tirupur",
+    "country": "India",
+    "address": "102, Mangalam Road, Karuvampalayam, Tirupur 641604",
+    "customerType": "regular",
+    "status": "active",
+    "paymentTermsDays": 15,
+    "createdAt": "2026-01-10T10:00:00.000Z",
+    "updatedAt": "2026-06-15T10:00:00.000Z",
+    "version": 1,
+    "portalAccess": {
+      "email": "senthil@monarchpolos.com",
+      "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+      "status": "active",
+      "invitedBy": "668001000000000000000001",
+      "invitedAt": "2026-01-10T10:05:00.000Z",
+      "notificationPrefs": {
+        "email": true,
+        "inApp": true,
+        "sms": true
+      }
+    }
+  },
+  {
+    "_id": "668002000000000000000013",
+    "tenantId": "tenant_loompilot_tn_01",
+    "clientName": "Global Vogue Sourcing",
+    "contactPerson": "Amitav Sen",
+    "email": "amitav.sen@globalvogue.co.in",
+    "phone": "+919842211013",
+    "city": "New Delhi",
+    "country": "India",
+    "address": "A-24, Okhla Industrial Area Phase 2, New Delhi 110020",
+    "customerType": "regular",
+    "status": "active",
+    "paymentTermsDays": 30,
+    "createdAt": "2026-01-10T10:00:00.000Z",
+    "updatedAt": "2026-06-15T10:00:00.000Z",
+    "version": 1,
+    "portalAccess": {
+      "email": "amitav.sen@globalvogue.co.in",
+      "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+      "status": "active",
+      "invitedBy": "668001000000000000000001",
+      "invitedAt": "2026-01-10T10:05:00.000Z",
+      "notificationPrefs": {
+        "email": true,
+        "inApp": true,
+        "sms": true
+      }
+    }
+  },
+  {
+    "_id": "668002000000000000000014",
+    "tenantId": "tenant_loompilot_tn_01",
+    "clientName": "Zenith Knitwear Hub",
+    "contactPerson": "Harpreet Singh",
+    "email": "harpreet@zenithknitwear.in",
+    "phone": "+919842211014",
+    "city": "Ludhiana",
+    "country": "India",
+    "address": "Industrial Area A, Ludhiana, Punjab 141003",
+    "customerType": "regular",
+    "status": "active",
+    "paymentTermsDays": 30,
+    "createdAt": "2026-01-10T10:00:00.000Z",
+    "updatedAt": "2026-06-15T10:00:00.000Z",
+    "version": 1,
+    "portalAccess": {
+      "email": "harpreet@zenithknitwear.in",
+      "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+      "status": "active",
+      "invitedBy": "668001000000000000000001",
+      "invitedAt": "2026-01-10T10:05:00.000Z",
+      "notificationPrefs": {
+        "email": true,
+        "inApp": true,
+        "sms": true
+      }
+    }
+  },
+  {
+    "_id": "668002000000000000000015",
+    "tenantId": "tenant_loompilot_tn_01",
+    "clientName": "Karur Home & Wear Fabrics",
+    "contactPerson": "V. Thangavel",
+    "email": "thangavel@karurwear.com",
+    "phone": "+919842211015",
+    "city": "Karur",
+    "country": "India",
+    "address": "55, Sengunthapuram Main Road, Karur, Tamil Nadu 639002",
+    "customerType": "regular",
+    "status": "active",
+    "paymentTermsDays": 30,
+    "createdAt": "2026-01-10T10:00:00.000Z",
+    "updatedAt": "2026-06-15T10:00:00.000Z",
+    "version": 1,
+    "portalAccess": {
+      "email": "thangavel@karurwear.com",
+      "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+      "status": "active",
+      "invitedBy": "668001000000000000000001",
+      "invitedAt": "2026-01-10T10:05:00.000Z",
+      "notificationPrefs": {
+        "email": true,
+        "inApp": true,
+        "sms": true
+      }
+    }
+  },
+  {
+    "_id": "668002000000000000000016",
+    "tenantId": "tenant_loompilot_tn_01",
+    "clientName": "Southern Star Clothing Co",
+    "contactPerson": "R. Meenakshisundaram",
+    "email": "meenakshi@southernstarclothing.com",
+    "phone": "+919842211016",
+    "city": "Madurai",
+    "country": "India",
+    "address": "12, Bypass Road, Madurai, Tamil Nadu 625016",
+    "customerType": "regular",
+    "status": "active",
+    "paymentTermsDays": 15,
+    "createdAt": "2026-01-10T10:00:00.000Z",
+    "updatedAt": "2026-06-15T10:00:00.000Z",
+    "version": 1,
+    "portalAccess": {
+      "email": "meenakshi@southernstarclothing.com",
+      "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+      "status": "active",
+      "invitedBy": "668001000000000000000001",
+      "invitedAt": "2026-01-10T10:05:00.000Z",
+      "notificationPrefs": {
+        "email": true,
+        "inApp": true,
+        "sms": true
+      }
+    }
+  },
+  {
+    "_id": "668002000000000000000017",
+    "tenantId": "tenant_loompilot_tn_01",
+    "clientName": "Vertex Garments Exporters",
+    "contactPerson": "S. Anand",
+    "email": "anand@vertexgarments.com",
+    "phone": "+919842211017",
+    "city": "Coimbatore",
+    "country": "India",
+    "address": "45, Pollachi Road, Sundarapuram, Coimbatore 641024",
+    "customerType": "regular",
+    "status": "active",
+    "paymentTermsDays": 30,
+    "createdAt": "2026-01-10T10:00:00.000Z",
+    "updatedAt": "2026-06-15T10:00:00.000Z",
+    "version": 1,
+    "portalAccess": {
+      "email": "anand@vertexgarments.com",
+      "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+      "status": "active",
+      "invitedBy": "668001000000000000000001",
+      "invitedAt": "2026-01-10T10:05:00.000Z",
+      "notificationPrefs": {
+        "email": true,
+        "inApp": true,
+        "sms": true
+      }
+    }
+  },
+  {
+    "_id": "668002000000000000000018",
+    "tenantId": "tenant_loompilot_tn_01",
+    "clientName": "Blue Horizon Kids Wear",
+    "contactPerson": "Shalini Iyer",
+    "email": "shalini@bluehorizonkids.com",
+    "phone": "+919842211018",
+    "city": "Bengaluru",
+    "country": "India",
+    "address": "77, Koramangala 4th Block, Bengaluru 560034",
+    "customerType": "regular",
+    "status": "active",
+    "paymentTermsDays": 15,
+    "createdAt": "2026-01-10T10:00:00.000Z",
+    "updatedAt": "2026-06-15T10:00:00.000Z",
+    "version": 1,
+    "portalAccess": {
+      "email": "shalini@bluehorizonkids.com",
+      "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+      "status": "active",
+      "invitedBy": "668001000000000000000001",
+      "invitedAt": "2026-01-10T10:05:00.000Z",
+      "notificationPrefs": {
+        "email": true,
+        "inApp": true,
+        "sms": true
+      }
+    }
+  },
+  {
+    "_id": "668002000000000000000019",
+    "tenantId": "tenant_loompilot_tn_01",
+    "clientName": "SilkRoute Cotton Apparels",
+    "contactPerson": "Sanjay Kulkarni",
+    "email": "sanjay@silkrouteapparels.com",
+    "phone": "+919842211019",
+    "city": "Pune",
+    "country": "India",
+    "address": "Survey No 28, Hinjewadi Phase 1, Pune, Maharashtra 411057",
+    "customerType": "regular",
+    "status": "active",
+    "paymentTermsDays": 30,
+    "createdAt": "2026-01-10T10:00:00.000Z",
+    "updatedAt": "2026-06-15T10:00:00.000Z",
+    "version": 1,
+    "portalAccess": {
+      "email": "sanjay@silkrouteapparels.com",
+      "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+      "status": "active",
+      "invitedBy": "668001000000000000000001",
+      "invitedAt": "2026-01-10T10:05:00.000Z",
+      "notificationPrefs": {
+        "email": true,
+        "inApp": true,
+        "sms": true
+      }
+    }
+  },
+  {
+    "_id": "668002000000000000000020",
+    "tenantId": "tenant_loompilot_tn_01",
+    "clientName": "PrimeEdge Fashion Logistics",
+    "contactPerson": "Nilesh Patel",
+    "email": "nilesh@primeedgefashion.com",
+    "phone": "+919842211020",
+    "city": "Surat",
+    "country": "India",
+    "address": "Ring Road Textile Market, Surat, Gujarat 395002",
+    "customerType": "regular",
+    "status": "active",
+    "paymentTermsDays": 30,
+    "createdAt": "2026-01-10T10:00:00.000Z",
+    "updatedAt": "2026-06-15T10:00:00.000Z",
+    "version": 1,
+    "portalAccess": {
+      "email": "nilesh@primeedgefashion.com",
+      "passwordHash": "$2b$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+      "status": "active",
+      "invitedBy": "668001000000000000000001",
+      "invitedAt": "2026-01-10T10:05:00.000Z",
+      "notificationPrefs": {
+        "email": true,
+        "inApp": true,
+        "sms": true
+      }
+    }
+  }
+]

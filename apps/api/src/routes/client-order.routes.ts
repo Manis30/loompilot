@@ -8,6 +8,7 @@ import {
   validateParams,
   validateQuery,
   IdParamSchema,
+  OrderMilestoneParamSchema,
   ClientSubmitOrderSchema,
   ClientAcceptQuotationSchema,
   ClientDeclineQuotationSchema,
@@ -63,6 +64,6 @@ clientOrderRouter.post(
   "/:id/payments/:milestoneIndex/razorpay-order",
   idempotencyMiddleware,
   authorize("POST /api/v1/client/orders/:id/payments/:milestoneIndex/razorpay-order"),
-  validateParams(IdParamSchema),
+  validateParams(OrderMilestoneParamSchema),
   controller.createPaymentOrder
 );

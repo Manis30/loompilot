@@ -1,5 +1,7 @@
+import { Types } from "mongoose";
 import { MachineRepository } from "../repositories/machine.repository.js";
 import { SettingsRepository } from "../repositories/settings.repository.js";
+import { MaintenanceTicketRepository } from "../repositories/maintenance-ticket.repository.js";
 import { IMachine } from "../models/catalog/machine.model.js";
 import { PaginationQuery, PaginatedResult, paginate } from "../utils/pagination.js";
 import { AuditService } from "./audit.service.js";
@@ -32,6 +34,7 @@ export class MachineService {
   constructor(
     private readonly machineRepo = new MachineRepository(),
     private readonly settingsRepo = new SettingsRepository(),
+    private readonly ticketRepo = new MaintenanceTicketRepository(),
     private readonly auditService = new AuditService()
   ) {}
 
@@ -126,10 +129,21 @@ export class MachineService {
     processArea: string;
     capacityUnitsPerDay: number;
     machineType?: string;
-    actor: { id: string; email?: string; ip?: string; requestId?: string };
+    actor: { id: string; email?: string; ip?: string; requestId?: string; role?: string };
+    supervisorProcessAreas?: string[];
   }): Promise<IMachine> {
-    const { tenantId, actor, ...data } = params;
+    const { tenantId, actor, supervisorProcessAreas, ...data } = params;
     await this.validateProcessArea(tenantId, data.processArea);
+
+    if (supervisorProcessAreas !== undefined) {
+      if (!supervisorProcessAreas.includes(data.processArea)) {
+        throw new AppError(
+          ErrorCode.FORBIDDEN,
+          "Access denied: Machine process area not in supervisor's assigned areas",
+          403
+        );
+      }
+    }
 
     const existing = await this.machineRepo.findOne(tenantId, { machineCode: data.machineCode.toUpperCase() });
     if (existing) {
@@ -181,6 +195,71 @@ export class MachineService {
       entity: { collection: "machines", id },
       before,
       after: updated,
+      ip: actor.ip,
+      requestId: actor.requestId,
+    });
+
+    return updated;
+  }
+
+  async updateMachineStatus(params: {
+    tenantId: string;
+    id: string;
+    status: "available" | "maint" | "breakdown" | "inactive";
+    notes?: string;
+    supervisorProcessAreas?: string[];
+    actor: { id: string; email?: string; ip?: string; requestId?: string; role?: string };
+  }): Promise<IMachine> {
+    const { tenantId, id, status, notes, supervisorProcessAreas, actor } = params;
+
+    let machine = null;
+    if (Types.ObjectId.isValid(id)) {
+      machine = await this.machineRepo.findById(tenantId, id);
+    }
+    if (!machine) {
+      machine = await this.machineRepo.findOne(tenantId, { machineCode: id.toUpperCase() });
+    }
+    if (!machine) {
+      throw new AppError(ErrorCode.NOT_FOUND, `Machine '${id}' not found`, 404);
+    }
+
+    if (supervisorProcessAreas !== undefined) {
+      if (!supervisorProcessAreas.includes(machine.processArea)) {
+        throw new AppError(
+          ErrorCode.FORBIDDEN,
+          "Access denied: Machine process area not in supervisor's assigned areas",
+          403
+        );
+      }
+    }
+
+    // Business rule: Cannot mark a machine available while it has an unresolved breakdown ticket
+    if (status === "available") {
+      const unresolvedTicket = await this.ticketRepo.findOne(tenantId, {
+        machineId: machine._id,
+        status: { $in: ["open", "assigned"] },
+      });
+      if (unresolvedTicket) {
+        throw new AppError(
+          ErrorCode.VALIDATION_FAILED,
+          `Cannot mark machine available: active breakdown ticket '${unresolvedTicket._id}' is still unresolved`,
+          400
+        );
+      }
+    }
+
+    const updated = await this.machineRepo.updateMachineStatus(tenantId, String(machine._id), status);
+    if (!updated) {
+      throw new AppError(ErrorCode.NOT_FOUND, `Machine '${id}' not found`, 404);
+    }
+
+    await this.auditService.log({
+      tenantId,
+      actor: { id: actor.id, type: "user", email: actor.email },
+      action: "MACHINE_STATUS_UPDATED",
+      entity: { collection: "machines", id: String(machine._id) },
+      before: { currentStatus: machine.currentStatus },
+      after: { currentStatus: status, notes },
       ip: actor.ip,
       requestId: actor.requestId,
     });

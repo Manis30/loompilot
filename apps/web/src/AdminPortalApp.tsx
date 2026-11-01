@@ -1,4 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import {
+  useGetOrdersQuery,
+  useApproveQuotationMutation,
+  useSendQuotationMutation,
+  useAssignSupervisorsMutation,
+  useCancelOrderMutation,
+  useRecordDeliveryMutation,
+  useRecordManualReceiptMutation,
+} from './store/api/ordersApi';
+import {
+  useGetClientsQuery,
+  useGetProductsQuery,
+  useGetMaterialsQuery,
+  useGetUsersQuery,
+} from './store/api/catalogApi';
+import { mapApiOrderToAdminOrder } from './utils/orderMapper';
+import { useGetMeQuery, useLogoutStaffMutation } from './store/api/authApi';
+import { useAppDispatch } from './store/hooks';
+import { logout as authLogout } from './store/slices/authSlice';
 import { AdminLogin } from './components/auth/AdminLogin';
 import { AdminSidebar, type AdminNavTab } from './components/layout/AdminSidebar';
 
@@ -47,16 +66,122 @@ import type {
   MaterialRequirement
 } from './types';
 
+const isDemo = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
+
+const getInitialAdminUser = (): AdminUser | null => {
+  if (isDemo) {
+    return INITIAL_ADMIN_USER;
+  }
+  // In normal mode, do not treat a cached user object or demo default as authenticated
+  return null;
+};
+
 export const AdminPortalApp: React.FC = () => {
-  // 1. Authentication State (defaults to active Admin session for instant navigation)
-  const [adminUser, setAdminUser] = useState<AdminUser | null>(INITIAL_ADMIN_USER);
+  // 1. Authentication State (restored only from verified admin session in normal mode)
+  const [adminUser, setAdminUser] = useState<AdminUser | null>(getInitialAdminUser);
+  const dispatch = useAppDispatch();
+  const [logoutStaffMutation] = useLogoutStaffMutation();
+
+  const token = typeof window !== 'undefined' ? localStorage.getItem('loompilot_token') : null;
+  const realm = typeof window !== 'undefined' ? localStorage.getItem('loompilot_realm') : null;
+
+  // Restore session only through verified auth API with confirmed admin role
+  const { data: meData, isSuccess: isMeSuccess, isError: isMeError } = useGetMeQuery(
+    undefined,
+    { skip: !token || realm !== 'user' }
+  );
+
+  useEffect(() => {
+    if (isMeSuccess && meData) {
+      const profile = (meData as any)?.profile;
+      if ((meData as any)?.realm === 'user' && profile?.role === 'admin') {
+        setAdminUser({
+          id: profile.id || profile._id || 'admin_user',
+          name: profile.name || 'Managing Director',
+          email: profile.email || '',
+          role: 'admin',
+          title: 'Managing Director & Operations Head',
+          unit: 'LoomPilot Textile Mills',
+          avatar: profile.avatarUrl || '/assets/avatar.svg',
+        });
+      } else if (!isDemo) {
+        setAdminUser(null);
+      }
+    } else if (isMeError && !isDemo) {
+      setAdminUser(null);
+      try {
+        localStorage.removeItem('loompilot_token');
+        localStorage.removeItem('loompilot_user');
+        localStorage.removeItem('loompilot_realm');
+      } catch {}
+    }
+  }, [isMeSuccess, isMeError, meData]);
 
   // 2. Navigation & Selection State
   const [currentTab, setCurrentTab] = useState<AdminNavTab>('orders');
   const [selectedOrderId, setSelectedOrderId] = useState<string>('');
 
+  // Live RTK Query hooks for Backend persistence
+  const { data: ordersResponse } = useGetOrdersQuery(undefined);
+  const { data: clientsResponse } = useGetClientsQuery(undefined);
+  const { data: productsResponse } = useGetProductsQuery(undefined);
+  const { data: usersResponse } = useGetUsersQuery(undefined);
+
+  const [approveQuotationMutation] = useApproveQuotationMutation();
+  const [sendQuotationMutation] = useSendQuotationMutation();
+  const [assignSupervisorsMutation] = useAssignSupervisorsMutation();
+  const [cancelOrderMutation] = useCancelOrderMutation();
+  const [recordDeliveryMutation] = useRecordDeliveryMutation();
+  const [recordManualReceiptMutation] = useRecordManualReceiptMutation();
+
+  const clientsMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const raw = clientsResponse?.data || [];
+    if (Array.isArray(raw)) {
+      raw.forEach((c: any) => {
+        if (c.id || c._id) map.set(String(c.id || c._id), c);
+      });
+    }
+    return map;
+  }, [clientsResponse]);
+
+  const productsMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const raw = productsResponse?.data || [];
+    if (Array.isArray(raw)) {
+      raw.forEach((p: any) => {
+        if (p.id || p._id) map.set(String(p.id || p._id), p);
+      });
+    }
+    return map;
+  }, [productsResponse]);
+
   // 3. Operational State
   const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
+
+  useEffect(() => {
+    const raw = ordersResponse?.data || [];
+    if (Array.isArray(raw) && raw.length > 0) {
+      const mapped = raw.map((item) => mapApiOrderToAdminOrder(item, clientsMap, productsMap));
+      setOrders(mapped);
+    }
+  }, [ordersResponse, clientsMap, productsMap]);
+
+  useEffect(() => {
+    const rawUsers = usersResponse?.data || [];
+    if (Array.isArray(rawUsers) && rawUsers.length > 0) {
+      setUsers(
+        rawUsers.map((u: any) => ({
+          id: u.id || u._id,
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          departmentOrCompany: u.processAreas?.join(', ') || 'Operations',
+          status: (u.status === 'inactive' ? 'suspended' : 'active') as 'active' | 'invited' | 'suspended',
+        }))
+      );
+    }
+  }, [usersResponse]);
   const [commodities] = useState<MarketCommodity[]>(INITIAL_COMMODITIES);
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>(INITIAL_AUDIT_LOGS);
   const [agentRuns, setAgentRuns] = useState<AgentRun[]>(INITIAL_AGENT_RUNS);
@@ -123,36 +248,52 @@ export const AdminPortalApp: React.FC = () => {
   // QUOTATION & REVISION HANDLERS
   // =========================================================================
 
-  const handleApproveQuotation = (orderId: string, editedMargin?: number) => {
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId && o.quotation) {
-          const margin = editedMargin !== undefined ? editedMargin : o.quotation.marginPercent;
-          const costBefore = o.quotation.materialCost + o.quotation.processingCost + o.quotation.overheadCost + o.quotation.priceRiskBuffer;
-          const newTotal = Math.round(costBefore / (1 - margin / 100));
-          const newUnit = +(newTotal / o.quantityMeters).toFixed(2);
+  const handleApproveQuotation = async (orderId: string, editedMargin?: number) => {
+    const targetOrder = orders.find((o) => o.id === orderId);
+    const realId = targetOrder?.backendId || orderId;
+    try {
+      await approveQuotationMutation({
+        id: realId,
+        body: {
+          marginPercent: editedMargin ?? targetOrder?.quotation?.marginPercent ?? 18,
+          status: 'approved',
+          notes: `Admin approved quotation with ${editedMargin ?? 18}% margin.`,
+        },
+      }).unwrap();
 
-          return {
-            ...o,
-            status: 'quotation_sent',
-            currentPhase: 'Quotation Sent to Client',
-            quotation: {
-              ...o.quotation,
-              marginPercent: margin,
-              totalPrice: newTotal,
-              pricePerUnit: newUnit,
-              adminApproved: true,
-              status: 'approved'
-            }
-          };
-        }
-        return o;
-      })
-    );
+      setOrders((prev) =>
+        prev.map((o) => {
+          if (o.id === orderId && o.quotation) {
+            const margin = editedMargin !== undefined ? editedMargin : o.quotation.marginPercent;
+            const costBefore = o.quotation.materialCost + o.quotation.processingCost + o.quotation.overheadCost + o.quotation.priceRiskBuffer;
+            const newTotal = Math.round(costBefore / (1 - margin / 100));
+            const newUnit = +(newTotal / o.quantityMeters).toFixed(2);
 
-    addAuditLog('QUOTATION_APPROVED', `Admin approved quotation for ${orderId}. Client-safe PDF generated and dispatched.`, orderId);
-    addAgentRun('Quotation Agent', 'SUCCESS', `Quotation for ${orderId} approved by Admin. Status moved to quotation_sent.`, orderId);
-    showToast(`Quotation approved! Order ${orderId} released to client with ${editedMargin || 18}% margin.`);
+            return {
+              ...o,
+              status: 'quotation_sent',
+              currentPhase: 'Quotation Sent to Client',
+              quotation: {
+                ...o.quotation,
+                marginPercent: margin,
+                totalPrice: newTotal,
+                pricePerUnit: newUnit,
+                adminApproved: true,
+                status: 'approved'
+              }
+            };
+          }
+          return o;
+        })
+      );
+
+      addAuditLog('QUOTATION_APPROVED', `Admin approved quotation for ${orderId}. Client-safe PDF generated and dispatched.`, orderId);
+      addAgentRun('Quotation Agent', 'SUCCESS', `Quotation for ${orderId} approved by Admin. Status moved to quotation_sent.`, orderId);
+      showToast(`Quotation approved! Order ${orderId} released to client with ${editedMargin || 18}% margin.`);
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to approve quotation on server.';
+      showToast(`Quotation approval failed: ${errMsg}`);
+    }
   };
 
   const handleRejectQuotation = (orderId: string, reason: string) => {
@@ -219,27 +360,39 @@ export const AdminPortalApp: React.FC = () => {
   // HANDOVER & RECOVERY HANDLERS
   // =========================================================================
 
-  const handleConfirmHandover = (orderId: string, supervisorId: string, supervisorName: string) => {
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId) {
-          return {
-            ...o,
-            status: 'in_production',
-            currentPhase: 'Loom Weaving Shed A',
-            assignedSupervisorId: supervisorId,
-            assignedSupervisorName: supervisorName,
-            handoverDate: '2026-10-29',
-            productionPlanConfirmed: true
-          };
-        }
-        return o;
-      })
-    );
+  const handleConfirmHandover = async (orderId: string, supervisorId: string, supervisorName: string) => {
+    const targetOrder = orders.find((o) => o.id === orderId);
+    const realId = targetOrder?.backendId || orderId;
+    try {
+      await assignSupervisorsMutation({
+        id: realId,
+        body: { supervisorIds: [supervisorId] },
+      }).unwrap();
 
-    addAuditLog('ORDER_HANDOVER', `Admin handed over ${orderId} to supervisor ${supervisorName}. Stock reserved.`, orderId);
-    addAgentRun('Monitoring Agent', 'SUCCESS', `Order ${orderId} entered in_production. Monitoring snapshots active.`, orderId);
-    showToast(`Order ${orderId} successfully assigned to ${supervisorName}!`);
+      setOrders((prev) =>
+        prev.map((o) => {
+          if (o.id === orderId) {
+            return {
+              ...o,
+              status: 'in_production',
+              currentPhase: 'Loom Weaving Shed A',
+              assignedSupervisorId: supervisorId,
+              assignedSupervisorName: supervisorName,
+              handoverDate: '2026-10-29',
+              productionPlanConfirmed: true
+            };
+          }
+          return o;
+        })
+      );
+
+      addAuditLog('ORDER_HANDOVER', `Admin handed over ${orderId} to supervisor ${supervisorName}. Stock reserved.`, orderId);
+      addAgentRun('Monitoring Agent', 'SUCCESS', `Order ${orderId} entered in_production. Monitoring snapshots active.`, orderId);
+      showToast(`Order ${orderId} successfully assigned to ${supervisorName}!`);
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to assign supervisor on server.';
+      showToast(`Supervisor assignment failed: ${errMsg}`);
+    }
   };
 
   const handleConfirmPurchase = (orderId: string, supplier: string, quantityKg: number, totalCost: number) => {
@@ -328,49 +481,97 @@ export const AdminPortalApp: React.FC = () => {
     showToast(`Alternative date ${altDate} drafted for client.`);
   };
 
-  const handleDeclineOrder = (orderId: string) => {
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId) {
-          return { ...o, status: 'rejected_by_admin', currentPhase: 'Order Declined' };
-        }
-        return o;
-      })
-    );
-    addAuditLog('ORDER_DECLINED', `Admin declined infeasible order ${orderId} with client-safe wording.`, orderId);
-    showToast(`Order ${orderId} declined with polite client-safe wording.`);
+  const handleDeclineOrder = async (orderId: string) => {
+    const targetOrder = orders.find((o) => o.id === orderId);
+    const realId = targetOrder?.backendId || orderId;
+    try {
+      await cancelOrderMutation({
+        id: realId,
+        body: { reason: 'Admin declined infeasible order' },
+      }).unwrap();
+
+      setOrders((prev) =>
+        prev.map((o) => {
+          if (o.id === orderId) {
+            return { ...o, status: 'rejected_by_admin', currentPhase: 'Order Declined' };
+          }
+          return o;
+        })
+      );
+      addAuditLog('ORDER_DECLINED', `Admin declined infeasible order ${orderId} with client-safe wording.`, orderId);
+      showToast(`Order ${orderId} declined with polite client-safe wording.`);
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to cancel order on server.';
+      showToast(`Order decline failed: ${errMsg}`);
+    }
   };
 
   // =========================================================================
   // DELIVERIES & PAYMENTS HANDLERS
   // =========================================================================
 
-  const handleRecordDelivery = (orderId: string, delivery: Omit<DeliveryRecord, 'id'>) => {
-    const record: DeliveryRecord = { ...delivery, id: `del_${Date.now()}` };
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId) {
-          return { ...o, deliveries: [...o.deliveries, record] };
-        }
-        return o;
-      })
-    );
-    addAuditLog('DELIVERY_RECORDED', `Logged dispatch of ${delivery.quantityMeters}m for ${orderId}. Invoice: ${delivery.invoiceNumber}`, orderId);
-    showToast(`Delivery recorded for ${orderId} (${delivery.quantityMeters}m).`);
+  const handleRecordDelivery = async (orderId: string, delivery: Omit<DeliveryRecord, 'id'>) => {
+    const targetOrder = orders.find((o) => o.id === orderId);
+    const realId = targetOrder?.backendId || orderId;
+    try {
+      await recordDeliveryMutation({
+        id: realId,
+        body: {
+          deliveryDate: delivery.date || new Date().toISOString().split('T')[0],
+          qty: delivery.quantityMeters,
+          invoiceNo: delivery.invoiceNumber || `INV-${Date.now()}`,
+          invoiceAmountPaise: delivery.quantityMeters * 22500,
+          notes: `Dispatched via ${delivery.carrier}`,
+        },
+      }).unwrap();
+
+      const record: DeliveryRecord = { ...delivery, id: `del_${Date.now()}` };
+      setOrders((prev) =>
+        prev.map((o) => {
+          if (o.id === orderId) {
+            return { ...o, deliveries: [...o.deliveries, record] };
+          }
+          return o;
+        })
+      );
+      addAuditLog('DELIVERY_RECORDED', `Logged dispatch of ${delivery.quantityMeters}m for ${orderId}. Invoice: ${delivery.invoiceNumber}`, orderId);
+      showToast(`Delivery recorded for ${orderId} (${delivery.quantityMeters}m).`);
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to record delivery on server.';
+      showToast(`Delivery record failed: ${errMsg}`);
+    }
   };
 
-  const handleRecordPayment = (orderId: string, payment: Omit<PaymentRecord, 'id'>) => {
-    const record: PaymentRecord = { ...payment, id: `pay_${Date.now()}` };
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId) {
-          return { ...o, payments: [...o.payments, record] };
-        }
-        return o;
-      })
-    );
-    addAuditLog('PAYMENT_RECORDED', `Recorded payment receipt of $${payment.amount} for ${orderId}.`, orderId);
-    showToast(`Payment receipt of $${payment.amount.toLocaleString()} logged.`);
+  const handleRecordPayment = async (orderId: string, payment: Omit<PaymentRecord, 'id'>) => {
+    const targetOrder = orders.find((o) => o.id === orderId);
+    const realId = targetOrder?.backendId || orderId;
+    try {
+      await recordManualReceiptMutation({
+        id: realId,
+        body: {
+          milestoneIndex: 0,
+          amountPaise: Math.round(payment.amount * 100),
+          ref: payment.invoiceNumber || `PAY-${Date.now()}`,
+          method: 'neft',
+          notes: `Payment receipt recorded for invoice ${payment.invoiceNumber}`,
+        },
+      }).unwrap();
+
+      const record: PaymentRecord = { ...payment, id: `pay_${Date.now()}` };
+      setOrders((prev) =>
+        prev.map((o) => {
+          if (o.id === orderId) {
+            return { ...o, payments: [...o.payments, record] };
+          }
+          return o;
+        })
+      );
+      addAuditLog('PAYMENT_RECORDED', `Recorded payment receipt of $${payment.amount} for ${orderId}.`, orderId);
+      showToast(`Payment receipt of $${payment.amount.toLocaleString()} logged.`);
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to record payment on server.';
+      showToast(`Payment receipt failed: ${errMsg}`);
+    }
   };
 
   // =========================================================================
@@ -504,8 +705,8 @@ export const AdminPortalApp: React.FC = () => {
     showToast(`Agent alert dismissed.`);
   };
 
-  // If not logged in, render the AdminLogin screen
-  if (!adminUser) {
+  // Require valid existing authentication state and an admin role before exposing admin functionality
+  if (!adminUser || adminUser.role !== 'admin') {
     return <AdminLogin onLogin={(user) => setAdminUser(user)} />;
   }
 
@@ -528,7 +729,20 @@ export const AdminPortalApp: React.FC = () => {
           openEscalationsCount={openEscalationsCount}
           surgeAlertsCount={surgeAlertsCount}
           materialShortagesCount={materialShortagesCount}
-          onLogout={() => setAdminUser(null)}
+          onLogout={() => {
+            try {
+              logoutStaffMutation().unwrap().catch(() => {});
+            } catch {}
+            dispatch(authLogout());
+            try {
+              localStorage.removeItem('loompilot_token');
+              localStorage.removeItem('loompilot_user');
+              localStorage.removeItem('loompilot_realm');
+            } catch (e) {
+              console.warn(e);
+            }
+            setAdminUser(null);
+          }}
         />
 
         {/* ================= 2. CENTER MAIN DASHBOARD ================= */}
@@ -551,7 +765,6 @@ export const AdminPortalApp: React.FC = () => {
 
             {currentTab === 'orders' && (
               <OrderPipelineModule
-                orders={orders}
                 selectedOrderId={selectedOrderId}
                 onSelectOrder={setSelectedOrderId}
                 onOpenOrderModal={(o) => setModalInspectorOrder(o)}

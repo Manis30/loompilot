@@ -1,0 +1,334 @@
+[
+  {
+    "_id": "668007000000000000000001",
+    "tenantId": "tenant_loompilot_tn_01",
+    "productName": "Classic Crew Neck Bio-Wash T-Shirt",
+    "category": "t_shirt",
+    "routing": [
+      {
+        "stage": "yarn_procurement_stock",
+        "seq": 1,
+        "stdMinPerUnit": 0.5
+      },
+      {
+        "stage": "knitting",
+        "seq": 2,
+        "stdMinPerUnit": 1.2
+      },
+      {
+        "stage": "dyeing_fabric_processing",
+        "seq": 3,
+        "stdMinPerUnit": 1.5
+      },
+      {
+        "stage": "cutting",
+        "seq": 4,
+        "stdMinPerUnit": 0.8
+      },
+      {
+        "stage": "stitching",
+        "seq": 5,
+        "stdMinPerUnit": 4.5
+      },
+      {
+        "stage": "checking",
+        "seq": 6,
+        "stdMinPerUnit": 0.8
+      },
+      {
+        "stage": "ironing_finishing",
+        "seq": 7,
+        "stdMinPerUnit": 0.7
+      },
+      {
+        "stage": "packing",
+        "seq": 8,
+        "stdMinPerUnit": 0.6
+      }
+    ],
+    "bom": [
+      {
+        "materialId": "66800500000000000001",
+        "qtyPerUnit": 0.22,
+        "wastage": 0.04
+      },
+      {
+        "materialId": "66800500000000000005",
+        "qtyPerUnit": 0.015,
+        "wastage": 0.02
+      },
+      {
+        "materialId": "66800500000000000007",
+        "qtyPerUnit": 0.02,
+        "wastage": 0.01
+      },
+      {
+        "materialId": "66800500000000000008",
+        "qtyPerUnit": 2.0,
+        "wastage": 0.01
+      },
+      {
+        "materialId": "66800500000000000009",
+        "qtyPerUnit": 1.0,
+        "wastage": 0.01
+      }
+    ],
+    "basePricePaise": 18500,
+    "imageFileIds": [
+      "66801F000000000000000001"
+    ],
+    "active": true,
+    "createdAt": "2026-01-01T08:00:00.000Z",
+    "updatedAt": "2026-06-01T08:00:00.000Z",
+    "version": 1
+  },
+  {
+    "_id": "668007000000000000000002",
+    "tenantId": "tenant_loompilot_tn_01",
+    "productName": "Premium Combed Cotton Pique Polo",
+    "category": "polo_shirt",
+    "routing": [
+      {
+        "stage": "yarn_procurement_stock",
+        "seq": 1,
+        "stdMinPerUnit": 0.6
+      },
+      {
+        "stage": "knitting",
+        "seq": 2,
+        "stdMinPerUnit": 1.5
+      },
+      {
+        "stage": "dyeing_fabric_processing",
+        "seq": 3,
+        "stdMinPerUnit": 1.8
+      },
+      {
+        "stage": "cutting",
+        "seq": 4,
+        "stdMinPerUnit": 1.1
+      },
+      {
+        "stage": "stitching",
+        "seq": 5,
+        "stdMinPerUnit": 6.8
+      },
+      {
+        "stage": "checking",
+        "seq": 6,
+        "stdMinPerUnit": 1.0
+      },
+      {
+        "stage": "ironing_finishing",
+        "seq": 7,
+        "stdMinPerUnit": 1.0
+      },
+      {
+        "stage": "packing",
+        "seq": 8,
+        "stdMinPerUnit": 0.8
+      }
+    ],
+    "bom": [
+      {
+        "materialId": "66800500000000000001",
+        "qtyPerUnit": 0.28,
+        "wastage": 0.04
+      },
+      {
+        "materialId": "66800500000000000005",
+        "qtyPerUnit": 0.02,
+        "wastage": 0.02
+      },
+      {
+        "materialId": "66800500000000000007",
+        "qtyPerUnit": 0.03,
+        "wastage": 0.01
+      },
+      {
+        "materialId": "66800500000000000008",
+        "qtyPerUnit": 3.0,
+        "wastage": 0.01
+      },
+      {
+        "materialId": "66800500000000000009",
+        "qtyPerUnit": 1.0,
+        "wastage": 0.01
+      }
+    ],
+    "basePricePaise": 29000,
+    "imageFileIds": [
+      "66801F000000000000000002"
+    ],
+    "active": true,
+    "createdAt": "2026-01-01T08:00:00.000Z",
+    "updatedAt": "2026-06-01T08:00:00.000Z",
+    "version": 1
+  },
+  {
+    "_id": "668007000000000000000003",
+    "tenantId": "tenant_loompilot_tn_01",
+    "productName": "Heavyweight Cotton Fleece Pullover Hoodie",
+    "category": "hoodie",
+    "routing": [
+      {
+        "stage": "yarn_procurement_stock",
+        "seq": 1,
+        "stdMinPerUnit": 0.8
+      },
+      {
+        "stage": "knitting",
+        "seq": 2,
+        "stdMinPerUnit": 2.2
+      },
+      {
+        "stage": "dyeing_fabric_processing",
+        "seq": 3,
+        "stdMinPerUnit": 2.5
+      },
+      {
+        "stage": "cutting",
+        "seq": 4,
+        "stdMinPerUnit": 1.5
+      },
+      {
+        "stage": "stitching",
+        "seq": 5,
+        "stdMinPerUnit": 9.5
+      },
+      {
+        "stage": "checking",
+        "seq": 6,
+        "stdMinPerUnit": 1.2
+      },
+      {
+        "stage": "ironing_finishing",
+        "seq": 7,
+        "stdMinPerUnit": 1.2
+      },
+      {
+        "stage": "packing",
+        "seq": 8,
+        "stdMinPerUnit": 1.0
+      }
+    ],
+    "bom": [
+      {
+        "materialId": "66800500000000000002",
+        "qtyPerUnit": 0.52,
+        "wastage": 0.05
+      },
+      {
+        "materialId": "66800500000000000005",
+        "qtyPerUnit": 0.035,
+        "wastage": 0.02
+      },
+      {
+        "materialId": "66800500000000000007",
+        "qtyPerUnit": 0.045,
+        "wastage": 0.01
+      },
+      {
+        "materialId": "66800500000000000008",
+        "qtyPerUnit": 3.0,
+        "wastage": 0.01
+      },
+      {
+        "materialId": "66800500000000000009",
+        "qtyPerUnit": 1.0,
+        "wastage": 0.01
+      }
+    ],
+    "basePricePaise": 48000,
+    "imageFileIds": [
+      "66801F000000000000000003"
+    ],
+    "active": true,
+    "createdAt": "2026-01-01T08:00:00.000Z",
+    "updatedAt": "2026-06-01T08:00:00.000Z",
+    "version": 1
+  },
+  {
+    "_id": "668007000000000000000004",
+    "tenantId": "tenant_loompilot_tn_01",
+    "productName": "Stretch Performance Activewear Tee",
+    "category": "activewear",
+    "routing": [
+      {
+        "stage": "yarn_procurement_stock",
+        "seq": 1,
+        "stdMinPerUnit": 0.5
+      },
+      {
+        "stage": "knitting",
+        "seq": 2,
+        "stdMinPerUnit": 1.4
+      },
+      {
+        "stage": "dyeing_fabric_processing",
+        "seq": 3,
+        "stdMinPerUnit": 1.6
+      },
+      {
+        "stage": "cutting",
+        "seq": 4,
+        "stdMinPerUnit": 0.9
+      },
+      {
+        "stage": "stitching",
+        "seq": 5,
+        "stdMinPerUnit": 5.2
+      },
+      {
+        "stage": "checking",
+        "seq": 6,
+        "stdMinPerUnit": 0.8
+      },
+      {
+        "stage": "ironing_finishing",
+        "seq": 7,
+        "stdMinPerUnit": 0.8
+      },
+      {
+        "stage": "packing",
+        "seq": 8,
+        "stdMinPerUnit": 0.6
+      }
+    ],
+    "bom": [
+      {
+        "materialId": "66800500000000000003",
+        "qtyPerUnit": 0.2,
+        "wastage": 0.03
+      },
+      {
+        "materialId": "66800500000000000005",
+        "qtyPerUnit": 0.018,
+        "wastage": 0.02
+      },
+      {
+        "materialId": "66800500000000000007",
+        "qtyPerUnit": 0.025,
+        "wastage": 0.01
+      },
+      {
+        "materialId": "66800500000000000008",
+        "qtyPerUnit": 2.0,
+        "wastage": 0.01
+      },
+      {
+        "materialId": "66800500000000000009",
+        "qtyPerUnit": 1.0,
+        "wastage": 0.01
+      }
+    ],
+    "basePricePaise": 24000,
+    "imageFileIds": [
+      "66801F000000000000000004"
+    ],
+    "active": true,
+    "createdAt": "2026-01-01T08:00:00.000Z",
+    "updatedAt": "2026-06-01T08:00:00.000Z",
+    "version": 1
+  }
+]

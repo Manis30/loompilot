@@ -1,6 +1,10 @@
 import React from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useGetClientOrderByIdQuery } from '../../../store/api/ordersApi';
+import { useGetClientProductsQuery } from '../../../store/api/catalogApi';
+import { mapApiClientOrder } from '../../../utils/orderMapper';
 import { formatCurrency, formatNumber, formatMetres } from '../../utils/formatters';
 import {
   ArrowLeft,
@@ -21,7 +25,27 @@ export const OrderDetailPage: React.FC = () => {
   const { orders } = useApp();
   const navigate = useNavigate();
 
-  const order = orders.find((o) => o.id === id);
+  const { data: productsResponse } = useGetClientProductsQuery(undefined);
+  const productsMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const raw = productsResponse?.data || [];
+    if (Array.isArray(raw)) {
+      raw.forEach((p: any) => {
+        if (p.id || p._id) map.set(String(p.id || p._id), p);
+      });
+    }
+    return map;
+  }, [productsResponse]);
+
+  const { data: orderResponse } = useGetClientOrderByIdQuery(id || '', { skip: !id });
+  const liveOrder = useMemo(() => {
+    if (orderResponse?.data) {
+      return mapApiClientOrder(orderResponse.data, productsMap);
+    }
+    return null;
+  }, [orderResponse, productsMap]);
+
+  const order = liveOrder || orders.find((o) => o.id === id);
 
   if (!order) {
     return (

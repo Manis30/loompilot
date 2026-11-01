@@ -1,13 +1,17 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { ClientProfile } from '../types';
 import { storageService } from '../services/storageService';
-import { INITIAL_CLIENT } from '../data/mockData';
+import { useGetMeQuery, useLogoutClientMutation } from '../../store/api/authApi';
+import { useAppDispatch } from '../../store/hooks';
+import { logout as authLogout } from '../../store/slices/authSlice';
+
+const isDemoEnabled = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
 
 interface AuthContextType {
   user: ClientProfile | null;
   isAuthenticated: boolean;
-  login: (email: string, pass: string) => { success: boolean; error?: string };
-  directLoginClient: () => { success: boolean };
+  login: (email: string, pass: string, profileOverride?: ClientProfile) => { success: boolean; error?: string };
+  directLoginClient: () => { success: boolean; error?: string };
   register: (data: Partial<ClientProfile> & { password?: string }) => { success: boolean; error?: string };
   logout: () => void;
   updateProfile: (updates: Partial<ClientProfile>) => void;
@@ -16,11 +20,58 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const dispatch = useAppDispatch();
+  const [logoutClientMutation] = useLogoutClientMutation();
+
+  const token = typeof window !== 'undefined' ? localStorage.getItem('loompilot_token') : null;
+  const realm = typeof window !== 'undefined' ? localStorage.getItem('loompilot_realm') : null;
+  const isClientSession = !!token && (realm === 'client' || !realm);
+
+  // In normal mode, do not treat a cached profile alone as proof of authentication
   const [user, setUser] = useState<ClientProfile | null>(() => {
-    // Check storage or default to initial active demo session for seamless navigation
-    const savedUser = storageService.getAuthUser();
-    return savedUser || storageService.getClient();
+    if (isDemoEnabled) {
+      const savedUser = storageService.getAuthUser();
+      if (savedUser) return savedUser;
+    }
+    return null;
   });
+
+  // Use existing auth API session restoration (/api/v1/me)
+  const { data: meData, isSuccess: isMeSuccess, isError: isMeError } = useGetMeQuery(
+    undefined,
+    { skip: !isClientSession }
+  );
+
+  useEffect(() => {
+    if (isMeSuccess && meData) {
+      const profile = (meData as any)?.profile;
+      if (profile && ((meData as any)?.realm === 'client' || !meData.realm)) {
+        const restored: ClientProfile = {
+          id: profile.id || profile._id || 'CLT-RESTORED',
+          clientCode: `CLT-${(profile.id || profile._id || '').slice(-6).toUpperCase()}`,
+          company: profile.clientName || profile.name || 'Client Corporation',
+          brand: profile.clientName || profile.name || 'Commercial Line',
+          contactPerson: profile.name,
+          designation: 'Authorized Sourcing Representative',
+          email: profile.email || '',
+          phone: profile.phone || '+91 98765 43210',
+          shippingPlant: 'Designated Mill Inward Dock',
+          billingAddress: [profile.city, profile.country].filter(Boolean).join(', ') || 'Corporate Office',
+          accountTier: 'Enterprise Verified',
+          accountManager: {
+            name: 'Operations Desk',
+            email: 'ops@mill.loompilot.local',
+            phone: '+91 80 4000 1122',
+          },
+        };
+        setUser(restored);
+        storageService.setAuthUser(restored);
+      }
+    } else if (isMeError && !isDemoEnabled) {
+      // Backend rejected token — clear client session
+      logout();
+    }
+  }, [isMeSuccess, isMeError, meData]);
 
   useEffect(() => {
     if (user) {
@@ -30,56 +81,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user]);
 
-  const login = (email: string, pass: string) => {
-    const cleanEmail = email.trim().toLowerCase();
-    const storedClient = storageService.getClient();
-
-    // Accept standard demo logins, stored email, or any valid input for easy evaluation
-    if (
-      !cleanEmail ||
-      cleanEmail === 'v.malhotra@raymondapparel.in' ||
-      cleanEmail === storedClient.email.toLowerCase() ||
-      pass.length >= 3 ||
-      cleanEmail.includes('@')
-    ) {
-      setUser(storedClient);
+  const login = (email: string, _pass: string, profileOverride?: ClientProfile) => {
+    // When called with confirmed backend profileOverride from loginClient mutation
+    if (profileOverride) {
+      setUser(profileOverride);
+      storageService.setClient(profileOverride);
       return { success: true };
     }
 
+    // In normal mode without verified backend credentials, reject unauthenticated login
     return {
       success: false,
-      error: 'Invalid corporate credentials. Please check your work email and password.',
+      error: 'Invalid corporate credentials. Authentication must be verified through the mill security gateway.',
     };
   };
 
   const directLoginClient = () => {
+    if (!isDemoEnabled) {
+      return { success: false, error: 'Direct demo authentication is disabled in standard operation.' };
+    }
     const storedClient = storageService.getClient();
     setUser(storedClient);
     return { success: true };
   };
 
-  const register = (data: Partial<ClientProfile> & { password?: string }) => {
-    if (!data.company || !data.email || !data.contactPerson) {
-      return { success: false, error: 'Please fill in all mandatory enterprise registration fields.' };
-    }
-
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const newProfile: ClientProfile = {
-      ...INITIAL_CLIENT,
-      ...data,
-      id: `CLI-CLIENT-${randomSuffix}`,
-      clientCode: `CLT-IND-${randomSuffix}`,
-      accountTier: 'Enterprise Tier 2 (Standard Mill Access)',
+  const register = (_data: Partial<ClientProfile> & { password?: string }) => {
+    return {
+      success: false,
+      error: 'Client entity registration must be provisioned through mill administration and enterprise onboarding contracts.',
     };
-
-    storageService.setClient(newProfile);
-    setUser(newProfile);
-    return { success: true };
   };
 
   const logout = () => {
     setUser(null);
     storageService.setAuthUser(null);
+    try {
+      logoutClientMutation().unwrap().catch(() => {});
+    } catch {}
+    dispatch(authLogout());
+    try {
+      localStorage.removeItem('loompilot_token');
+      localStorage.removeItem('loompilot_user');
+      localStorage.removeItem('loompilot_realm');
+      localStorage.removeItem('loompilot_client_profile');
+      localStorage.removeItem('loompilot_auth_user');
+    } catch (e) {
+      console.warn('Failed to clear storage on logout:', e);
+    }
   };
 
   const updateProfile = (updates: Partial<ClientProfile>) => {
@@ -94,7 +142,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider
       value={{
         user,
-        isAuthenticated: !!user,
+        isAuthenticated: !!user && (isDemoEnabled || (!!token && (realm === 'client' || !realm))),
         login,
         directLoginClient,
         register,

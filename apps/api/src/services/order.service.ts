@@ -31,6 +31,7 @@ import {
   InternalFeasibilityReport,
   InternalQuotationDraft,
   InternalQuotationRevision,
+  InternalMonitoringSnapshot,
 } from "@loompilot/shared";
 import { PaginationQuery, PaginatedResult } from "../utils/pagination.js";
 import { getTodayBusinessDate } from "../utils/dates.js";
@@ -158,6 +159,19 @@ export function toSupervisorOrderDto(order: any): any {
             processes: s.processes || [],
             acknowledgedAt: s.acknowledgedAt,
           })),
+          stageTotals: order.production.stageTotals || [],
+          monitoring: order.production.monitoring
+            ? {
+                requiredDailyOutput: order.production.monitoring.requiredDailyOutput,
+                actualRate: order.production.monitoring.actualRate,
+                projectedFinish: order.production.monitoring.projectedFinish,
+                status: order.production.monitoring.status,
+                stale: order.production.monitoring.stale,
+                byStage: order.production.monitoring.byStage,
+                recommendations: order.production.monitoring.recommendations,
+                updatedAt: order.production.monitoring.updatedAt,
+              }
+            : undefined,
         }
       : undefined,
     createdAt: order.createdAt,
@@ -195,24 +209,15 @@ export class OrderService {
   ) {}
 
   private getAgentsClient(): IAgentsClient {
-    if (!this.agentsClient) {
-      this.agentsClient = getContainer().agentsClient;
-    }
-    return this.agentsClient;
+    return this.agentsClient || getContainer().agentsClient;
   }
 
   private getUnitOfWork(): IUnitOfWork {
-    if (!this.unitOfWork) {
-      this.unitOfWork = getContainer().unitOfWork;
-    }
-    return this.unitOfWork;
+    return this.unitOfWork || getContainer().unitOfWork;
   }
 
   private getPaymentGateway(): IPaymentGateway {
-    if (!this.paymentGateway) {
-      this.paymentGateway = getContainer().paymentGateway;
-    }
-    return this.paymentGateway;
+    return this.paymentGateway || getContainer().paymentGateway;
   }
 
   async submitOrder(params: {
@@ -1127,6 +1132,115 @@ export class OrderService {
 
     const refreshed = await this.ordersRepo.findById(tenantId, orderId);
     return toAdminOrderDto(refreshed);
+  }
+
+  async advanceStage(params: {
+    tenantId: string;
+    orderId: string;
+    stage: string;
+    producedQty?: number;
+    percentComplete?: number;
+    notes?: string;
+    actor: { id: string; role: string; realm: string; email?: string; ip?: string; requestId?: string };
+  }): Promise<any> {
+    const { tenantId, orderId, stage, producedQty, percentComplete, notes, actor } = params;
+    const order = await this.ordersRepo.findById(tenantId, orderId);
+    if (!order) {
+      throw new AppError(ErrorCode.NOT_FOUND, `Order '${orderId}' not found`, 404);
+    }
+
+    if (actor.role === "supervisor") {
+      const isAssigned = (order.production?.assignedSupervisors || []).some(
+        (s: any) => String(s.supervisorId) === String(actor.id)
+      );
+      if (!isAssigned) {
+        throw new AppError(
+          ErrorCode.FORBIDDEN,
+          "Access denied: Supervisor is not assigned to this order",
+          403
+        );
+      }
+    }
+
+    const nonProductionStatuses: string[] = [
+      "draft",
+      OrderStatus.SUBMITTED,
+      OrderStatus.ANALYZING,
+      OrderStatus.ANALYSIS_FAILED,
+      OrderStatus.AWAITING_ADMIN_DECISION,
+      OrderStatus.QUOTATION_DRAFTING,
+      OrderStatus.QUOTATION_PENDING_APPROVAL,
+      OrderStatus.QUOTATION_SENT,
+      OrderStatus.DECLINED_BY_CLIENT,
+      OrderStatus.REJECTED_BY_ADMIN,
+      OrderStatus.EXPIRED,
+      OrderStatus.CANCELLED,
+    ];
+    if (nonProductionStatuses.includes(order.status as any)) {
+      throw new AppError(
+        ErrorCode.VALIDATION_FAILED,
+        `Cannot advance stage for order with status '${order.status}'`,
+        400
+      );
+    }
+
+    const currentProduction = order.production || {};
+    const updatedStageTotals = [...(currentProduction.stageTotals || [])].map((s: any) => ({
+      stage: String(s.stage || ""),
+      produced: Number(s.produced || 0),
+      defective: Number(s.defective || 0),
+    }));
+    const existing = updatedStageTotals.find((s) => s.stage === stage);
+    if (existing) {
+      if (producedQty !== undefined) {
+        existing.produced = producedQty;
+      }
+    } else {
+      updatedStageTotals.push({
+        stage,
+        produced: producedQty || 0,
+        defective: 0,
+      });
+    }
+
+    const newProducedQty = producedQty !== undefined ? producedQty : currentProduction.producedQty;
+    const newPercent = percentComplete !== undefined
+      ? percentComplete
+      : (order.quantity > 0 && newProducedQty !== undefined
+          ? Math.min(100, Math.round((newProducedQty / order.quantity) * 100))
+          : currentProduction.percentComplete);
+
+    await this.ordersRepo.updateProductionProgress(tenantId, orderId, {
+      phase: stage,
+      producedQty: newProducedQty,
+      percentComplete: newPercent,
+      stageTotals: updatedStageTotals,
+    });
+
+    if (order.status === OrderStatus.ASSIGNED) {
+      await this.ordersRepo.updateStatus(tenantId, orderId, OrderStatus.IN_PRODUCTION, {
+        role: actor.role as any,
+        reason: `Production started at stage ${stage}`,
+      });
+    }
+
+    await this.auditService.log({
+      tenantId,
+      actor: { id: actor.id, type: "user", email: actor.email },
+      action: "ORDER_STAGE_ADVANCED",
+      entity: { collection: "orders", id: orderId },
+      after: {
+        stage,
+        producedQty: newProducedQty,
+        percentComplete: newPercent,
+        notes,
+      },
+      ip: actor.ip,
+      requestId: actor.requestId,
+    });
+
+    const refreshed = await this.ordersRepo.findById(tenantId, orderId);
+    return actor.role === "supervisor" ? toSupervisorOrderDto(refreshed) : toAdminOrderDto(refreshed);
   }
 
   async sendQuotation(params: {
@@ -2326,6 +2440,17 @@ export class OrderService {
       );
     }
 
+    const duplicateRef = (milestone.receipts || []).some(
+      (r: any) => r.ref === params.ref && !r.reversedAt
+    );
+    if (duplicateRef) {
+      throw new AppError(
+        ErrorCode.DUPLICATE,
+        `Payment receipt with reference '${params.ref}' has already been credited to this milestone`,
+        409
+      );
+    }
+
     const currentReceived = milestone.receivedPaise || 0;
     if (currentReceived + params.amountPaise > milestone.amountPaise) {
       throw new AppError(
@@ -2365,7 +2490,7 @@ export class OrderService {
         if (allReceived) {
           const activeRes = (updated.reservations || []).filter((r: any) => r.status === "active");
           for (const res of activeRes) {
-            await this.materialRepo.releaseStock(
+            const matUpdated = await this.materialRepo.releaseStock(
               params.tenantId,
               String(res.materialId),
               res.qty,
@@ -2377,7 +2502,7 @@ export class OrderService {
                 materialId: String(res.materialId),
                 type: "release",
                 qty: res.qty,
-                qtyAfter: 0,
+                qtyAfter: matUpdated ? matUpdated.stockQty - matUpdated.reservedQty : 0,
                 orderId: params.orderId,
               },
               tx
@@ -2532,12 +2657,30 @@ export class OrderService {
         return { received: true };
       }
 
-      // Check deduplication
-      const alreadyRecorded = milestone.receipts?.some(
-        (r: any) => r.razorpayPaymentId === paymentId
+      // Check deduplication across all milestones on the order
+      const alreadyRecorded = (order.financials?.milestones || []).some(
+        (m: any) => (m.receipts || []).some((r: any) => r.razorpayPaymentId === paymentId)
       );
       if (alreadyRecorded) {
         return { received: true, deduplicated: true };
+      }
+
+      const currentReceived = milestone.receivedPaise || 0;
+      const remainingDue = milestone.amountPaise - currentReceived;
+      if (event.amountPaise > remainingDue) {
+        logger.warn(
+          { orderNumber: order.orderNumber, mIndex, amountPaise: event.amountPaise, remainingDue },
+          "Razorpay webhook amount exceeds milestone remaining due"
+        );
+        throw new AppError(
+          ErrorCode.OVERPAYMENT,
+          `Captured payment amount of ₹${(event.amountPaise / 100).toFixed(
+            2
+          )} exceeds remaining due of ₹${(remainingDue / 100).toFixed(2)} for milestone '${
+            milestone.milestone
+          }'`,
+          400
+        );
       }
 
       const paymentDate = getTodayBusinessDate();
@@ -2564,7 +2707,7 @@ export class OrderService {
           if (allReceived) {
             const activeRes = (updated.reservations || []).filter((r: any) => r.status === "active");
             for (const res of activeRes) {
-              await this.materialRepo.releaseStock(
+              const matUpdated = await this.materialRepo.releaseStock(
                 order.tenantId,
                 String(res.materialId),
                 res.qty,
@@ -2576,7 +2719,7 @@ export class OrderService {
                   materialId: String(res.materialId),
                   type: "release",
                   qty: res.qty,
-                  qtyAfter: 0,
+                  qtyAfter: matUpdated ? matUpdated.stockQty - matUpdated.reservedQty : 0,
                   orderId: String(order._id),
                 },
                 tx
@@ -2730,7 +2873,7 @@ export class OrderService {
           nextStatus = OrderStatus.COMPLETED;
           const activeRes = (order.reservations || []).filter((r: any) => r.status === "active");
           for (const res of activeRes) {
-            await this.materialRepo.releaseStock(
+            const matUpdated = await this.materialRepo.releaseStock(
               params.tenantId,
               String(res.materialId),
               res.qty,
@@ -2742,7 +2885,7 @@ export class OrderService {
                 materialId: String(res.materialId),
                 type: "release",
                 qty: res.qty,
-                qtyAfter: 0,
+                qtyAfter: matUpdated ? matUpdated.stockQty - matUpdated.reservedQty : 0,
                 orderId: params.orderId,
               },
               tx
@@ -2848,4 +2991,281 @@ export class OrderService {
 
     return overdueCount;
   }
+
+  async listSupervisorOrders(
+    tenantId: string,
+    supervisorId: string,
+    pagination: Partial<PaginationQuery> = {}
+  ): Promise<PaginatedResult<any>> {
+    const result = await this.ordersRepo.findPaginated(
+      tenantId,
+      {
+        "production.assignedSupervisors.supervisorId": supervisorId as any,
+      },
+      {
+        page: pagination.page || 1,
+        limit: pagination.limit || 20,
+        sortOrder: pagination.sortOrder || "desc",
+        sortBy: pagination.sortBy,
+      },
+      {
+        _id: 1,
+        tenantId: 1,
+        orderNumber: 1,
+        clientId: 1,
+        productId: 1,
+        productDescription: 1,
+        quantity: 1,
+        deliveryDeadline: 1,
+        status: 1,
+        spec: 1,
+        referenceFiles: 1,
+        production: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      }
+    );
+
+    return {
+      data: result.data.map(toSupervisorOrderDto),
+      meta: result.meta,
+    };
+  }
+
+  async getProductionBoard(
+    tenantId: string,
+    actor: { id: string; role?: string }
+  ): Promise<any> {
+    const ordersResult = await this.ordersRepo.findPaginated(
+      tenantId,
+      {
+        status: {
+          $in: [
+            OrderStatus.ASSIGNED,
+            OrderStatus.IN_PRODUCTION,
+            OrderStatus.READY_FOR_DELIVERY,
+            OrderStatus.PARTIALLY_DELIVERED,
+          ],
+        },
+      },
+      { page: 1, limit: 100, sortOrder: "desc" }
+    );
+
+    const activeOrders = ordersResult.data;
+    const defaultPhases = ["cutting", "knitting", "dyeing", "stitching", "finishing", "packaging"];
+    const byPhase: Record<string, any[]> = {};
+    for (const ph of defaultPhases) {
+      byPhase[ph] = [];
+    }
+
+    let totalActiveOrders = activeOrders.length;
+    let totalTargetQty = 0;
+    let totalProducedQty = 0;
+    let delayedCount = 0;
+
+    for (const order of activeOrders) {
+      totalTargetQty += order.quantity || 0;
+      totalProducedQty += order.production?.producedQty || 0;
+
+      const phase = order.production?.phase || "unassigned";
+      if (!byPhase[phase]) {
+        byPhase[phase] = [];
+      }
+
+      const isDelayed =
+        order.production?.monitoring?.status === "behind" ||
+        (order.deliveryDeadline && new Date(order.deliveryDeadline) < new Date());
+      if (isDelayed) {
+        delayedCount++;
+      }
+
+      const orderCard =
+        actor.role === "supervisor" ? toSupervisorOrderDto(order) : toAdminOrderDto(order);
+
+      byPhase[phase].push(orderCard);
+    }
+
+    return {
+      summary: {
+        totalActiveOrders,
+        totalTargetQty,
+        totalProducedQty,
+        delayedCount,
+      },
+      byPhase,
+      orders: activeOrders.map((o) =>
+        actor.role === "supervisor" ? toSupervisorOrderDto(o) : toAdminOrderDto(o)
+      ),
+    };
+  }
+
+  async runOrderMonitoring(
+    tenantId: string,
+    orderId: string,
+    actor: { id: string; role?: string; requestId?: string }
+  ): Promise<any> {
+    const order = await this.ordersRepo.findById(tenantId, orderId);
+    if (!order) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+    }
+
+    if (actor.role === "supervisor") {
+      const isAssigned = (order.production?.assignedSupervisors || []).some(
+        (s: any) => String(s.supervisorId) === String(actor.id)
+      );
+      if (!isAssigned) {
+        throw new AppError(
+          ErrorCode.FORBIDDEN,
+          "Access denied: Supervisor is not assigned to this order",
+          403
+        );
+      }
+    }
+
+    const client = this.getAgentsClient();
+    const result = await client.runMonitoring({ tenantId, orderId });
+    if (!result.success || !result.data) {
+      throw new AppError(
+        ErrorCode.AGENTS_UNAVAILABLE,
+        result.error || "Agent monitoring execution failed",
+        502
+      );
+    }
+
+    return this.ingestMonitoringSnapshot(result.data, actor);
+  }
+
+  async ingestMonitoringSnapshot(
+    snapshot: InternalMonitoringSnapshot,
+    actor: { id: string; type?: string; role?: string; requestId?: string }
+  ): Promise<any> {
+    const order = await this.ordersRepo.findById(snapshot.tenantId, snapshot.orderId);
+    if (!order) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Order not found for monitoring snapshot", 404);
+    }
+
+    const monitoringData = {
+      status: snapshot.onTrack
+        ? ("on_track" as const)
+        : snapshot.predictedDelayDays > 2
+        ? ("behind" as const)
+        : ("at_risk" as const),
+      stale: false,
+      recommendations: snapshot.recommendations || [],
+      updatedAt: new Date(),
+      agentRunId: snapshot.agentRunId as any,
+    };
+
+    await this.ordersRepo.setProductionMonitoring(
+      snapshot.tenantId,
+      snapshot.orderId,
+      monitoringData
+    );
+
+    if (snapshot.phase || snapshot.percentComplete !== undefined) {
+      await this.ordersRepo.updateProductionProgress(snapshot.tenantId, snapshot.orderId, {
+        phase: snapshot.phase,
+        percentComplete: snapshot.percentComplete,
+      });
+    }
+
+    // Trigger delay alert notification if at risk or behind
+    if (!snapshot.onTrack || snapshot.predictedDelayDays > 0) {
+      const supervisorIds = (order.production?.assignedSupervisors || []).map((s: any) =>
+        String(s.supervisorId)
+      );
+      for (const sId of supervisorIds) {
+        await this.notificationRepo.createNotification(snapshot.tenantId, {
+          recipient: { userId: sId },
+          kind: "alert",
+          type: "production_delay",
+          channel: "in_app",
+          title: `Production Alert: Order ${order.orderNumber} Behind Schedule`,
+          body: `Monitoring agent detected delay of ${snapshot.predictedDelayDays} days in stage ${snapshot.phase}. Recommendations: ${snapshot.recommendations.join("; ")}`,
+          entity: { collection: "orders", id: String(order._id) },
+          dedupeKey: `monitoring_delay_${order._id}_${snapshot.phase}_${sId}`,
+        });
+      }
+    }
+
+    await this.auditService.log({
+      tenantId: snapshot.tenantId,
+      actor: {
+        id: actor.id,
+        type: "user",
+      },
+      action: "order.monitoring.snapshot_ingested",
+      entity: { collection: "orders", id: snapshot.orderId },
+      after: {
+        onTrack: snapshot.onTrack,
+        predictedDelayDays: snapshot.predictedDelayDays,
+        phase: snapshot.phase,
+        percentComplete: snapshot.percentComplete,
+      },
+      requestId: actor.requestId,
+    });
+
+    const refreshed = await this.ordersRepo.findById(snapshot.tenantId, snapshot.orderId);
+    return actor.role === "supervisor" ? toSupervisorOrderDto(refreshed) : toAdminOrderDto(refreshed);
+  }
+
+  async listSupervisorNotifications(
+    tenantId: string,
+    userId: string,
+    filter: { unreadOnly?: boolean; kind?: string } = {},
+    pagination: Partial<PaginationQuery> = {}
+  ): Promise<PaginatedResult<any>> {
+    const paginated = await this.notificationRepo.findForUser(tenantId, userId, filter, pagination);
+    return {
+      data: paginated.data.map(toNotificationDto),
+      meta: paginated.meta,
+    };
+  }
+
+  async markSupervisorNotificationAsRead(
+    tenantId: string,
+    notificationId: string,
+    userId: string
+  ): Promise<any> {
+    const updated = await this.notificationRepo.markAsRead(tenantId, notificationId, userId);
+    if (!updated) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Notification not found", 404);
+    }
+    return toNotificationDto(updated);
+  }
+
+  async getOrderDashboardSummary(
+    tenantId: string,
+    filter: { dateFrom?: string; dateTo?: string; clientId?: string } = {},
+    actor: { role?: string }
+  ): Promise<any> {
+    const summary = await this.ordersRepo.getOrderSummary(tenantId, filter);
+    if (actor.role === "supervisor") {
+      const { financials, ...supervisorSafeSummary } = summary;
+      return supervisorSafeSummary;
+    }
+    return summary;
+  }
+}
+
+export function toNotificationDto(item: any): any {
+  if (!item) return item;
+  return {
+    id: String(item._id || item.id),
+    kind: item.kind,
+    type: item.type,
+    channel: item.channel,
+    status: item.status,
+    title: item.title,
+    body: item.body,
+    entity: item.entity
+      ? {
+          collection: item.entity.collection,
+          id: String(item.entity.id),
+        }
+      : undefined,
+    readAt: item.readAt || null,
+    resolvedAt: item.resolvedAt || null,
+    createdAt: item.createdAt,
+  };
 }

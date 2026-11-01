@@ -1,6 +1,11 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useGetClientOrdersQuery, useClientAcceptQuotationMutation } from '../../../store/api/ordersApi';
+import { useGetClientProductsQuery } from '../../../store/api/catalogApi';
+import { mapApiClientOrder } from '../../../utils/orderMapper';
+import { Loader2 } from 'lucide-react';
 import { formatCurrency, formatNumber } from '../../utils/formatters';
 import {
   FileText,
@@ -15,13 +20,60 @@ import {
 } from 'lucide-react';
 
 export const QuotationsPage: React.FC = () => {
-  const { orders, acceptQuotation, addToast } = useApp();
+  const { orders: localOrders, acceptQuotation, addToast } = useApp();
   const navigate = useNavigate();
 
-  // Quotation orders (Awaiting Quotation or Active Negotiations)
-  const quotationOrders = orders.filter(
-    (o) => o.status === 'Awaiting Quotation' || o.id === 'LP-2026-8854' || o.id === 'LP-2026-8890'
+  const { data: ordersResponse } = useGetClientOrdersQuery(undefined);
+  const { data: productsResponse } = useGetClientProductsQuery(undefined);
+  const [clientAcceptQuotation, { isLoading: isAccepting }] = useClientAcceptQuotationMutation();
+  const [acceptingOrderId, setAcceptingOrderId] = useState<string | null>(null);
+
+  const productsMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const raw = productsResponse?.data || [];
+    if (Array.isArray(raw)) {
+      raw.forEach((p: any) => {
+        if (p.id || p._id) map.set(String(p.id || p._id), p);
+      });
+    }
+    return map;
+  }, [productsResponse]);
+
+  const allOrders = useMemo(() => {
+    const raw = ordersResponse?.data || [];
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw.map((item) => mapApiClientOrder(item, productsMap));
+    }
+    return localOrders;
+  }, [ordersResponse, productsMap, localOrders]);
+
+  const quotationOrders = allOrders.filter(
+    (o) => o.status === 'Awaiting Quotation' || o.status === 'Quote Accepted' || (o as any).quotation
   );
+
+  const handleAccept = async (order: any) => {
+    setAcceptingOrderId(order.id);
+    const targetId = order.backendId || order.id;
+
+    try {
+      await clientAcceptQuotation({
+        id: targetId,
+        body: {
+          deliveryAddress: order.deliveryAddress,
+          notes: 'Client accepted quotation terms',
+        },
+      }).unwrap();
+      acceptQuotation(order.id);
+      addToast(`Quotation accepted for ${order.id}! Advance milestone invoice issued.`, 'success');
+      navigate('/client/payments');
+    } catch (err: any) {
+      console.error('API accept quote error:', err);
+      const msg = err?.data?.error?.message || err?.data?.message || err?.error || err?.message || 'Failed to accept quotation on server.';
+      addToast(msg, 'error');
+    } finally {
+      setAcceptingOrderId(null);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -178,14 +230,21 @@ export const QuotationsPage: React.FC = () => {
                   </Link>
 
                   <button
-                    onClick={() => {
-                      acceptQuotation(order.id);
-                      navigate('/client/payments');
-                    }}
-                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-success text-white text-xs font-bold hover:bg-[#1A6C49] shadow-sm transition-colors"
+                    onClick={() => handleAccept(order)}
+                    disabled={isAccepting && acceptingOrderId === order.id}
+                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-success text-white text-xs font-bold hover:bg-[#1A6C49] shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <CheckCircle2 size={16} />
-                    <span>Accept Quotation & Issue Advance Invoice</span>
+                    {isAccepting && acceptingOrderId === order.id ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Accepting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 size={16} />
+                        <span>Accept Quotation & Issue Advance Invoice</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

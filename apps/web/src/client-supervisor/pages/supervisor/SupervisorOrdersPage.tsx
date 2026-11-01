@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Package,
   Search,
@@ -10,16 +10,127 @@ import {
   PlusCircle,
   FileText,
   AlertTriangle,
+  RefreshCw,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { useSupervisor } from '../../context/SupervisorContext';
 import { SUPERVISOR_PRODUCTION_STAGES } from '../../data/supervisorMockData';
+import { useGetSupervisorOrdersQuery, useAdvanceOrderStageMutation } from '../../../store/api/ordersApi';
+import { useGetClientsQuery } from '../../../store/api/catalogApi';
+import { mapApiSupervisorOrder } from '../../../utils/orderMapper';
+import type { SupervisorOrder } from '../../types/supervisor';
 
 export const SupervisorOrdersPage: React.FC = () => {
-  const { orders, advanceOrderStage, openDailyUpdateModal } = useSupervisor();
+  const { advanceOrderStage, openDailyUpdateModal } = useSupervisor();
+
+  const { data: supervisorOrdersRes, isLoading, isError, error, refetch } = useGetSupervisorOrdersQuery();
+  const { data: clientsRes } = useGetClientsQuery(undefined);
+
+  const clientsMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const raw = clientsRes?.data || [];
+    if (Array.isArray(raw)) {
+      raw.forEach((c: any) => {
+        if (c.id || c._id) map.set(String(c.id || c._id), c);
+      });
+    }
+    return map;
+  }, [clientsRes]);
+
+  const liveOrders: SupervisorOrder[] = useMemo(() => {
+    const raw = supervisorOrdersRes?.data || [];
+    if (!Array.isArray(raw)) return [];
+    return raw.map((ord: any) => mapApiSupervisorOrder(ord, clientsMap));
+  }, [supervisorOrdersRes, clientsMap]);
+
+  const [orders, setOrders] = useState<SupervisorOrder[]>([]);
+
+  useEffect(() => {
+    if (supervisorOrdersRes && Array.isArray(supervisorOrdersRes.data)) {
+      setOrders(liveOrders);
+    }
+  }, [supervisorOrdersRes, liveOrders]);
 
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrderSpecs, setSelectedOrderSpecs] = useState<any | null>(null);
+  const [advanceOrderStageMutation, { isLoading: isAdvancingStage }] = useAdvanceOrderStageMutation();
+  const [advancingOrderId, setAdvancingOrderId] = useState<string | null>(null);
+  const [stageError, setStageError] = useState<string | null>(null);
+
+  const handleAdvanceStage = async (orderId: string) => {
+    if (isAdvancingStage) return;
+    setStageError(null);
+    setAdvancingOrderId(orderId);
+
+    const ord = orders.find((o) => o.id === orderId);
+    if (!ord) {
+      setAdvancingOrderId(null);
+      return;
+    }
+
+    const currentIndex = SUPERVISOR_PRODUCTION_STAGES.findIndex((s) => s === ord.currentStage);
+    if (currentIndex >= SUPERVISOR_PRODUCTION_STAGES.length - 1) {
+      setAdvancingOrderId(null);
+      return;
+    }
+    const nextStage = SUPERVISOR_PRODUCTION_STAGES[currentIndex + 1];
+
+    // Find the real 24-character ObjectId from raw supervisor order query
+    const rawList = supervisorOrdersRes?.data || [];
+    const rawOrder = Array.isArray(rawList)
+      ? rawList.find((o: any) => o._id === orderId || o.id === orderId || o.orderNumber === orderId)
+      : null;
+    const realOrderId = rawOrder?._id || rawOrder?.id || (orderId.length === 24 ? orderId : null);
+
+    if (realOrderId) {
+      try {
+        const nextPercent = Math.min(100, Math.round(((currentIndex + 2) / SUPERVISOR_PRODUCTION_STAGES.length) * 100));
+        await advanceOrderStageMutation({
+          id: realOrderId,
+          stage: nextStage,
+          producedQty: ord.producedQty,
+          percentComplete: nextPercent,
+        }).unwrap();
+
+        setOrders((prev) =>
+          prev.map((o) => {
+            if (o.id === orderId) {
+              return {
+                ...o,
+                currentStage: nextStage,
+                status: nextStage === '8. Delivered' ? 'Completed' : 'In Progress',
+              };
+            }
+            return o;
+          })
+        );
+        advanceOrderStage(orderId);
+        refetch();
+      } catch (err: any) {
+        const errMsg = err?.data?.message || err?.message || 'Failed to advance stage on server';
+        setStageError(`Error advancing stage for order ${orderId}: ${errMsg}`);
+      } finally {
+        setAdvancingOrderId(null);
+      }
+    } else {
+      setOrders((prev) =>
+        prev.map((o) => {
+          if (o.id === orderId) {
+            return {
+              ...o,
+              currentStage: nextStage,
+              status: nextStage === '8. Delivered' ? 'Completed' : 'In Progress',
+            };
+          }
+          return o;
+        })
+      );
+      advanceOrderStage(orderId);
+      setAdvancingOrderId(null);
+    }
+  };
 
   const filteredOrders = orders.filter((o) => {
     const matchesStatus = filterStatus === 'All' || o.status === filterStatus;
@@ -32,6 +143,21 @@ export const SupervisorOrdersPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {stageError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center justify-between text-sm">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={16} />
+            <span>{stageError}</span>
+          </div>
+          <button
+            onClick={() => setStageError(null)}
+            className="text-red-500 hover:text-red-800 font-bold text-xs"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* Page Header */}
       <div className="bg-white p-5 rounded-2xl border border-[#EAE2D9] shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
@@ -43,14 +169,48 @@ export const SupervisorOrdersPage: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={openDailyUpdateModal}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#E65338] hover:bg-[#D24227] shadow-sm transition-all"
-        >
-          <PlusCircle size={15} />
-          <span>Log Shift Output</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => refetch()}
+            disabled={isLoading}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-[#252622] bg-[#FBF6F0] border border-[#EAE2D9] hover:bg-white shadow-sm transition-all"
+            title="Reload orders from backend API"
+          >
+            <RefreshCw size={14} className={isLoading ? 'animate-spin text-[#E65338]' : ''} />
+            <span>{isLoading ? 'Syncing...' : 'Sync Orders'}</span>
+          </button>
+          <button
+            onClick={openDailyUpdateModal}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#E65338] hover:bg-[#D24227] shadow-sm transition-all"
+          >
+            <PlusCircle size={15} />
+            <span>Log Shift Output</span>
+          </button>
+        </div>
       </div>
+
+      {/* API Status Banners */}
+      {isLoading && (
+        <div className="p-4 rounded-2xl bg-white border border-[#EAE2D9] flex items-center gap-3 text-xs text-[#252622] font-semibold">
+          <RefreshCw size={16} className="animate-spin text-[#E65338]" />
+          <span>Synchronizing assigned orders from live supervisor API...</span>
+        </div>
+      )}
+
+      {isError && (
+        <div className="p-4 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-between text-xs text-red-800">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={16} className="text-red-600" />
+            <span>Failed to load supervisor orders: {String((error as any)?.data?.message || (error as any)?.error || 'Network error')}</span>
+          </div>
+          <button
+            onClick={() => refetch()}
+            className="px-3.5 py-1.5 rounded-xl bg-[#E65338] text-white font-bold text-xs hover:bg-[#D24227]"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -129,11 +289,21 @@ export const SupervisorOrdersPage: React.FC = () => {
                     Tech Specs
                   </button>
                   <button
-                    onClick={() => advanceOrderStage(ord.id)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-[#E65338] hover:bg-[#D24227] shadow-sm transition-all flex items-center gap-1"
+                    onClick={() => handleAdvanceStage(ord.id)}
+                    disabled={isAdvancingStage && advancingOrderId === ord.id}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-[#E65338] hover:bg-[#D24227] disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all flex items-center gap-1"
                   >
-                    <span>Advance Stage</span>
-                    <ArrowRight size={13} />
+                    {isAdvancingStage && advancingOrderId === ord.id ? (
+                      <>
+                        <Loader2 size={13} className="animate-spin" />
+                        <span>Advancing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Advance Stage</span>
+                        <ArrowRight size={13} />
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
@@ -196,6 +366,11 @@ export const SupervisorOrdersPage: React.FC = () => {
             </div>
           );
         })}
+        {filteredOrders.length === 0 && !isLoading && (
+          <div className="bg-white rounded-2xl border border-[#EAE2D9] p-12 text-center text-xs text-gray-500">
+            No mill manufacturing orders match the selected filter or search term.
+          </div>
+        )}
       </div>
 
       {/* Tech Specs Drawer Modal */}

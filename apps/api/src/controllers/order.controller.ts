@@ -1,9 +1,13 @@
 import { Request, Response, NextFunction } from "express";
 import { OrderService } from "../services/order.service.js";
+import { ProcurementService } from "../services/procurement.service.js";
 import { parsePaginationQuery } from "../utils/pagination.js";
 
 export class OrderController {
-  constructor(private readonly orderService = new OrderService()) {}
+  constructor(
+    private readonly orderService = new OrderService(),
+    private readonly procurementService = new ProcurementService()
+  ) {}
 
   listOrders = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -141,6 +145,33 @@ export class OrderController {
         recalculateReason: req.body?.recalculateReason,
         actor: {
           id: actor.subjectId,
+          email: actor.email,
+          ip: req.ip,
+          requestId: actor.requestId,
+        },
+      });
+
+      res.json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  advanceStage = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const actor = req.actor!;
+
+      const result = await this.orderService.advanceStage({
+        tenantId: actor.tenantId,
+        orderId: req.params.id as string,
+        stage: req.body.stage,
+        producedQty: req.body.producedQty,
+        percentComplete: req.body.percentComplete,
+        notes: req.body.notes,
+        actor: {
+          id: actor.subjectId,
+          role: actor.role || "admin",
+          realm: actor.realm,
           email: actor.email,
           ip: req.ip,
           requestId: actor.requestId,
@@ -417,6 +448,89 @@ export class OrderController {
         },
       });
 
+      res.json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+
+  getOrderSummary = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const actor = req.actor!;
+      const result = await this.orderService.getOrderDashboardSummary(
+        actor.tenantId,
+        req.query as any,
+        { role: actor.role }
+      );
+      res.json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  runMonitoring = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const actor = req.actor!;
+      const result = await this.orderService.runOrderMonitoring(
+        actor.tenantId,
+        req.params.id as string,
+        { id: actor.subjectId, role: actor.role, requestId: actor.requestId }
+      );
+      res.json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  createPurchaseDecision = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const actor = req.actor!;
+      const result = await this.procurementService.createPurchaseDecision({
+        tenantId: actor.tenantId,
+        orderId: req.params.id as string,
+        actor: {
+          id: actor.subjectId,
+          email: actor.email,
+          ip: req.ip,
+          requestId: actor.requestId,
+        },
+        data: req.body,
+      });
+      res.status(201).json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  updatePurchaseDecision = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const actor = req.actor!;
+      const result = await this.procurementService.updatePurchaseDecision({
+        tenantId: actor.tenantId,
+        orderId: req.params.id as string,
+        decisionId: req.params.decisionId as string,
+        actor: {
+          id: actor.subjectId,
+          email: actor.email,
+          ip: req.ip,
+          requestId: actor.requestId,
+        },
+        data: req.body,
+      });
+      res.json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  getMaterialReadiness = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const actor = req.actor!;
+      const result = await this.procurementService.checkMaterialReadiness(
+        actor.tenantId,
+        req.params.id as string
+      );
       res.json({ data: result });
     } catch (err) {
       next(err);

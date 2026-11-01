@@ -1,7 +1,10 @@
 import { Request, Response, NextFunction } from "express";
-import { z, ZodSchema } from "zod";
+import { z, ZodSchema, ZodType } from "zod";
 import { AppError } from "../errors/app-error.js";
 import { ErrorCode } from "@loompilot/shared";
+import { paginationQuerySchema } from "../utils/pagination.js";
+
+export { paginationQuerySchema };
 
 export function validateBody<T>(schema: ZodSchema<T>) {
   return (req: Request, _res: Response, next: NextFunction): void => {
@@ -35,7 +38,7 @@ export function validateQuery<T>(schema: ZodSchema<T>) {
   };
 }
 
-export function validateParams<T>(schema: ZodSchema<T>) {
+export function validateParams<T = any>(schema: ZodType<T, any, any>) {
   return (req: Request, _res: Response, next: NextFunction): void => {
     const result = schema.safeParse(req.params);
     if (!result.success) {
@@ -249,6 +252,16 @@ export const MachineCreateSchema = z.object({
 });
 
 export const MachineUpdateSchema = MachineCreateSchema.partial();
+
+export const MachineStatusUpdateSchema = z
+  .object({
+    status: z.enum(["available", "maint", "breakdown", "inactive"]).optional(),
+    currentStatus: z.enum(["available", "maint", "breakdown", "inactive"]).optional(),
+    notes: z.string().optional(),
+  })
+  .refine((data) => data.status !== undefined || data.currentStatus !== undefined, {
+    message: "Either status or currentStatus is required",
+  });
 
 export const ProductCreateSchema = z
   .object({
@@ -464,6 +477,13 @@ export const OrderUpdateSchema = z.object({
   tenantId: z.string().optional(),
 });
 
+export const OrderStageAdvanceSchema = z.object({
+  stage: z.string().min(1).trim(),
+  producedQty: z.number().nonnegative().optional(),
+  percentComplete: z.number().min(0).max(100).optional(),
+  notes: z.string().optional(),
+});
+
 export const OrderDecisionSchema = z.object({
   decision: z.enum(["proceed", "reject", "alternative"]),
   alternativeId: z.string().optional(),
@@ -551,6 +571,12 @@ export const OrderMilestoneParamSchema = z.object({
   milestoneIndex: z.string().regex(/^\d+$/).transform(Number),
 });
 
+export const ClientVerifyPaymentSchema = z.object({
+  gatewayOrderId: z.string().min(1, "gatewayOrderId is required"),
+  paymentId: z.string().min(1, "paymentId is required"),
+  signature: z.string().min(1, "signature is required"),
+});
+
 export const OrderManualReceiptSchema = z.object({
   milestoneIndex: z.number().int().nonnegative(),
   amountPaise: z.number().int().positive("amountPaise must be positive"),
@@ -574,5 +600,223 @@ export const OrderDeliverySchema = z.object({
   invoiceNo: z.string().min(1, "invoiceNo is required"),
   invoiceAmountPaise: z.number().int().positive("invoiceAmountPaise must be positive"),
   notes: z.string().optional(),
+});
+
+// ============================================================================
+// Phase 6 Validation Schemas (Production, Reports, Maintenance & Monitoring)
+// ============================================================================
+
+export const SupervisorDailyReportSubmitSchema = z.object({
+  reportDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "reportDate must be in YYYY-MM-DD format"),
+  employeesPresentTotal: z.number().int().nonnegative("employeesPresentTotal must be non-negative"),
+  workforce: z
+    .array(
+      z.object({
+        area: z.string().min(1, "area is required"),
+        count: z.number().int().nonnegative(),
+      })
+    )
+    .optional(),
+  resources: z
+    .object({
+      machinesAvail: z.number().int().nonnegative(),
+      machinesDown: z.number().int().nonnegative().optional().default(0),
+    })
+    .optional(),
+  stockCounts: z
+    .array(
+      z.object({
+        materialId: z.string().min(1),
+        qty: z.number().nonnegative(),
+      })
+    )
+    .optional(),
+  outputs: z
+    .array(
+      z.object({
+        orderId: z.string().min(1),
+        stage: z.string().min(1),
+        produced: z.number().int().nonnegative(),
+        defective: z.number().int().nonnegative().optional().default(0),
+      })
+    )
+    .optional(),
+  machines: z
+    .array(
+      z.object({
+        machineId: z.string().min(1),
+        status: z.enum(["available", "maint", "breakdown"]),
+        hours: z.number().nonnegative(),
+        remarks: z.string().optional(),
+      })
+    )
+    .optional(),
+  issues: z
+    .array(
+      z.object({
+        type: z.enum(["machine", "shortage", "delay", "quality", "other"]),
+        notes: z.string().min(1),
+        machineId: z.string().optional(),
+      })
+    )
+    .optional(),
+  clientGeneratedId: z.string().optional(),
+  status: z.enum(["draft", "submitted"]).optional().default("submitted"),
+});
+
+export const SupervisorDailyReportQuerySchema = paginationQuerySchema.extend({
+  reportDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  fromDate: z.string().optional(),
+  toDate: z.string().optional(),
+  status: z.enum(["draft", "submitted", "corrected"]).optional(),
+  supervisorId: z.string().optional(),
+  isLate: z.coerce.boolean().optional(),
+});
+
+export const SupervisorDailyReportCorrectionSchema = z.object({
+  reason: z.string().min(1, "Correction reason is required"),
+  employeesPresentTotal: z.number().int().nonnegative().optional(),
+  workforce: z
+    .array(
+      z.object({
+        area: z.string().min(1),
+        count: z.number().int().nonnegative(),
+      })
+    )
+    .optional(),
+  resources: z
+    .object({
+      machinesAvail: z.number().int().nonnegative(),
+      machinesDown: z.number().int().nonnegative().optional(),
+    })
+    .optional(),
+  outputs: z
+    .array(
+      z.object({
+        orderId: z.string().min(1),
+        stage: z.string().min(1),
+        produced: z.number().int().nonnegative(),
+        defective: z.number().int().nonnegative().optional(),
+      })
+    )
+    .optional(),
+  machines: z
+    .array(
+      z.object({
+        machineId: z.string().min(1),
+        status: z.enum(["available", "maint", "breakdown"]),
+        hours: z.number().nonnegative(),
+        remarks: z.string().optional(),
+      })
+    )
+    .optional(),
+  issues: z
+    .array(
+      z.object({
+        type: z.enum(["machine", "shortage", "delay", "quality", "other"]),
+        notes: z.string().min(1),
+        machineId: z.string().optional(),
+      })
+    )
+    .optional(),
+});
+
+export const MaintenanceTicketCreateSchema = z.object({
+  machineId: z.string().min(1, "machineId is required"),
+  sourceReportId: z.string().optional(),
+  issue: z.string().min(1, "issue description is required"),
+  notes: z.string().optional(),
+});
+
+export const MaintenanceTicketUpdateSchema = z.object({
+  status: z.enum(["open", "assigned", "resolved"]).optional(),
+  technicianName: z.string().optional(),
+  technicianContact: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export const MaintenanceTicketQuerySchema = paginationQuerySchema.extend({
+  machineId: z.string().optional(),
+  status: z.enum(["open", "assigned", "resolved"]).optional(),
+});
+
+export const SupervisorNotificationQuerySchema = paginationQuerySchema.extend({
+  kind: z.enum(["notification", "alert"]).optional(),
+  unreadOnly: z.coerce.boolean().optional(),
+});
+
+export const StockConsumeSchema = z.object({
+  materialId: z.string().min(1, "materialId is required"),
+  qty: z.number().positive("qty must be positive"),
+  orderId: z.string().min(1, "orderId is required"),
+  reason: z.string().optional(),
+});
+
+export const PurchaseDecisionCreateSchema = z.object({
+  decisionId: z.string().optional(),
+  optionId: z.string().optional(),
+  materialId: z.string().min(1, "materialId is required"),
+  supplierId: z.string().optional(),
+  qty: z.number().positive("qty must be positive"),
+  ratePaise: z.number().int().positive("ratePaise must be positive integer"),
+  expectedArrivalDate: z.string().optional(),
+  supplierOrderNo: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export const PurchaseRequestDirectCreateSchema = z.object({
+  orderId: z.string().min(1, "orderId is required"),
+  materialId: z.string().min(1, "materialId is required"),
+  qty: z.number().positive("qty must be positive"),
+  ratePaise: z.number().int().positive("ratePaise must be positive integer").optional(),
+  supplierId: z.string().optional(),
+  decisionId: z.string().optional(),
+  optionId: z.string().optional(),
+  expectedArrivalDate: z.string().optional(),
+  supplierOrderNo: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export const PurchaseDecisionUpdateSchema = z.object({
+  expectedArrivalDate: z.string().optional(),
+  status: z.enum(["ordered", "cancelled", "approved", "rejected"]).optional(),
+  action: z.enum(["approve", "reject"]).optional(),
+  reason: z.string().optional(),
+  notes: z.string().optional(),
+  orderId: z.string().optional(),
+});
+
+export const PurchaseDecisionQuerySchema = paginationQuerySchema.extend({
+  status: z.enum(["ordered", "partially_received", "received", "cancelled"]).optional(),
+  materialId: z.string().optional(),
+  supplierId: z.string().optional(),
+  orderId: z.string().optional(),
+  search: z.string().optional(),
+});
+
+export const StockMovementQuerySchema = paginationQuerySchema.extend({
+  materialId: z.string().optional(),
+  orderId: z.string().optional(),
+  type: z.enum(["receipt", "consume", "reserve", "release", "adjust", "opening"]).optional(),
+});
+
+export const StockBalancesQuerySchema = paginationQuerySchema.extend({
+  type: z.enum(["yarn", "fabric", "dye_chemical", "trim", "packing"]).optional(),
+  search: z.string().optional(),
+});
+
+export const DateRangeQuerySchema = z.object({
+  dateFrom: z.string().trim().optional(),
+  dateTo: z.string().trim().optional(),
+  clientId: z.string().trim().optional(),
+});
+
+export const AuditQuerySchema = paginationQuerySchema.extend({
+  entity: z.string().trim().optional(),
+  actorId: z.string().trim().optional(),
+  actorType: z.enum(["user", "client", "agent", "system"]).optional(),
+  action: z.string().trim().optional(),
+  dateFrom: z.string().trim().optional(),
+  dateTo: z.string().trim().optional(),
 });
 

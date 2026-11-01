@@ -142,4 +142,97 @@ export class MaterialRepository extends BaseRepository<IMaterial> {
       .lean<IMaterial>()
       .exec();
   }
+
+  async consumeStock(
+    tenantId: string,
+    materialId: string,
+    qty: number,
+    fromReserved = true,
+    tx?: TxContext
+  ): Promise<IMaterial | null> {
+    const session = this.getSession(tx);
+    const filter: Record<string, any> = { tenantId, _id: materialId };
+    const incOps: Record<string, any> = { stockQty: -qty, version: 1 };
+
+    if (fromReserved) {
+      filter.stockQty = { $gte: qty };
+      filter.reservedQty = { $gte: qty };
+      incOps.reservedQty = -qty;
+    } else {
+      filter.$expr = { $gte: [{ $subtract: ["$stockQty", "$reservedQty"] }, qty] };
+    }
+
+    return this.model
+      .findOneAndUpdate(
+        filter,
+        { $inc: incOps },
+        { new: true, session: session ?? null }
+      )
+      .lean<IMaterial>()
+      .exec();
+  }
+
+  async getStockSummary(tenantId: string): Promise<{
+    totalMaterials: number;
+    lowStockCount: number;
+    byGroup: Record<string, { count: number; totalStock: number }>;
+    totalValuationPaise: number;
+  }> {
+    const pipeline = [
+      { $match: { tenantId, status: "active" } },
+      {
+        $facet: {
+          totals: [
+            {
+              $group: {
+                _id: null,
+                totalMaterials: { $sum: 1 },
+                totalValuationPaise: {
+                  $sum: { $multiply: [{ $ifNull: ["$stockQty", 0] }, { $ifNull: ["$currentRatePaise", 0] }] },
+                },
+                lowStockCount: {
+                  $sum: {
+                    $cond: [
+                      { $lte: [{ $ifNull: ["$stockQty", 0] }, { $ifNull: ["$reorderLevel", 0] }] },
+                      1,
+                      0,
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+          byGroup: [
+            {
+              $group: {
+                _id: "$type",
+                count: { $sum: 1 },
+                totalStock: { $sum: { $ifNull: ["$stockQty", 0] } },
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const [res] = await this.model.aggregate(pipeline).exec();
+
+    const totals = res?.totals?.[0] || {};
+    const byGroup: Record<string, { count: number; totalStock: number }> = {};
+    if (res?.byGroup) {
+      for (const item of res.byGroup) {
+        byGroup[item._id] = {
+          count: item.count,
+          totalStock: item.totalStock,
+        };
+      }
+    }
+
+    return {
+      totalMaterials: totals.totalMaterials || 0,
+      lowStockCount: totals.lowStockCount || 0,
+      byGroup,
+      totalValuationPaise: totals.totalValuationPaise || 0,
+    };
+  }
 }

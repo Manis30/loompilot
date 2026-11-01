@@ -203,6 +203,15 @@ export class ImportService {
       return job;
     }
 
+    // If job is currently being processed by another worker, reject duplicate concurrent execution
+    if (job && job.status === "processing") {
+      throw new AppError(
+        ErrorCode.DUPLICATE,
+        "Import job is currently being processed",
+        409
+      );
+    }
+
     // If no stored job was found, but csvContent was provided as fallback
     if (!job && params.csvContent && fileHash && params.type) {
       const dryResult = await this.dryRun({
@@ -222,6 +231,25 @@ export class ImportService {
         404
       );
     }
+
+    if (job.status === "completed") {
+      return job;
+    }
+
+    // Atomically claim the job to prevent concurrent duplicate commits
+    const claimed = await this.importJobRepo.claimJobForProcessing(tenantId, String(job._id));
+    if (!claimed) {
+      const refreshed = await this.importJobRepo.findById(tenantId, String(job._id));
+      if (refreshed && refreshed.status === "completed") {
+        return refreshed;
+      }
+      throw new AppError(
+        ErrorCode.DUPLICATE,
+        "Import job is already being processed or has already been completed",
+        409
+      );
+    }
+    job = claimed;
 
     const type = job.type as ImportType;
     const validRows = job.validRows || [];

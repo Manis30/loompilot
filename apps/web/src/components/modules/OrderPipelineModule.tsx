@@ -25,14 +25,20 @@ import {
   Boxes,
   Maximize2,
   Minimize2,
-  X
+  X,
+  RefreshCw,
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
+import { useGetOrdersQuery, useAdvanceOrderStageMutation } from '../../store/api/ordersApi';
+import { useGetClientsQuery, useGetProductsQuery } from '../../store/api/catalogApi';
+import { mapApiOrderToAdminOrder } from '../../utils/orderMapper';
 import type { Order, OrderItemProduct } from '../../types';
 import { GarmentVisual3D } from '../common/GarmentVisual3D';
 import { SerpentineStagesPipeline } from '../common/SerpentineStagesPipeline';
 
 interface OrderPipelineModuleProps {
-  orders: Order[];
+  orders?: Order[];
   selectedOrderId: string;
   onSelectOrder: (id: string) => void;
   onOpenOrderModal: (order: Order) => void;
@@ -45,7 +51,47 @@ export const OrderPipelineModule: React.FC<OrderPipelineModuleProps> = ({
   onSelectOrder,
   onOpenOrderModal
 }) => {
-  const [orders, setOrders] = useState<Order[]>(propOrders);
+  const { data: ordersResponse, isLoading, isError, error, refetch } = useGetOrdersQuery(undefined);
+  const [advanceOrderStageMutation, { isLoading: isAdvancingStage }] = useAdvanceOrderStageMutation();
+  const [stageError, setStageError] = useState<string | null>(null);
+  const { data: clientsResponse } = useGetClientsQuery(undefined);
+  const { data: productsResponse } = useGetProductsQuery(undefined);
+
+  const clientsMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const raw = clientsResponse?.data || [];
+    if (Array.isArray(raw)) {
+      raw.forEach((c: any) => {
+        if (c.id || c._id) map.set(String(c.id || c._id), c);
+      });
+    }
+    return map;
+  }, [clientsResponse]);
+
+  const productsMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const raw = productsResponse?.data || [];
+    if (Array.isArray(raw)) {
+      raw.forEach((p: any) => {
+        if (p.id || p._id) map.set(String(p.id || p._id), p);
+      });
+    }
+    return map;
+  }, [productsResponse]);
+
+  const liveOrders = useMemo(() => {
+    const rawList = ordersResponse?.data || [];
+    if (!Array.isArray(rawList)) return [];
+    return rawList.map((item) => mapApiOrderToAdminOrder(item, clientsMap, productsMap));
+  }, [ordersResponse, clientsMap, productsMap]);
+
+  const [orders, setOrders] = useState<Order[]>(propOrders || []);
+
+  useEffect(() => {
+    if (ordersResponse && Array.isArray(ordersResponse.data)) {
+      setOrders(liveOrders);
+    }
+  }, [ordersResponse, liveOrders]);
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>(['LP-901', 'LP-903']);
   const [orderTab, setOrderTab] = useState<'all' | 'active' | 'to_invoice' | 'to_ship'>('all');
@@ -120,68 +166,124 @@ export const OrderPipelineModule: React.FC<OrderPipelineModuleProps> = ({
   };
 
   // Handle stage advancement
-  const handleAdvanceStage = (orderId: string, itemId: string) => {
-    setOrders((prevOrders) =>
-      prevOrders.map((ord) => {
-        if (ord.id !== orderId || !ord.items) return ord;
+  const handleAdvanceStage = async (orderId: string, itemId: string) => {
+    if (isAdvancingStage) return;
+    setStageError(null);
 
-        const updatedItems = ord.items.map((item) => {
-          if (item.id !== itemId) return item;
+    const ord = orders.find((o) => o.id === orderId);
+    if (!ord || !ord.items) return;
 
-          const currentInProgIdx = item.timeline.findIndex((s) => s.status === 'in_progress');
-          if (currentInProgIdx === -1) {
-            const firstPendingIdx = item.timeline.findIndex((s) => s.status === 'pending');
-            if (firstPendingIdx !== -1) {
-              const newTimeline = [...item.timeline];
-              newTimeline[firstPendingIdx] = {
-                ...newTimeline[firstPendingIdx],
-                status: 'in_progress',
-                dateOrDetails: 'In progress · Current stage'
-              };
-              const newProgress = Math.min(100, item.progressPercent + 15);
-              return { ...item, progressPercent: newProgress, timeline: newTimeline };
-            }
-            return item;
-          }
+    const currentItem = ord.items.find((item) => item.id === itemId);
+    if (!currentItem) return;
 
+    let targetStageName = '';
+    const currentInProgIdx = currentItem.timeline.findIndex((s) => s.status === 'in_progress');
+    if (currentInProgIdx === -1) {
+      const firstPendingIdx = currentItem.timeline.findIndex((s) => s.status === 'pending');
+      if (firstPendingIdx !== -1) {
+        targetStageName = currentItem.timeline[firstPendingIdx].name;
+      }
+    } else if (currentInProgIdx + 1 < currentItem.timeline.length) {
+      targetStageName = currentItem.timeline[currentInProgIdx + 1].name;
+    } else {
+      targetStageName = currentItem.timeline[currentInProgIdx].name;
+    }
+
+    const updatedItems = ord.items.map((item) => {
+      if (item.id !== itemId) return item;
+
+      const inProgIdx = item.timeline.findIndex((s) => s.status === 'in_progress');
+      if (inProgIdx === -1) {
+        const firstPendingIdx = item.timeline.findIndex((s) => s.status === 'pending');
+        if (firstPendingIdx !== -1) {
           const newTimeline = [...item.timeline];
-          newTimeline[currentInProgIdx] = {
-            ...newTimeline[currentInProgIdx],
-            status: 'completed',
-            dateOrDetails: `Completed · ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}`
+          newTimeline[firstPendingIdx] = {
+            ...newTimeline[firstPendingIdx],
+            status: 'in_progress',
+            dateOrDetails: 'In progress · Current stage'
           };
+          const newProgress = Math.min(100, item.progressPercent + 15);
+          return { ...item, progressPercent: newProgress, timeline: newTimeline };
+        }
+        return item;
+      }
 
-          if (currentInProgIdx + 1 < newTimeline.length) {
-            newTimeline[currentInProgIdx + 1] = {
-              ...newTimeline[currentInProgIdx + 1],
-              status: 'in_progress',
-              dateOrDetails: 'Current stage · Underway'
-            };
-          }
+      const newTimeline = [...item.timeline];
+      newTimeline[inProgIdx] = {
+        ...newTimeline[inProgIdx],
+        status: 'completed',
+        dateOrDetails: `Completed · ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}`
+      };
 
-          const completedCount = newTimeline.filter((s) => s.status === 'completed').length;
-          const inProgressCount = newTimeline.filter((s) => s.status === 'in_progress').length;
-          const calculatedItemProgress = Math.round(((completedCount + inProgressCount * 0.5) / newTimeline.length) * 100);
-
-          return {
-            ...item,
-            progressPercent: calculatedItemProgress,
-            timeline: newTimeline
-          };
-        });
-
-        const newWeighted = calculateWeightedProgress(updatedItems);
-        const newProduced = Math.round((ord.quantityMeters * newWeighted) / 100);
-
-        return {
-          ...ord,
-          items: updatedItems,
-          producedMeters: newProduced
+      if (inProgIdx + 1 < newTimeline.length) {
+        newTimeline[inProgIdx + 1] = {
+          ...newTimeline[inProgIdx + 1],
+          status: 'in_progress',
+          dateOrDetails: 'Current stage · Underway'
         };
-      })
-    );
+      }
 
-    showNotification(`Stage advanced & overall progress recalculated automatically.`);
+      const completedCount = newTimeline.filter((s) => s.status === 'completed').length;
+      const inProgressCount = newTimeline.filter((s) => s.status === 'in_progress').length;
+      const calculatedItemProgress = Math.round(((completedCount + inProgressCount * 0.5) / newTimeline.length) * 100);
+
+      return {
+        ...item,
+        progressPercent: calculatedItemProgress,
+        timeline: newTimeline
+      };
+    });
+
+    const newWeighted = calculateWeightedProgress(updatedItems);
+    const newProduced = Math.round((ord.quantityMeters * newWeighted) / 100);
+
+    // Resolve real MongoDB ObjectId
+    const rawList = ordersResponse?.data || [];
+    const rawOrder = Array.isArray(rawList)
+      ? rawList.find((o: any) => o._id === orderId || o.id === orderId || o.orderNumber === orderId)
+      : null;
+    const realOrderId = rawOrder?._id || rawOrder?.id || (orderId.length === 24 ? orderId : null);
+
+    if (realOrderId) {
+      try {
+        await advanceOrderStageMutation({
+          id: realOrderId,
+          stage: targetStageName || 'In Production',
+          producedQty: newProduced,
+          percentComplete: newWeighted,
+          notes: `Stage advanced to ${targetStageName || 'next phase'}`
+        }).unwrap();
+
+        setOrders((prevOrders) =>
+          prevOrders.map((o) => {
+            if (o.id !== orderId) return o;
+            return {
+              ...o,
+              items: updatedItems,
+              producedMeters: newProduced
+            };
+          })
+        );
+        showNotification(`Stage advanced on ${currentItem.name}!`);
+        refetch();
+      } catch (err: any) {
+        const errMsg = err?.data?.message || err?.message || 'Failed to advance order stage on server';
+        setStageError(errMsg);
+        showNotification(`Error: ${errMsg}`);
+      }
+    } else {
+      setOrders((prevOrders) =>
+        prevOrders.map((o) => {
+          if (o.id !== orderId) return o;
+          return {
+            ...o,
+            items: updatedItems,
+            producedMeters: newProduced
+          };
+        })
+      );
+      showNotification(`Stage advanced on ${currentItem.name}!`);
+    }
   };
 
   const activeCount = useMemo(() => orders.filter((o) => o.status === 'in_production' || o.riskStatus === 'on_track').length, [orders]);
@@ -604,6 +706,16 @@ export const OrderPipelineModule: React.FC<OrderPipelineModuleProps> = ({
                   </div>
 
                   {/* Which Stage It Is In Banner + Direct Advance Action */}
+                  {stageError && (
+                    <div style={{ padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, color: '#B91C1C', fontSize: 12, marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <AlertCircle size={14} />
+                        <span>{stageError}</span>
+                      </div>
+                      <button onClick={() => setStageError(null)} style={{ background: 'transparent', border: 'none', color: '#B91C1C', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>×</button>
+                    </div>
+                  )}
+
                   <div className="clean-current-stage-bar">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <div className="clean-stage-indicator-pill">
@@ -623,15 +735,24 @@ export const OrderPipelineModule: React.FC<OrderPipelineModuleProps> = ({
 
                     <button
                       className="clean-stage-advance-btn"
+                      disabled={isAdvancingStage}
                       onClick={() => {
-                        if (!currentItem) return;
+                        if (!currentItem || isAdvancingStage) return;
                         handleAdvanceStage(activeOrder.id, currentItem.id);
-                        showNotification(`Advanced stage on ${currentItem.name}!`);
                       }}
                       title={`Advance ${inProgStage?.name} to Next Stage`}
                     >
-                      <Check size={13} strokeWidth={2.8} />
-                      <span>Advance Stage</span>
+                      {isAdvancingStage ? (
+                        <>
+                          <Loader2 size={13} className="animate-spin" />
+                          <span>Advancing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check size={13} strokeWidth={2.8} />
+                          <span>Advance Stage</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -646,10 +767,10 @@ export const OrderPipelineModule: React.FC<OrderPipelineModuleProps> = ({
                 productName={currentItem.name}
                 designCode={currentItem.designCode}
                 onAdvanceStage={() => {
+                  if (!currentItem || isAdvancingStage) return;
                   handleAdvanceStage(activeOrder.id, currentItem.id);
-                  showNotification(`Advanced stage on ${currentItem.name}!`);
                 }}
-                canAdvance={true}
+                canAdvance={!isAdvancingStage}
               />
             )}
           </div>
@@ -832,6 +953,62 @@ export const OrderPipelineModule: React.FC<OrderPipelineModuleProps> = ({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', overflowY: 'auto', padding: '12px 18px', boxSizing: 'border-box', background: '#ffffff'
     }}>
       {/* 1. TOP HEADER & VIEW TOGGLES */}
+      {/* Live Backend API Status Banners */}
+      {isLoading && (
+        <div style={{
+          padding: '12px 18px',
+          background: '#f8fafc',
+          border: '1px solid #e2e8f0',
+          borderRadius: 12,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          color: '#475569',
+          fontSize: 12,
+          fontWeight: 600
+        }}>
+          <RefreshCw size={15} className="animate-spin text-[#79B4B7]" />
+          <span>Synchronizing orders from live backend API...</span>
+        </div>
+      )}
+
+      {isError && (
+        <div style={{
+          padding: '12px 18px',
+          background: '#fef2f2',
+          border: '1px solid #fecaca',
+          borderRadius: 12,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          color: '#991b1b',
+          fontSize: 12
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <AlertCircle size={16} color="#dc2626" />
+            <span>
+              Failed to load live orders: {String((error as any)?.data?.message || (error as any)?.error || 'Network error')}
+            </span>
+          </div>
+          <button
+            onClick={() => refetch()}
+            style={{
+              padding: '5px 12px',
+              borderRadius: 8,
+              background: '#dc2626',
+              color: '#ffffff',
+              border: 'none',
+              fontWeight: 700,
+              fontSize: 11,
+              cursor: 'pointer'
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <div className="module-header-flat">
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 800, color: '#111827', letterSpacing: '-0.4px', margin: 0 }}>
@@ -841,13 +1018,39 @@ export const OrderPipelineModule: React.FC<OrderPipelineModuleProps> = ({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Refresh Live Data */}
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isLoading}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              padding: '6px 12px',
+              borderRadius: 9999,
+              border: '1px solid #E8DEC8',
+              background: '#ffffff',
+              color: '#64748b',
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+            title="Reload orders from backend API"
+          >
+            <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
+            <span>{isLoading ? 'Syncing...' : 'Sync'}</span>
+          </button>
+
           {/* Jump to 3D Order Configurator */}
           <button
             type="button"
             onClick={() => {
-              setActiveDetailOrderId('LP-901');
-              onSelectOrder('LP-901');
-              setSelectedProductItemId('LP-901-A');
+              const targetId = orders[0]?.id || 'LP-901';
+              const targetItemId = orders[0]?.items?.[0]?.id || 'LP-901-A';
+              setActiveDetailOrderId(targetId);
+              onSelectOrder(targetId);
+              setSelectedProductItemId(targetItemId);
             }}
             style={{
               display: 'inline-flex',

@@ -8,6 +8,7 @@ import {
   IdParamSchema,
   MachineCreateSchema,
   MachineUpdateSchema,
+  MachineStatusUpdateSchema,
 } from "../validators/index.js";
 
 export const machineRouter: Router = Router();
@@ -41,6 +42,14 @@ machineRouter.patch(
   validateParams(IdParamSchema),
   validateBody(MachineUpdateSchema),
   controller.updateMachine
+);
+
+machineRouter.patch(
+  "/:id/status",
+  authorize("PATCH /api/v1/machines/:id/status"),
+  validateParams(IdParamSchema),
+  validateBody(MachineStatusUpdateSchema),
+  controller.updateMachineStatus
 );
 
 machineRouter.delete(

@@ -49,4 +49,15 @@ export class ImportJobRepository extends BaseRepository<IImportJob> {
       version: 1,
     } as any);
   }
+
+  async claimJobForProcessing(tenantId: string, jobId: string): Promise<IImportJob | null> {
+    return this.model
+      .findOneAndUpdate(
+        { tenantId, _id: jobId, status: "pending" },
+        { $set: { status: "processing" }, $inc: { version: 1 } },
+        { new: true }
+      )
+      .lean<IImportJob>()
+      .exec();
+  }
 }

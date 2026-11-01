@@ -6,6 +6,7 @@ import {
   InternalFeasibilityReportSchema,
   InternalQuotationDraftSchema,
   InternalQuotationRevisionSchema,
+  InternalMonitoringSnapshotSchema,
 } from "@loompilot/shared";
 
 export const internalGatewayRouter: Router = Router();
@@ -29,4 +30,10 @@ internalGatewayRouter.post(
   "/quotation-revisions",
   validateBody(InternalQuotationRevisionSchema),
   controller.ingestQuotationRevision
+);
+
+internalGatewayRouter.post(
+  "/monitoring-snapshots",
+  validateBody(InternalMonitoringSnapshotSchema),
+  controller.ingestMonitoringSnapshot
 );

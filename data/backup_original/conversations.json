@@ -1,0 +1,1928 @@
+[
+  {
+    "_id": "66802200000000000000001",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000001",
+    "clientId": "668002000000000000000001",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-07-25 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-07-03T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 185.00 per unit for 10,050 units. Feasibility checks confirm capacity is reserved to complete production by 2026-07-23.",
+        "guardrail": true,
+        "createdAt": "2026-07-03T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-07-03T12:30:00.000Z",
+    "createdAt": "2026-07-03T10:30:00.000Z",
+    "escalation": {
+      "type": "discount",
+      "summary": "Client requested 3% volume concession for 10,000 pcs annual repeat contract.",
+      "resolution": "Approved 1.5% discount via revised quotation.",
+      "status": "resolved"
+    }
+  },
+  {
+    "_id": "66802200000000000000002",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000002",
+    "clientId": "668002000000000000000002",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-07-26 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-07-04T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 290.00 per unit for 10,100 units. Feasibility checks confirm capacity is reserved to complete production by 2026-07-24.",
+        "guardrail": true,
+        "createdAt": "2026-07-04T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-07-04T12:30:00.000Z",
+    "createdAt": "2026-07-04T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000003",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000003",
+    "clientId": "668002000000000000000003",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-07-27 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-07-05T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 480.00 per unit for 10,150 units. Feasibility checks confirm capacity is reserved to complete production by 2026-07-25.",
+        "guardrail": true,
+        "createdAt": "2026-07-05T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-07-05T12:30:00.000Z",
+    "createdAt": "2026-07-05T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000004",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000004",
+    "clientId": "668002000000000000000004",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-07-28 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-07-06T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 240.00 per unit for 10,200 units. Feasibility checks confirm capacity is reserved to complete production by 2026-07-26.",
+        "guardrail": true,
+        "createdAt": "2026-07-06T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-07-06T12:30:00.000Z",
+    "createdAt": "2026-07-06T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000005",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000005",
+    "clientId": "668002000000000000000005",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-07-24 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-07-02T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 185.00 per unit for 10,250 units. Feasibility checks confirm capacity is reserved to complete production by 2026-07-22.",
+        "guardrail": true,
+        "createdAt": "2026-07-02T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-07-02T12:30:00.000Z",
+    "createdAt": "2026-07-02T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000006",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000006",
+    "clientId": "668002000000000000000006",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-07-25 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-07-03T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 290.00 per unit for 10,300 units. Feasibility checks confirm capacity is reserved to complete production by 2026-07-23.",
+        "guardrail": true,
+        "createdAt": "2026-07-03T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-07-03T12:30:00.000Z",
+    "createdAt": "2026-07-03T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000007",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000007",
+    "clientId": "668002000000000000000007",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-07-26 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-07-04T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 480.00 per unit for 10,350 units. Feasibility checks confirm capacity is reserved to complete production by 2026-07-24.",
+        "guardrail": true,
+        "createdAt": "2026-07-04T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-07-04T12:30:00.000Z",
+    "createdAt": "2026-07-04T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000008",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000008",
+    "clientId": "668002000000000000000008",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-07-27 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-07-05T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 240.00 per unit for 10,400 units. Feasibility checks confirm capacity is reserved to complete production by 2026-07-25.",
+        "guardrail": true,
+        "createdAt": "2026-07-05T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-07-05T12:30:00.000Z",
+    "createdAt": "2026-07-05T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000009",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000009",
+    "clientId": "668002000000000000000009",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-07-28 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-07-06T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 185.00 per unit for 10,450 units. Feasibility checks confirm capacity is reserved to complete production by 2026-07-26.",
+        "guardrail": true,
+        "createdAt": "2026-07-06T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-07-06T12:30:00.000Z",
+    "createdAt": "2026-07-06T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000010",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000010",
+    "clientId": "668002000000000000000010",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-07-24 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-07-02T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 290.00 per unit for 10,500 units. Feasibility checks confirm capacity is reserved to complete production by 2026-07-22.",
+        "guardrail": true,
+        "createdAt": "2026-07-02T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-07-02T12:30:00.000Z",
+    "createdAt": "2026-07-02T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000011",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000011",
+    "clientId": "668002000000000000000011",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-07-25 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-07-03T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 480.00 per unit for 10,550 units. Feasibility checks confirm capacity is reserved to complete production by 2026-07-23.",
+        "guardrail": true,
+        "createdAt": "2026-07-03T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-07-03T12:30:00.000Z",
+    "createdAt": "2026-07-03T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000012",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000012",
+    "clientId": "668002000000000000000012",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-07-26 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-07-04T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 240.00 per unit for 10,600 units. Feasibility checks confirm capacity is reserved to complete production by 2026-07-24.",
+        "guardrail": true,
+        "createdAt": "2026-07-04T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-07-04T12:30:00.000Z",
+    "createdAt": "2026-07-04T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000013",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000013",
+    "clientId": "668002000000000000000013",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-07-27 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-07-05T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 185.00 per unit for 10,650 units. Feasibility checks confirm capacity is reserved to complete production by 2026-07-25.",
+        "guardrail": true,
+        "createdAt": "2026-07-05T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-07-05T12:30:00.000Z",
+    "createdAt": "2026-07-05T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000014",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000014",
+    "clientId": "668002000000000000000014",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-07-28 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-07-06T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 290.00 per unit for 10,700 units. Feasibility checks confirm capacity is reserved to complete production by 2026-07-26.",
+        "guardrail": true,
+        "createdAt": "2026-07-06T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-07-06T12:30:00.000Z",
+    "createdAt": "2026-07-06T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000015",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000015",
+    "clientId": "668002000000000000000015",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-07-24 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-07-02T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 480.00 per unit for 10,750 units. Feasibility checks confirm capacity is reserved to complete production by 2026-07-22.",
+        "guardrail": true,
+        "createdAt": "2026-07-02T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-07-02T12:30:00.000Z",
+    "createdAt": "2026-07-02T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000016",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000016",
+    "clientId": "668002000000000000000016",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-07-25 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-07-03T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 240.00 per unit for 10,800 units. Feasibility checks confirm capacity is reserved to complete production by 2026-07-23.",
+        "guardrail": true,
+        "createdAt": "2026-07-03T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-07-03T12:30:00.000Z",
+    "createdAt": "2026-07-03T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000017",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000017",
+    "clientId": "668002000000000000000017",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-07-26 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-07-04T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 185.00 per unit for 10,850 units. Feasibility checks confirm capacity is reserved to complete production by 2026-07-24.",
+        "guardrail": true,
+        "createdAt": "2026-07-04T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-07-04T12:30:00.000Z",
+    "createdAt": "2026-07-04T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000018",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000018",
+    "clientId": "668002000000000000000018",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-07-27 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-07-05T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 290.00 per unit for 10,900 units. Feasibility checks confirm capacity is reserved to complete production by 2026-07-25.",
+        "guardrail": true,
+        "createdAt": "2026-07-05T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-07-05T12:30:00.000Z",
+    "createdAt": "2026-07-05T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000019",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000019",
+    "clientId": "668002000000000000000019",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-07-28 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-07-06T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 480.00 per unit for 10,950 units. Feasibility checks confirm capacity is reserved to complete production by 2026-07-26.",
+        "guardrail": true,
+        "createdAt": "2026-07-06T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-07-06T12:30:00.000Z",
+    "createdAt": "2026-07-06T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000020",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000020",
+    "clientId": "668002000000000000000020",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-07-24 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-07-02T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 240.00 per unit for 11,000 units. Feasibility checks confirm capacity is reserved to complete production by 2026-07-22.",
+        "guardrail": true,
+        "createdAt": "2026-07-02T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-07-02T12:30:00.000Z",
+    "createdAt": "2026-07-02T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000021",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000021",
+    "clientId": "668002000000000000000001",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-08-25 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-08-03T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 185.00 per unit for 10,050 units. Feasibility checks confirm capacity is reserved to complete production by 2026-08-23.",
+        "guardrail": true,
+        "createdAt": "2026-08-03T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-08-03T12:30:00.000Z",
+    "createdAt": "2026-08-03T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000022",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000022",
+    "clientId": "668002000000000000000002",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-08-26 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-08-04T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 290.00 per unit for 10,100 units. Feasibility checks confirm capacity is reserved to complete production by 2026-08-24.",
+        "guardrail": true,
+        "createdAt": "2026-08-04T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-08-04T12:30:00.000Z",
+    "createdAt": "2026-08-04T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000023",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000023",
+    "clientId": "668002000000000000000003",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-08-27 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-08-05T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 480.00 per unit for 10,150 units. Feasibility checks confirm capacity is reserved to complete production by 2026-08-25.",
+        "guardrail": true,
+        "createdAt": "2026-08-05T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-08-05T12:30:00.000Z",
+    "createdAt": "2026-08-05T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000024",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000024",
+    "clientId": "668002000000000000000004",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-08-28 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-08-06T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 240.00 per unit for 10,200 units. Feasibility checks confirm capacity is reserved to complete production by 2026-08-26.",
+        "guardrail": true,
+        "createdAt": "2026-08-06T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-08-06T12:30:00.000Z",
+    "createdAt": "2026-08-06T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000025",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000025",
+    "clientId": "668002000000000000000005",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-08-24 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-08-02T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 185.00 per unit for 10,250 units. Feasibility checks confirm capacity is reserved to complete production by 2026-08-22.",
+        "guardrail": true,
+        "createdAt": "2026-08-02T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-08-02T12:30:00.000Z",
+    "createdAt": "2026-08-02T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000026",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000026",
+    "clientId": "668002000000000000000006",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-08-25 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-08-03T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 290.00 per unit for 10,300 units. Feasibility checks confirm capacity is reserved to complete production by 2026-08-23.",
+        "guardrail": true,
+        "createdAt": "2026-08-03T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-08-03T12:30:00.000Z",
+    "createdAt": "2026-08-03T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000027",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000027",
+    "clientId": "668002000000000000000007",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-08-26 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-08-04T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 480.00 per unit for 10,350 units. Feasibility checks confirm capacity is reserved to complete production by 2026-08-24.",
+        "guardrail": true,
+        "createdAt": "2026-08-04T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-08-04T12:30:00.000Z",
+    "createdAt": "2026-08-04T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000028",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000028",
+    "clientId": "668002000000000000000008",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-08-27 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-08-05T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 240.00 per unit for 10,400 units. Feasibility checks confirm capacity is reserved to complete production by 2026-08-25.",
+        "guardrail": true,
+        "createdAt": "2026-08-05T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-08-05T12:30:00.000Z",
+    "createdAt": "2026-08-05T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000029",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000029",
+    "clientId": "668002000000000000000009",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-08-28 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-08-06T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 185.00 per unit for 10,450 units. Feasibility checks confirm capacity is reserved to complete production by 2026-08-26.",
+        "guardrail": true,
+        "createdAt": "2026-08-06T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-08-06T12:30:00.000Z",
+    "createdAt": "2026-08-06T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000030",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000030",
+    "clientId": "668002000000000000000010",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-08-24 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-08-02T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 290.00 per unit for 10,500 units. Feasibility checks confirm capacity is reserved to complete production by 2026-08-22.",
+        "guardrail": true,
+        "createdAt": "2026-08-02T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-08-02T12:30:00.000Z",
+    "createdAt": "2026-08-02T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000031",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000031",
+    "clientId": "668002000000000000000011",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-08-25 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-08-03T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 480.00 per unit for 10,550 units. Feasibility checks confirm capacity is reserved to complete production by 2026-08-23.",
+        "guardrail": true,
+        "createdAt": "2026-08-03T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-08-03T12:30:00.000Z",
+    "createdAt": "2026-08-03T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000032",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000032",
+    "clientId": "668002000000000000000012",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-08-26 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-08-04T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 240.00 per unit for 10,600 units. Feasibility checks confirm capacity is reserved to complete production by 2026-08-24.",
+        "guardrail": true,
+        "createdAt": "2026-08-04T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-08-04T12:30:00.000Z",
+    "createdAt": "2026-08-04T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000033",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000033",
+    "clientId": "668002000000000000000013",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-08-27 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-08-05T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 185.00 per unit for 10,650 units. Feasibility checks confirm capacity is reserved to complete production by 2026-08-25.",
+        "guardrail": true,
+        "createdAt": "2026-08-05T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-08-05T12:30:00.000Z",
+    "createdAt": "2026-08-05T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000034",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000034",
+    "clientId": "668002000000000000000014",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-08-28 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-08-06T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 290.00 per unit for 10,700 units. Feasibility checks confirm capacity is reserved to complete production by 2026-08-26.",
+        "guardrail": true,
+        "createdAt": "2026-08-06T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-08-06T12:30:00.000Z",
+    "createdAt": "2026-08-06T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000035",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000035",
+    "clientId": "668002000000000000000015",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-08-24 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-08-02T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 480.00 per unit for 10,750 units. Feasibility checks confirm capacity is reserved to complete production by 2026-08-22.",
+        "guardrail": true,
+        "createdAt": "2026-08-02T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-08-02T12:30:00.000Z",
+    "createdAt": "2026-08-02T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000036",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000036",
+    "clientId": "668002000000000000000016",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-08-25 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-08-03T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 240.00 per unit for 10,800 units. Feasibility checks confirm capacity is reserved to complete production by 2026-08-23.",
+        "guardrail": true,
+        "createdAt": "2026-08-03T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-08-03T12:30:00.000Z",
+    "createdAt": "2026-08-03T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000037",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000037",
+    "clientId": "668002000000000000000017",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-08-26 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-08-04T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 185.00 per unit for 10,850 units. Feasibility checks confirm capacity is reserved to complete production by 2026-08-24.",
+        "guardrail": true,
+        "createdAt": "2026-08-04T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-08-04T12:30:00.000Z",
+    "createdAt": "2026-08-04T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000038",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000038",
+    "clientId": "668002000000000000000018",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-08-27 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-08-05T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 290.00 per unit for 10,900 units. Feasibility checks confirm capacity is reserved to complete production by 2026-08-25.",
+        "guardrail": true,
+        "createdAt": "2026-08-05T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-08-05T12:30:00.000Z",
+    "createdAt": "2026-08-05T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000039",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000039",
+    "clientId": "668002000000000000000019",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-08-28 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-08-06T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 480.00 per unit for 10,950 units. Feasibility checks confirm capacity is reserved to complete production by 2026-08-26.",
+        "guardrail": true,
+        "createdAt": "2026-08-06T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-08-06T12:30:00.000Z",
+    "createdAt": "2026-08-06T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000040",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000040",
+    "clientId": "668002000000000000000020",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-08-24 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-08-02T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 240.00 per unit for 11,000 units. Feasibility checks confirm capacity is reserved to complete production by 2026-08-22.",
+        "guardrail": true,
+        "createdAt": "2026-08-02T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-08-02T12:30:00.000Z",
+    "createdAt": "2026-08-02T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000041",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000041",
+    "clientId": "668002000000000000000001",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-09-25 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-09-03T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 185.00 per unit for 10,050 units. Feasibility checks confirm capacity is reserved to complete production by 2026-09-23.",
+        "guardrail": true,
+        "createdAt": "2026-09-03T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-09-03T12:30:00.000Z",
+    "createdAt": "2026-09-03T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000042",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000042",
+    "clientId": "668002000000000000000002",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-09-26 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-09-04T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 290.00 per unit for 10,100 units. Feasibility checks confirm capacity is reserved to complete production by 2026-09-24.",
+        "guardrail": true,
+        "createdAt": "2026-09-04T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-09-04T12:30:00.000Z",
+    "createdAt": "2026-09-04T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000043",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000043",
+    "clientId": "668002000000000000000003",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-09-27 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-09-05T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 480.00 per unit for 10,150 units. Feasibility checks confirm capacity is reserved to complete production by 2026-09-25.",
+        "guardrail": true,
+        "createdAt": "2026-09-05T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-09-05T12:30:00.000Z",
+    "createdAt": "2026-09-05T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000044",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000044",
+    "clientId": "668002000000000000000004",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-09-28 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-09-06T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 240.00 per unit for 10,200 units. Feasibility checks confirm capacity is reserved to complete production by 2026-09-26.",
+        "guardrail": true,
+        "createdAt": "2026-09-06T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-09-06T12:30:00.000Z",
+    "createdAt": "2026-09-06T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000045",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000045",
+    "clientId": "668002000000000000000005",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-09-24 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-09-02T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 185.00 per unit for 10,250 units. Feasibility checks confirm capacity is reserved to complete production by 2026-09-22.",
+        "guardrail": true,
+        "createdAt": "2026-09-02T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-09-02T12:30:00.000Z",
+    "createdAt": "2026-09-02T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000046",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000046",
+    "clientId": "668002000000000000000006",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-09-25 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-09-03T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 290.00 per unit for 10,300 units. Feasibility checks confirm capacity is reserved to complete production by 2026-09-23.",
+        "guardrail": true,
+        "createdAt": "2026-09-03T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-09-03T12:30:00.000Z",
+    "createdAt": "2026-09-03T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000047",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000047",
+    "clientId": "668002000000000000000007",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-09-26 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-09-04T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 480.00 per unit for 10,350 units. Feasibility checks confirm capacity is reserved to complete production by 2026-09-24.",
+        "guardrail": true,
+        "createdAt": "2026-09-04T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-09-04T12:30:00.000Z",
+    "createdAt": "2026-09-04T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000048",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000048",
+    "clientId": "668002000000000000000008",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-09-27 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-09-05T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 240.00 per unit for 10,400 units. Feasibility checks confirm capacity is reserved to complete production by 2026-09-25.",
+        "guardrail": true,
+        "createdAt": "2026-09-05T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-09-05T12:30:00.000Z",
+    "createdAt": "2026-09-05T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000049",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000049",
+    "clientId": "668002000000000000000009",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-09-28 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-09-06T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 185.00 per unit for 10,450 units. Feasibility checks confirm capacity is reserved to complete production by 2026-09-26.",
+        "guardrail": true,
+        "createdAt": "2026-09-06T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-09-06T12:30:00.000Z",
+    "createdAt": "2026-09-06T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000050",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000050",
+    "clientId": "668002000000000000000010",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-09-24 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-09-02T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 290.00 per unit for 10,500 units. Feasibility checks confirm capacity is reserved to complete production by 2026-09-22.",
+        "guardrail": true,
+        "createdAt": "2026-09-02T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-09-02T12:30:00.000Z",
+    "createdAt": "2026-09-02T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000051",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000051",
+    "clientId": "668002000000000000000011",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-09-25 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-09-03T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 480.00 per unit for 10,550 units. Feasibility checks confirm capacity is reserved to complete production by 2026-09-23.",
+        "guardrail": true,
+        "createdAt": "2026-09-03T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-09-03T12:30:00.000Z",
+    "createdAt": "2026-09-03T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000052",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000052",
+    "clientId": "668002000000000000000012",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-09-26 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-09-04T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 240.00 per unit for 10,600 units. Feasibility checks confirm capacity is reserved to complete production by 2026-09-24.",
+        "guardrail": true,
+        "createdAt": "2026-09-04T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-09-04T12:30:00.000Z",
+    "createdAt": "2026-09-04T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000053",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000053",
+    "clientId": "668002000000000000000013",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-09-27 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-09-05T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 185.00 per unit for 10,650 units. Feasibility checks confirm capacity is reserved to complete production by 2026-09-25.",
+        "guardrail": true,
+        "createdAt": "2026-09-05T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-09-05T12:30:00.000Z",
+    "createdAt": "2026-09-05T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000054",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000054",
+    "clientId": "668002000000000000000014",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-09-28 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-09-06T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 290.00 per unit for 10,700 units. Feasibility checks confirm capacity is reserved to complete production by 2026-09-26.",
+        "guardrail": true,
+        "createdAt": "2026-09-06T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-09-06T12:30:00.000Z",
+    "createdAt": "2026-09-06T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000055",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000055",
+    "clientId": "668002000000000000000015",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-09-24 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-09-02T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 480.00 per unit for 10,750 units. Feasibility checks confirm capacity is reserved to complete production by 2026-09-22.",
+        "guardrail": true,
+        "createdAt": "2026-09-02T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-09-02T12:30:00.000Z",
+    "createdAt": "2026-09-02T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000056",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000056",
+    "clientId": "668002000000000000000016",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-09-25 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-09-03T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 240.00 per unit for 10,800 units. Feasibility checks confirm capacity is reserved to complete production by 2026-09-23.",
+        "guardrail": true,
+        "createdAt": "2026-09-03T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-09-03T12:30:00.000Z",
+    "createdAt": "2026-09-03T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000057",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000057",
+    "clientId": "668002000000000000000017",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-09-26 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-09-04T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 185.00 per unit for 10,850 units. Feasibility checks confirm capacity is reserved to complete production by 2026-09-24.",
+        "guardrail": true,
+        "createdAt": "2026-09-04T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-09-04T12:30:00.000Z",
+    "createdAt": "2026-09-04T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000058",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000058",
+    "clientId": "668002000000000000000018",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-09-27 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-09-05T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 290.00 per unit for 10,900 units. Feasibility checks confirm capacity is reserved to complete production by 2026-09-25.",
+        "guardrail": true,
+        "createdAt": "2026-09-05T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-09-05T12:30:00.000Z",
+    "createdAt": "2026-09-05T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000059",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000059",
+    "clientId": "668002000000000000000019",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-09-28 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-09-06T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 480.00 per unit for 10,950 units. Feasibility checks confirm capacity is reserved to complete production by 2026-09-26.",
+        "guardrail": true,
+        "createdAt": "2026-09-06T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-09-06T12:30:00.000Z",
+    "createdAt": "2026-09-06T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000060",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000060",
+    "clientId": "668002000000000000000020",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-09-24 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-09-02T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 240.00 per unit for 11,000 units. Feasibility checks confirm capacity is reserved to complete production by 2026-09-22.",
+        "guardrail": true,
+        "createdAt": "2026-09-02T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-09-02T12:30:00.000Z",
+    "createdAt": "2026-09-02T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000061",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000061",
+    "clientId": "668002000000000000000001",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-10-25 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-10-03T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 185.00 per unit for 10,050 units. Feasibility checks confirm capacity is reserved to complete production by 2026-10-23.",
+        "guardrail": true,
+        "createdAt": "2026-10-03T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-10-03T12:30:00.000Z",
+    "createdAt": "2026-10-03T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000062",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000062",
+    "clientId": "668002000000000000000002",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-10-26 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-10-04T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 290.00 per unit for 10,100 units. Feasibility checks confirm capacity is reserved to complete production by 2026-10-24.",
+        "guardrail": true,
+        "createdAt": "2026-10-04T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-10-04T12:30:00.000Z",
+    "createdAt": "2026-10-04T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000063",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000063",
+    "clientId": "668002000000000000000003",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-10-27 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-10-05T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 480.00 per unit for 10,150 units. Feasibility checks confirm capacity is reserved to complete production by 2026-10-25.",
+        "guardrail": true,
+        "createdAt": "2026-10-05T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-10-05T12:30:00.000Z",
+    "createdAt": "2026-10-05T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000064",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000064",
+    "clientId": "668002000000000000000004",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-10-28 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-10-06T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 240.00 per unit for 10,200 units. Feasibility checks confirm capacity is reserved to complete production by 2026-10-26.",
+        "guardrail": true,
+        "createdAt": "2026-10-06T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-10-06T12:30:00.000Z",
+    "createdAt": "2026-10-06T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000065",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000065",
+    "clientId": "668002000000000000000005",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-10-24 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-10-02T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 185.00 per unit for 10,250 units. Feasibility checks confirm capacity is reserved to complete production by 2026-10-22.",
+        "guardrail": true,
+        "createdAt": "2026-10-02T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-10-02T12:30:00.000Z",
+    "createdAt": "2026-10-02T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000066",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000066",
+    "clientId": "668002000000000000000006",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-10-25 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-10-03T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 290.00 per unit for 10,300 units. Feasibility checks confirm capacity is reserved to complete production by 2026-10-23.",
+        "guardrail": true,
+        "createdAt": "2026-10-03T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-10-03T12:30:00.000Z",
+    "createdAt": "2026-10-03T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000067",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000067",
+    "clientId": "668002000000000000000007",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-10-26 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-10-04T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 480.00 per unit for 10,350 units. Feasibility checks confirm capacity is reserved to complete production by 2026-10-24.",
+        "guardrail": true,
+        "createdAt": "2026-10-04T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-10-04T12:30:00.000Z",
+    "createdAt": "2026-10-04T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000068",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000068",
+    "clientId": "668002000000000000000008",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-10-27 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-10-05T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 240.00 per unit for 10,400 units. Feasibility checks confirm capacity is reserved to complete production by 2026-10-25.",
+        "guardrail": true,
+        "createdAt": "2026-10-05T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-10-05T12:30:00.000Z",
+    "createdAt": "2026-10-05T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000069",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000069",
+    "clientId": "668002000000000000000009",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-10-28 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-10-06T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 185.00 per unit for 10,450 units. Feasibility checks confirm capacity is reserved to complete production by 2026-10-26.",
+        "guardrail": true,
+        "createdAt": "2026-10-06T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-10-06T12:30:00.000Z",
+    "createdAt": "2026-10-06T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000070",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000070",
+    "clientId": "668002000000000000000010",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-10-24 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-10-02T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 290.00 per unit for 10,500 units. Feasibility checks confirm capacity is reserved to complete production by 2026-10-22.",
+        "guardrail": true,
+        "createdAt": "2026-10-02T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-10-02T12:30:00.000Z",
+    "createdAt": "2026-10-02T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000071",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000071",
+    "clientId": "668002000000000000000011",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-10-25 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-10-03T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 480.00 per unit for 10,550 units. Feasibility checks confirm capacity is reserved to complete production by 2026-10-23.",
+        "guardrail": true,
+        "createdAt": "2026-10-03T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-10-03T12:30:00.000Z",
+    "createdAt": "2026-10-03T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000072",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000072",
+    "clientId": "668002000000000000000012",
+    "status": "resolved",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-10-26 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-10-04T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 240.00 per unit for 10,600 units. Feasibility checks confirm capacity is reserved to complete production by 2026-10-24.",
+        "guardrail": true,
+        "createdAt": "2026-10-04T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-10-04T12:30:00.000Z",
+    "createdAt": "2026-10-04T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000073",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000073",
+    "clientId": "668002000000000000000013",
+    "status": "agent_handling",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-10-27 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-10-05T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 185.00 per unit for 10,650 units. Feasibility checks confirm capacity is reserved to complete production by 2026-10-25.",
+        "guardrail": true,
+        "createdAt": "2026-10-05T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-10-05T12:30:00.000Z",
+    "createdAt": "2026-10-05T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000074",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000074",
+    "clientId": "668002000000000000000014",
+    "status": "agent_handling",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-10-28 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-10-06T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 290.00 per unit for 10,700 units. Feasibility checks confirm capacity is reserved to complete production by 2026-10-26.",
+        "guardrail": true,
+        "createdAt": "2026-10-06T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-10-06T12:30:00.000Z",
+    "createdAt": "2026-10-06T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000075",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000075",
+    "clientId": "668002000000000000000015",
+    "status": "agent_handling",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-10-24 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-10-02T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 480.00 per unit for 10,750 units. Feasibility checks confirm capacity is reserved to complete production by 2026-10-22.",
+        "guardrail": true,
+        "createdAt": "2026-10-02T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-10-02T12:30:00.000Z",
+    "createdAt": "2026-10-02T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000076",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000076",
+    "clientId": "668002000000000000000016",
+    "status": "agent_handling",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-10-25 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-10-03T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 240.00 per unit for 10,800 units. Feasibility checks confirm capacity is reserved to complete production by 2026-10-23.",
+        "guardrail": true,
+        "createdAt": "2026-10-03T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-10-03T12:30:00.000Z",
+    "createdAt": "2026-10-03T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000077",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000077",
+    "clientId": "668002000000000000000017",
+    "status": "agent_handling",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-10-26 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-10-04T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 185.00 per unit for 10,850 units. Feasibility checks confirm capacity is reserved to complete production by 2026-10-24.",
+        "guardrail": true,
+        "createdAt": "2026-10-04T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-10-04T12:30:00.000Z",
+    "createdAt": "2026-10-04T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000078",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000078",
+    "clientId": "668002000000000000000018",
+    "status": "agent_handling",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-10-27 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-10-05T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 290.00 per unit for 10,900 units. Feasibility checks confirm capacity is reserved to complete production by 2026-10-25.",
+        "guardrail": true,
+        "createdAt": "2026-10-05T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-10-05T12:30:00.000Z",
+    "createdAt": "2026-10-05T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000079",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000079",
+    "clientId": "668002000000000000000019",
+    "status": "agent_handling",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-10-28 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-10-06T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 480.00 per unit for 10,950 units. Feasibility checks confirm capacity is reserved to complete production by 2026-10-26.",
+        "guardrail": true,
+        "createdAt": "2026-10-06T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-10-06T12:30:00.000Z",
+    "createdAt": "2026-10-06T10:30:00.000Z"
+  },
+  {
+    "_id": "66802200000000000000080",
+    "tenantId": "tenant_loompilot_tn_01",
+    "orderId": "66800800000000000000080",
+    "clientId": "668002000000000000000020",
+    "status": "agent_handling",
+    "assignedAdminId": "668001000000000000000001",
+    "messages": [
+      {
+        "senderType": "client",
+        "text": "Please verify if we can receive delivery by 2026-10-24 and provide the best pricing breakdown.",
+        "guardrail": true,
+        "createdAt": "2026-10-02T10:31:00.000Z"
+      },
+      {
+        "senderType": "assistant",
+        "text": "Hello! The quotation has been prepared at Rs. 240.00 per unit for 11,000 units. Feasibility checks confirm capacity is reserved to complete production by 2026-10-22.",
+        "guardrail": true,
+        "createdAt": "2026-10-02T10:33:00.000Z"
+      }
+    ],
+    "lastMessageAt": "2026-10-02T12:30:00.000Z",
+    "createdAt": "2026-10-02T10:30:00.000Z"
+  }
+]

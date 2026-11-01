@@ -24,6 +24,7 @@ import {
   PlusCircle,
 } from 'lucide-react';
 import { useSupervisor } from '../../context/SupervisorContext';
+import { useSubmitSupervisorReportMutation } from '../../../store/api/productionApi';
 import { useApp } from '../../context/AppContext';
 import { cn } from '../../utils/cn';
 
@@ -52,6 +53,7 @@ export const SupervisorLayout: React.FC = () => {
   const [producedMeters, setProducedMeters] = useState<number>(650);
   const [defectiveMeters, setDefectiveMeters] = useState<number>(12);
   const [shiftNotes, setShiftNotes] = useState('Shift A airjet velocity steady. Warp tension calibrated.');
+  const [submitSupervisorReportMutation] = useSubmitSupervisorReportMutation();
 
   const navItems = [
     { name: 'Factory Dashboard', to: '/supervisor/dashboard', icon: LayoutDashboard },
@@ -64,9 +66,26 @@ export const SupervisorLayout: React.FC = () => {
     { name: 'My Profile', to: '/supervisor/profile', icon: User },
   ];
 
-  const handleDailyUpdateSubmit = (e: React.FormEvent) => {
+  const handleDailyUpdateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedOrderId) return;
+    try {
+      await submitSupervisorReportMutation({
+        reportDate: new Date().toISOString().split('T')[0],
+        employeesPresentTotal: 12,
+        outputs: [
+          {
+            orderId: selectedOrderId || 'ORD-CURRENT',
+            stage: 'weaving',
+            produced: producedMeters,
+            defective: defectiveMeters,
+          },
+        ],
+        notes: shiftNotes,
+      }).unwrap();
+    } catch (err) {
+      console.warn('Backend daily report submit warning:', err);
+    }
     logShiftOutput(selectedOrderId, producedMeters, defectiveMeters, shiftNotes);
     addToast(`Logged ${producedMeters}m for order ${selectedOrderId}. Shift records updated.`, 'success');
     closeDailyUpdateModal();

@@ -1,21 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { Invoice } from '../../types';
 import { formatCurrency, formatLakhs } from '../../utils/formatters';
 import {
-  CreditCard,
   Download,
-  CheckCircle2,
-  Clock,
-  AlertCircle,
   FileText,
-  ShieldCheck,
-  Building,
 } from 'lucide-react';
 import { RazorpayModal } from '../../components/payments/RazorpayModal';
+import { useGetClientOrdersQuery } from '../../../store/api/ordersApi';
 
 export const PaymentsPage: React.FC = () => {
-  const { invoices, payments, addToast } = useApp();
-  const [activeInvoiceNumber, setActiveInvoiceNumber] = useState<string | null>(null);
+  const { payments, addToast } = useApp();
+  const { data: ordersResponse, isLoading, isError, refetch } = useGetClientOrdersQuery(undefined);
+  const [activeInvoice, setActiveInvoice] = useState<Invoice | null>(null);
+
+  const invoices = useMemo<Invoice[]>(() => {
+    const rawOrders = ordersResponse?.data || [];
+    if (Array.isArray(rawOrders) && rawOrders.length > 0) {
+      const generated: Invoice[] = [];
+      rawOrders.forEach((o: any) => {
+        const milestones = o.financials?.milestones || [];
+        milestones.forEach((m: any, idx: number) => {
+          const isPaid = m.status === 'received' || (m.receivedPaise || 0) >= m.amountPaise;
+          generated.push({
+            invoiceNumber: `INV-${o.orderNumber || String(o._id).slice(-6)}-M${idx + 1}`,
+            orderId: o.orderNumber || String(o._id).slice(-8).toUpperCase(),
+            backendOrderId: String(o._id || o.id),
+            milestoneIndex: idx,
+            productName: o.productDescription || o.styleName || 'Apparel Production',
+            milestonePhase: m.milestone || `Milestone ${idx + 1}`,
+            issueDate: o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '01 Nov 2026',
+            dueDate: m.dueDate ? new Date(m.dueDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '15 Nov 2026',
+            amount: (m.amountPaise || 0) / 100,
+            paidAmount: (m.receivedPaise || 0) / 100,
+            remainingAmount: Math.max(0, ((m.amountPaise || 0) - (m.receivedPaise || 0)) / 100),
+            status: isPaid ? 'Paid' : 'Pending',
+            paidDate: m.receipts?.[0]?.date || undefined,
+          });
+        });
+      });
+      return generated;
+    }
+    return [];
+  }, [ordersResponse]);
 
   const totalPaid = invoices.reduce((acc, i) => acc + (i.paidAmount || 0), 0);
   const totalOutstanding = invoices.reduce((acc, i) => acc + (i.remainingAmount || 0), 0);
@@ -35,7 +62,7 @@ export const PaymentsPage: React.FC = () => {
         </div>
 
         <button
-          onClick={() => addToast('Downloading Raymond Apparel Account Statement (FY 2026-27).pdf...', 'info')}
+          onClick={() => addToast('Downloading Statement.pdf...', 'info')}
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-ivory text-charcoal border border-muted-border text-xs font-bold hover:bg-white transition-colors flex-shrink-0"
         >
           <Download size={15} />
@@ -71,11 +98,11 @@ export const PaymentsPage: React.FC = () => {
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-muted-border shadow-card">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Corporate Credit Limit</span>
+          <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Active Invoices</span>
           <div className="text-2xl font-extrabold text-charcoal mt-1">
-            ₹ 87.40 <span className="text-sm font-semibold text-muted">Lakhs</span>
+            {invoices.length}
           </div>
-          <div className="text-xs text-muted mt-1">Net 15 days credit facility</div>
+          <div className="text-xs text-muted mt-1">Contract milestones billed</div>
         </div>
       </div>
 
@@ -107,79 +134,103 @@ export const PaymentsPage: React.FC = () => {
           <p className="text-xs text-muted">GST-compliant manufacturing invoices generated per production milestone</p>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-ivory border-b border-muted-border text-[11px] font-bold uppercase tracking-wider text-charcoal">
-                <th className="py-3 px-4">Invoice #</th>
-                <th className="py-3 px-4">Order Ref</th>
-                <th className="py-3 px-4">Milestone Deliverable</th>
-                <th className="py-3 px-4">Issue Date</th>
-                <th className="py-3 px-4">Due Date</th>
-                <th className="py-3 px-4">Invoice Amount</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-muted-border/60">
-              {invoices.map((inv) => (
-                <tr key={inv.invoiceNumber} className="hover:bg-ivory/50 transition-colors">
-                  <td className="py-3.5 px-4 font-mono font-bold text-charcoal">{inv.invoiceNumber}</td>
+        {isLoading && (
+          <div className="py-12 text-center text-sm text-muted">
+            Loading commercial invoices from mill ledger...
+          </div>
+        )}
 
-                  <td className="py-3.5 px-4 font-mono font-bold text-vermilion">
-                    {inv.orderId}
-                    <div className="text-[10px] text-muted font-sans font-normal">{inv.productName}</div>
-                  </td>
+        {isError && (
+          <div className="py-8 text-center text-sm text-vermilion">
+            Failed to load commercial invoices from mill server.
+          </div>
+        )}
 
-                  <td className="py-3.5 px-4 font-medium text-charcoal">{inv.milestonePhase}</td>
+        {!isLoading && !isError && invoices.length === 0 && (
+          <div className="py-12 text-center space-y-2">
+            <FileText className="mx-auto text-muted" size={32} />
+            <div className="text-sm font-bold text-charcoal">No Commercial Invoices Found</div>
+            <p className="text-xs text-muted max-w-sm mx-auto">
+              Invoices will be automatically generated upon order submission and quotation acceptance.
+            </p>
+          </div>
+        )}
 
-                  <td className="py-3.5 px-4 text-muted">{inv.issueDate}</td>
-
-                  <td className="py-3.5 px-4 font-bold text-charcoal">
-                    <span className={inv.status === 'Pending' ? 'text-warning' : ''}>{inv.dueDate}</span>
-                  </td>
-
-                  <td className="py-3.5 px-4 font-extrabold text-charcoal">{formatCurrency(inv.amount)}</td>
-
-                  <td className="py-3.5 px-4">
-                    <span
-                      className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                        inv.status === 'Paid'
-                          ? 'bg-success-bg text-success border border-success-border'
-                          : 'bg-warning-bg text-warning border border-warning-border'
-                      }`}
-                    >
-                      {inv.status}
-                    </span>
-                  </td>
-
-                  <td className="py-3.5 px-4 text-right space-x-2">
-                    <button
-                      onClick={() => addToast(`Downloading Tax Invoice ${inv.invoiceNumber}.pdf...`, 'info')}
-                      className="px-2.5 py-1 rounded-lg border border-muted-border text-xs font-bold text-charcoal hover:bg-white inline-block"
-                      title="Download PDF"
-                    >
-                      PDF
-                    </button>
-
-                    {inv.status === 'Pending' ? (
-                      <button
-                        onClick={() => setActiveInvoiceNumber(inv.invoiceNumber)}
-                        className="px-3 py-1 rounded-lg bg-vermilion text-white text-xs font-bold shadow-sm hover:bg-vermilion-hover inline-block"
-                      >
-                        Pay Now
-                      </button>
-                    ) : (
-                      <span className="text-[11px] font-bold text-success px-2 py-1">
-                        Settled
-                      </span>
-                    )}
-                  </td>
+        {!isLoading && !isError && invoices.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-ivory border-b border-muted-border text-[11px] font-bold uppercase tracking-wider text-charcoal">
+                  <th className="py-3 px-4">Invoice #</th>
+                  <th className="py-3 px-4">Order Ref</th>
+                  <th className="py-3 px-4">Milestone Deliverable</th>
+                  <th className="py-3 px-4">Issue Date</th>
+                  <th className="py-3 px-4">Due Date</th>
+                  <th className="py-3 px-4">Invoice Amount</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-right">Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-muted-border/60">
+                {invoices.map((inv) => (
+                  <tr key={inv.invoiceNumber} className="hover:bg-ivory/50 transition-colors">
+                    <td className="py-3.5 px-4 font-mono font-bold text-charcoal">{inv.invoiceNumber}</td>
+
+                    <td className="py-3.5 px-4 font-mono font-bold text-vermilion">
+                      {inv.orderId}
+                      <div className="text-[10px] text-muted font-sans font-normal">{inv.productName}</div>
+                    </td>
+
+                    <td className="py-3.5 px-4 font-medium text-charcoal">{inv.milestonePhase}</td>
+
+                    <td className="py-3.5 px-4 text-muted">{inv.issueDate}</td>
+
+                    <td className="py-3.5 px-4 font-bold text-charcoal">
+                      <span className={inv.status === 'Pending' ? 'text-warning' : ''}>{inv.dueDate}</span>
+                    </td>
+
+                    <td className="py-3.5 px-4 font-extrabold text-charcoal">{formatCurrency(inv.amount)}</td>
+
+                    <td className="py-3.5 px-4">
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                          inv.status === 'Paid'
+                            ? 'bg-success-bg text-success border border-success-border'
+                            : 'bg-warning-bg text-warning border border-warning-border'
+                        }`}
+                      >
+                        {inv.status}
+                      </span>
+                    </td>
+
+                    <td className="py-3.5 px-4 text-right space-x-2">
+                      <button
+                        onClick={() => addToast(`Downloading Tax Invoice ${inv.invoiceNumber}.pdf...`, 'info')}
+                        className="px-2.5 py-1 rounded-lg border border-muted-border text-xs font-bold text-charcoal hover:bg-white inline-block"
+                        title="Download PDF"
+                      >
+                        PDF
+                      </button>
+
+                      {inv.status === 'Pending' ? (
+                        <button
+                          onClick={() => setActiveInvoice(inv)}
+                          className="px-3 py-1 rounded-lg bg-vermilion text-white text-xs font-bold shadow-sm hover:bg-vermilion-hover inline-block"
+                        >
+                          Pay Now
+                        </button>
+                      ) : (
+                        <span className="text-[11px] font-bold text-success px-2 py-1">
+                          Settled
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Disbursement History Table */}
@@ -225,14 +276,17 @@ export const PaymentsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Simulated Razorpay Checkout Modal */}
-      {activeInvoiceNumber && (
+      {/* Razorpay Checkout Modal */}
+      {activeInvoice && (
         <RazorpayModal
-          invoiceNumber={activeInvoiceNumber}
-          onClose={() => setActiveInvoiceNumber(null)}
+          invoiceNumber={activeInvoice.invoiceNumber}
+          invoiceData={activeInvoice}
+          onClose={() => {
+            setActiveInvoice(null);
+            refetch();
+          }}
         />
       )}
     </div>
   );
 };
-

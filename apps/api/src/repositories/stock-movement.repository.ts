@@ -45,11 +45,21 @@ export class StockMovementRepository extends BaseRepository<IStockMovement> {
   async findMovementsPaginated(
     tenantId: string,
     pagination: PaginationQuery,
-    materialId?: string
+    filterOrMaterialId?: string | { materialId?: string; type?: string; orderId?: string }
   ): Promise<PaginatedResult<IStockMovement>> {
     const filter: Record<string, any> = {};
-    if (materialId) {
-      filter.materialId = new Types.ObjectId(materialId);
+    if (typeof filterOrMaterialId === "string") {
+      filter.materialId = new Types.ObjectId(filterOrMaterialId);
+    } else if (filterOrMaterialId) {
+      if (filterOrMaterialId.materialId) {
+        filter.materialId = new Types.ObjectId(filterOrMaterialId.materialId);
+      }
+      if (filterOrMaterialId.type) {
+        filter.type = filterOrMaterialId.type;
+      }
+      if (filterOrMaterialId.orderId) {
+        filter.orderId = new Types.ObjectId(filterOrMaterialId.orderId);
+      }
     }
     return this.findPaginated(tenantId, filter, pagination);
   }

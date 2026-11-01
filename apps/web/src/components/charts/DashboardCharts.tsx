@@ -275,8 +275,7 @@ export const DailyProductionAreaChart: React.FC = () => {
 export const OrderStatusDonutChart: React.FC<{ orders: Order[] }> = ({ orders }) => {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
-  // Group orders into real lifecycle orders matching mockups
-  const segments = [
+  const fallbackSegments = [
     {
       id: 'tx1024',
       label: 'Stitching / In-Prod',
@@ -329,7 +328,30 @@ export const OrderStatusDonutChart: React.FC<{ orders: Order[] }> = ({ orders })
     }
   ];
 
-  const totalMeters = 16000;
+  const colors = ['#6366f1', '#d97706', '#16a34a', '#2563eb', '#92400e', '#0d9488', '#ea580c'];
+
+  const segments = React.useMemo(() => {
+    if (!orders || orders.length === 0) return fallbackSegments;
+    const total = orders.reduce((sum, o) => sum + (o.quantityMeters || 1000), 0);
+    if (total === 0) return fallbackSegments;
+
+    return orders.slice(0, 5).map((o, idx) => {
+      const metres = o.quantityMeters || 1000;
+      const pct = Math.round((metres / total) * 1000) / 10;
+      return {
+        id: o.id || String(idx),
+        label: `${o.currentPhase || o.status}`,
+        orderCode: o.id || `TX-${1020 + idx}`,
+        client: o.clientName || 'Client Entity',
+        meters: metres,
+        color: colors[idx % colors.length],
+        percentage: pct,
+        statusPill: o.status || 'Active'
+      };
+    });
+  }, [orders]);
+
+  const totalMeters = segments.reduce((acc, s) => acc + s.meters, 0);
   const radius = 55;
   const circumference = 2 * Math.PI * radius; // ~345.57
 

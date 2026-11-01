@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -20,9 +20,12 @@ import {
   Plus,
   Upload,
   SlidersHorizontal,
-  Minus
+  Minus,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import type { Order } from '../../types';
+import { useGetOrdersQuery, useApproveQuotationMutation } from '../../store/api/ordersApi';
 
 // =========================================================================
 // DATA MODELS & TYPES
@@ -265,6 +268,11 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
   onApproveQuotation,
   onRejectQuotation
 }) => {
+  // Real RTK Query hooks for live quotation approval
+  const { data: ordersResponse, refetch: refetchOrders } = useGetOrdersQuery(undefined);
+  const [approveQuotationMutation, { isLoading: isApprovingQuotation }] = useApproveQuotationMutation();
+  const [approvalError, setApprovalError] = useState<string | null>(null);
+
   // Active selected client state (Defaults to 'CL-001' Fashion House)
   const [selectedClientId] = useState<string>('CL-001');
 
@@ -1213,6 +1221,28 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
   }, [quotations, selectedClient.id]);
 
   // Filtered Quotations for table display (based on tab and search query)
+  useEffect(() => {
+    setApprovalError(null);
+  }, [activeQuotationId]);
+
+  useEffect(() => {
+    if (ordersResponse && Array.isArray(ordersResponse.data)) {
+      setQuotations((prev) =>
+        prev.map((q) => {
+          const liveOrder = ordersResponse.data.find(
+            (o: any) => String(o._id || o.id) === q.orderId || o.orderNumber === q.orderId
+          );
+          if (liveOrder && (liveOrder.quotation?.status === 'approved' || liveOrder.status === 'quotation_approved')) {
+            if (q.status !== 'approved' && q.status !== 'client_accepted' && q.status !== 'finalized') {
+              return { ...q, status: 'approved' };
+            }
+          }
+          return q;
+        })
+      );
+    }
+  }, [ordersResponse]);
+
   const filteredQuotations = useMemo(() => {
     return quotations.filter((q) => {
       if (quotationTab === 'in_review' && q.status !== 'pending_admin_approval') return false;
@@ -1276,31 +1306,90 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
   // =========================================================================
   // WORKFLOW ACTION HANDLERS
   // =========================================================================
-  const handleAdminApprove = (quoteId: string) => {
-    const timestamp = new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    setQuotations((prev) =>
-      prev.map((q) => {
-        if (q.id === quoteId) {
-          const fin = calculateQuotationFinancials(q);
-          return {
-            ...q,
-            status: 'approved',
-            approvedBy: 'John Doe (Managing Director)',
-            approvedAt: timestamp,
-            history: [
-              ...q.history,
-              { id: `hist_${Date.now()}`, timestamp, actor: 'John Doe (Managing Director)', action: 'APPROVED_BY_ADMIN', version: q.version, comments: `Admin approved with ${fin.marginPercent}% margin.` }
-            ]
-          };
-        }
-        return q;
-      })
-    );
+  const handleAdminApprove = async (quoteId: string) => {
+    if (isApprovingQuotation) return;
+    setApprovalError(null);
+
     const target = quotations.find((q) => q.id === quoteId);
-    if (target) {
-      onApproveQuotation(target.orderId, calculateQuotationFinancials(target).marginPercent);
+    if (!target) return;
+
+    const fin = calculateQuotationFinancials(target);
+    const timestamp = new Date().toLocaleString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    // Resolve real backend order ID
+    let orderIdToApprove = target.orderId;
+    if (orderIdToApprove.length !== 24 && ordersResponse?.data) {
+      const matched = ordersResponse.data.find(
+        (o: any) => o.orderNumber === target.orderId || String(o._id || o.id) === target.orderId
+      );
+      if (matched) {
+        orderIdToApprove = String(matched._id || matched.id);
+      }
     }
-    showToast(`Quotation ${quoteId} APPROVED by Admin. Client dispatch unlocked!`);
+
+    const isLiveBackendOrder = orderIdToApprove && orderIdToApprove.length === 24;
+
+    try {
+      if (isLiveBackendOrder) {
+        await approveQuotationMutation({
+          id: orderIdToApprove,
+          body: {
+            action: 'approve',
+            editedMarginPercent: fin.marginPercent,
+            notes: `Admin approved quotation with ${fin.marginPercent}% margin.`,
+          },
+        }).unwrap();
+      }
+
+      // ONLY on success update local UI state!
+      setQuotations((prev) =>
+        prev.map((q) => {
+          if (q.id === quoteId) {
+            return {
+              ...q,
+              status: 'approved',
+              approvedBy: 'John Doe (Managing Director)',
+              approvedAt: timestamp,
+              history: [
+                ...q.history,
+                {
+                  id: `hist_${Date.now()}`,
+                  timestamp,
+                  actor: 'John Doe (Managing Director)',
+                  action: 'APPROVED_BY_ADMIN',
+                  version: q.version,
+                  comments: `Admin approved with ${fin.marginPercent}% margin.`
+                }
+              ]
+            };
+          }
+          return q;
+        })
+      );
+
+      if (onApproveQuotation) {
+        onApproveQuotation(target.orderId, fin.marginPercent);
+      }
+
+      showToast(`Quotation ${quoteId} APPROVED by Admin. Client dispatch unlocked!`);
+      setApprovalError(null);
+
+      if (isLiveBackendOrder) {
+        refetchOrders();
+      }
+    } catch (err: any) {
+      console.error('Quotation approval failed on server:', err);
+      const errMsg =
+        err?.data?.message || err?.error || err?.message || 'Failed to approve quotation on server. Status was not updated.';
+      setApprovalError(errMsg);
+      showToast(`Error: ${errMsg}`);
+    }
   };
 
   const handleSendToClient = (quoteId: string) => {
@@ -2480,12 +2569,53 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
                   Request Revision
                 </button>
 
+                {approvalError && (
+                  <div
+                    style={{
+                      background: '#fef2f2',
+                      border: '1px solid #fecaca',
+                      borderRadius: 12,
+                      padding: '6px 12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      color: '#b91c1c',
+                      fontSize: 11,
+                      marginRight: 8,
+                    }}
+                  >
+                    <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                    <span>{approvalError}</span>
+                  </div>
+                )}
+
                 {activeQuotation.status !== 'approved' && activeQuotation.status !== 'client_accepted' && activeQuotation.status !== 'finalized' && (
                   <button
                     onClick={() => handleAdminApprove(activeQuotation.id)}
-                    style={{ background: '#79B4B7', color: '#ffffff', border: 'none', borderRadius: 9999, padding: '6px 16px', fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}
+                    disabled={isApprovingQuotation}
+                    style={{
+                      background: isApprovingQuotation ? '#94a3b8' : '#79B4B7',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: 9999,
+                      padding: '6px 16px',
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      cursor: isApprovingQuotation ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      opacity: isApprovingQuotation ? 0.7 : 1,
+                    }}
                   >
-                    Approve Quotation
+                    {isApprovingQuotation ? (
+                      <>
+                        <Loader2 size={12} className="animate-spin" />
+                        <span>Approving...</span>
+                      </>
+                    ) : (
+                      'Approve Quotation'
+                    )}
                   </button>
                 )}
 

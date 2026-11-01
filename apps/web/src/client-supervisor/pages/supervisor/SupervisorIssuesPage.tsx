@@ -1,37 +1,112 @@
-import React, { useState } from 'react';
-import { AlertTriangle, PlusCircle, CheckCircle2, Clock, Wrench, X } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { AlertTriangle, PlusCircle, CheckCircle2, Clock, Wrench, X, Loader2, RefreshCw } from 'lucide-react';
 import { useSupervisor } from '../../context/SupervisorContext';
 import { useApp } from '../../context/AppContext';
+import { useGetMaintenanceTicketsQuery, useCreateMaintenanceTicketMutation } from '../../../store/api/productionApi';
+import { useGetMachinesQuery } from '../../../store/api/catalogApi';
+import type { IssueTicket } from '../../types/supervisor';
 
 export const SupervisorIssuesPage: React.FC = () => {
-  const { issues, reportIssue, orders, machines } = useSupervisor();
+  const { issues: mockIssues, reportIssue, orders, machines: mockMachines } = useSupervisor();
   const { addToast } = useApp();
+
+  const { data: ticketsRes, isLoading: isLoadingTickets, isError: isTicketsError, error: ticketsError, refetch: refetchTickets } = useGetMaintenanceTicketsQuery(undefined);
+  const { data: machinesRes } = useGetMachinesQuery(undefined);
+  const [createMaintenanceTicket, { isLoading: isSubmittingTicket }] = useCreateMaintenanceTicketMutation();
+
+  const availableMachines = useMemo(() => {
+    const rawList = Array.isArray(machinesRes?.data) ? machinesRes.data : [];
+    if (rawList.length > 0) {
+      return rawList.map((m: any) => ({
+        id: String(m._id || m.id),
+        code: m.machineCode || m.id,
+        name: m.machineName || m.name || 'Textile Machine',
+      }));
+    }
+    return mockMachines.map((m) => ({ id: m.id, code: m.id, name: m.name }));
+  }, [machinesRes, mockMachines]);
+
+  const liveIssues: IssueTicket[] = useMemo(() => {
+    const rawList = ticketsRes?.data || [];
+    if (!Array.isArray(rawList)) return [];
+    return rawList.map((t: any) => {
+      const machineObj = typeof t.machineId === 'object' ? t.machineId : null;
+      const machineCode = machineObj?.machineCode || (typeof t.machineId === 'string' ? t.machineId : 'Machine');
+      const createdDate = t.createdAt ? new Date(t.createdAt) : new Date();
+
+      let statusLabel: 'Open' | 'Technician Assigned' | 'Resolved' = 'Open';
+      if (t.status === 'assigned') statusLabel = 'Technician Assigned';
+      else if (t.status === 'resolved') statusLabel = 'Resolved';
+
+      return {
+        id: String(t._id || t.id || ''),
+        date: createdDate.toISOString().split('T')[0],
+        time: createdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        category: 'Machine Breakdown',
+        relatedOrder: 'Floor Station',
+        machineId: machineCode,
+        severity: 'High' as const,
+        description: t.issue || 'Breakdown reported',
+        impact: t.notes || 'Maintenance triage initiated',
+        status: statusLabel,
+        adminResponse: t.technicianName
+          ? `Assigned to: ${t.technicianName}`
+          : t.status === 'resolved'
+          ? 'Issue resolved & verified'
+          : 'Maintenance triage initiated.',
+      };
+    });
+  }, [ticketsRes]);
+
+  const displayedIssues = liveIssues.length > 0 || !isLoadingTickets ? liveIssues : mockIssues;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [category, setCategory] = useState('Machine Breakdown');
   const [relatedOrder, setRelatedOrder] = useState(orders[0]?.id || 'ORD-8092');
-  const [machineId, setMachineId] = useState(machines[0]?.id || 'LOOM-A01');
+  const [machineId, setMachineId] = useState(availableMachines[0]?.id || 'LOOM-A01');
   const [severity, setSeverity] = useState<'Critical' | 'High' | 'Medium' | 'Low'>('High');
   const [description, setDescription] = useState('');
   const [impact, setImpact] = useState('');
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!description) return;
+    if (!description || isSubmittingTicket) return;
+    setSubmitError(null);
 
-    reportIssue({
-      category,
-      relatedOrder,
-      machineId,
-      severity,
-      description,
-      impact,
-    });
+    // Resolve real backend machine ID
+    const rawList = Array.isArray(machinesRes?.data) ? machinesRes.data : [];
+    const matched = rawList.find(
+      (m: any) => String(m._id) === machineId || m.id === machineId || m.machineCode === machineId
+    );
+    const targetMachineId = matched ? String(matched._id || matched.id) : machineId;
 
-    addToast(`Issue reported for ${machineId}. Maintenance engineer notified.`, 'success');
-    setDescription('');
-    setImpact('');
-    setIsModalOpen(false);
+    try {
+      await createMaintenanceTicket({
+        machineId: targetMachineId,
+        issue: `${category}: ${description}`,
+        notes: `Severity: ${severity}${impact ? ` | Impact: ${impact}` : ''}`,
+      }).unwrap();
+
+      // Also update local mock for offline sync
+      reportIssue({
+        category,
+        relatedOrder,
+        machineId: matched?.machineCode || machineId,
+        severity,
+        description,
+        impact,
+      });
+
+      addToast(`Breakdown ticket submitted for machine. Maintenance engineer notified.`, 'success');
+      setDescription('');
+      setImpact('');
+      setIsModalOpen(false);
+      refetchTickets();
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.message || 'Failed to submit maintenance ticket';
+      setSubmitError(errMsg);
+    }
   };
 
   return (
@@ -47,18 +122,51 @@ export const SupervisorIssuesPage: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#E65338] hover:bg-[#D24227] shadow-sm transition-all"
-        >
-          <PlusCircle size={15} />
-          <span>Report New Floor Issue</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => refetchTickets()}
+            disabled={isLoadingTickets}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-[#252622] bg-[#FBF6F0] border border-[#EAE2D9] hover:bg-white transition-all disabled:opacity-50"
+            title="Refresh tickets"
+          >
+            <RefreshCw size={13} className={isLoadingTickets ? 'animate-spin' : ''} />
+            <span>Refresh</span>
+          </button>
+          <button
+            onClick={() => {
+              setSubmitError(null);
+              setIsModalOpen(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-white bg-[#E65338] hover:bg-[#D24227] shadow-sm transition-all"
+          >
+            <PlusCircle size={15} />
+            <span>Report New Floor Issue</span>
+          </button>
+        </div>
       </div>
+
+      {/* Loading state */}
+      {isLoadingTickets && displayedIssues.length === 0 && (
+        <div className="p-8 text-center bg-white rounded-2xl border border-[#EAE2D9]">
+          <Loader2 className="animate-spin mx-auto text-[#E65338] mb-2" size={24} />
+          <p className="text-xs text-gray-500">Loading maintenance tickets...</p>
+        </div>
+      )}
+
+      {/* Error state */}
+      {isTicketsError && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={15} />
+            <span>Failed to load live maintenance tickets from backend. Showing local cache.</span>
+          </div>
+          <button onClick={() => refetchTickets()} className="font-bold underline text-xs">Retry</button>
+        </div>
+      )}
 
       {/* Issues List */}
       <div className="grid grid-cols-1 gap-4">
-        {issues.map((iss) => {
+        {displayedIssues.map((iss) => {
           const isCritical = iss.severity === 'Critical' || iss.severity === 'High';
           return (
             <div
@@ -122,6 +230,14 @@ export const SupervisorIssuesPage: React.FC = () => {
             </div>
           );
         })}
+
+        {!isLoadingTickets && displayedIssues.length === 0 && (
+          <div className="p-12 text-center bg-white rounded-2xl border border-dashed border-[#EAE2D9]">
+            <CheckCircle2 className="mx-auto text-green-600 mb-2" size={32} />
+            <p className="text-sm font-bold text-[#252622]">No Active Breakdown Issues</p>
+            <p className="text-xs text-gray-500 mt-1">All machinery is currently operating normally.</p>
+          </div>
+        )}
       </div>
 
       {/* Report Issue Modal */}
@@ -129,8 +245,9 @@ export const SupervisorIssuesPage: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#252622]/60 backdrop-blur-sm animate-in fade-in">
           <div className="bg-white w-full max-w-lg rounded-2xl border border-[#EAE2D9] shadow-2xl p-6 relative">
             <button
-              onClick={() => setIsModalOpen(false)}
-              className="absolute top-4 right-4 p-1.5 rounded-lg text-gray-400 hover:text-[#252622]"
+              onClick={() => !isSubmittingTicket && setIsModalOpen(false)}
+              disabled={isSubmittingTicket}
+              className="absolute top-4 right-4 p-1.5 rounded-lg text-gray-400 hover:text-[#252622] disabled:opacity-50"
             >
               <X size={18} />
             </button>
@@ -140,10 +257,17 @@ export const SupervisorIssuesPage: React.FC = () => {
                 <AlertTriangle size={20} />
               </div>
               <div>
-                <h3 className="text-base font-extrabold text-[#252622]">Report Floor Issue</h3>
-                <p className="text-xs text-gray-500">Log loom stoppage, shortage or quality defect</p>
+                <h3 className="text-base font-extrabold text-[#252622]">Report Floor Issue / Breakdown</h3>
+                <p className="text-xs text-gray-500">Log loom stoppage, breakdown or defect to maintenance</p>
               </div>
             </div>
+
+            {submitError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs flex items-center justify-between">
+                <span>{submitError}</span>
+                <button type="button" onClick={() => setSubmitError(null)} className="font-bold ml-2">&times;</button>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-3">
@@ -183,8 +307,8 @@ export const SupervisorIssuesPage: React.FC = () => {
                     onChange={(e) => setMachineId(e.target.value)}
                     className="w-full p-2 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0]"
                   >
-                    {machines.map((m) => (
-                      <option key={m.id} value={m.id}>{m.id} ({m.name})</option>
+                    {availableMachines.map((m: any) => (
+                      <option key={m.id} value={m.id}>{m.code} ({m.name})</option>
                     ))}
                   </select>
                 </div>
@@ -228,16 +352,25 @@ export const SupervisorIssuesPage: React.FC = () => {
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#EAE2D9]">
                 <button
                   type="button"
+                  disabled={isSubmittingTicket}
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 hover:bg-[#FBF6F0]"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 hover:bg-[#FBF6F0] disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-[#E65338] hover:bg-[#D24227] shadow-sm"
+                  disabled={isSubmittingTicket}
+                  className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-[#E65338] hover:bg-[#D24227] disabled:opacity-50 shadow-sm flex items-center gap-1.5"
                 >
-                  Submit Issue Ticket
+                  {isSubmittingTicket ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" />
+                      <span>Submitting...</span>
+                    </>
+                  ) : (
+                    <span>Submit Issue Ticket</span>
+                  )}
                 </button>
               </div>
             </form>
@@ -247,4 +380,3 @@ export const SupervisorIssuesPage: React.FC = () => {
     </div>
   );
 };
-

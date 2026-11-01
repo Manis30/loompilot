@@ -7,6 +7,7 @@ import {
   UserModel,
   ClientModel,
   SettingsModel,
+  AuditLogModel,
 } from "../../src/models/index.js";
 import {
   createTestUser,
@@ -28,6 +29,9 @@ describe("Quotation Workflow & AI Agent Integration Test Suite", () => {
   let adminUserId: string;
   let clientToken: string;
   let clientId: string;
+  let supervisorToken: string;
+  const otherTenantId = `tenant_quote_other_${Date.now()}`;
+  let otherTenantAdminToken: string;
   let orderService: OrderService;
 
   beforeAll(async () => {
@@ -57,13 +61,31 @@ describe("Quotation Workflow & AI Agent Integration Test Suite", () => {
       tenantId,
       clientId,
     });
+
+    const { user: supUser } = await createTestUser({ tenantId, role: "supervisor" });
+    supervisorToken = generateTestAuthHeader({
+      subjectId: String(supUser._id),
+      realm: "user",
+      tenantId,
+      role: "supervisor",
+    });
+
+    const { user: otherAdminUser } = await createTestUser({ tenantId: otherTenantId, role: "admin" });
+    otherTenantAdminToken = generateTestAuthHeader({
+      subjectId: String(otherAdminUser._id),
+      realm: "user",
+      tenantId: otherTenantId,
+      role: "admin",
+    });
   });
 
   afterAll(async () => {
-    await OrderModel.deleteMany({ tenantId });
-    await UserModel.deleteMany({ tenantId });
-    await ClientModel.deleteMany({ tenantId });
-    await SettingsModel.deleteMany({ tenantId });
+    const tenants = { $in: [tenantId, otherTenantId] };
+    await OrderModel.deleteMany({ tenantId: tenants });
+    await UserModel.deleteMany({ tenantId: tenants });
+    await ClientModel.deleteMany({ tenantId: tenants });
+    await SettingsModel.deleteMany({ tenantId: tenants });
+    await AuditLogModel.deleteMany({ tenantId: tenants });
   });
 
   describe("Quotation Approval & Margin Controls", () => {
@@ -211,6 +233,166 @@ describe("Quotation Workflow & AI Agent Integration Test Suite", () => {
       expect(updated?.quotation?.revisions?.length).toBeGreaterThan(0);
       // Original quotation price stands untouched until client decision
       expect(updated?.quotation?.totalPaise).toBe(30000000);
+    });
+    it("persists QUOTATION_APPROVED audit log on successful quotation approval", async () => {
+      const order = await OrderModel.create({
+        tenantId,
+        orderNumber: `ORD-AUDIT-${Date.now()}`,
+        clientId: new Types.ObjectId(clientId),
+        productDescription: "Audit Cotton Polos",
+        quantity: 500,
+        deliveryDeadline: "2026-12-01",
+        spec: { fabric: "cotton", gsm: 180 },
+        status: "quotation_pending_approval",
+        quotation: {
+          unitPricePaise: 40000,
+          totalPaise: 20000000,
+          etaDate: "2026-12-01",
+          status: "pending_approval",
+        },
+        version: 1,
+      });
+
+      const res = await request(app)
+        .post(`/api/v1/orders/${order._id}/quotation/approve`)
+        .set("Authorization", adminToken)
+        .send({
+          action: "approve",
+          notes: "Approved for audit logging test",
+        });
+
+      expect(res.status).toBe(200);
+
+      const audit = await AuditLogModel.findOne({
+        tenantId,
+        action: "QUOTATION_APPROVED",
+        "entity.id": String(order._id),
+      }).lean();
+      expect(audit).toBeDefined();
+    });
+
+    it("rejects approval for non-existent order with 404 Not Found", async () => {
+      const fakeId = new Types.ObjectId().toString();
+      const res = await request(app)
+        .post(`/api/v1/orders/${fakeId}/quotation/approve`)
+        .set("Authorization", adminToken)
+        .send({ action: "approve" });
+
+      expect(res.status).toBe(404);
+    });
+
+    it("rejects approval when order status is not quotation_pending_approval with 400 Bad Request", async () => {
+      const order = await OrderModel.create({
+        tenantId,
+        orderNumber: `ORD-INVALID-STATUS-${Date.now()}`,
+        clientId: new Types.ObjectId(clientId),
+        productDescription: "Cardigan",
+        quantity: 300,
+        deliveryDeadline: "2026-12-01",
+        spec: { fabric: "cotton", gsm: 180 },
+        status: "in_production", // Invalid status for quotation approval
+        quotation: {
+          unitPricePaise: 50000,
+          totalPaise: 15000000,
+          etaDate: "2026-12-01",
+          status: "pending_approval",
+        },
+        version: 1,
+      });
+
+      const res = await request(app)
+        .post(`/api/v1/orders/${order._id}/quotation/approve`)
+        .set("Authorization", adminToken)
+        .send({ action: "approve" });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error?.message || res.body.message).toMatch(/Cannot approve quotation/i);
+    });
+
+    it("enforces tenant isolation: rejects quotation approval by another tenant with 404", async () => {
+      const order = await OrderModel.create({
+        tenantId,
+        orderNumber: `ORD-TENANT-ISO-${Date.now()}`,
+        clientId: new Types.ObjectId(clientId),
+        productDescription: "Denim Pants",
+        quantity: 200,
+        deliveryDeadline: "2026-12-01",
+        spec: { fabric: "cotton", gsm: 240 },
+        status: "quotation_pending_approval",
+        quotation: {
+          unitPricePaise: 60000,
+          totalPaise: 12000000,
+          etaDate: "2026-12-01",
+          status: "pending_approval",
+        },
+        version: 1,
+      });
+
+      // Request with other tenant admin
+      const res = await request(app)
+        .post(`/api/v1/orders/${order._id}/quotation/approve`)
+        .set("Authorization", otherTenantAdminToken)
+        .send({ action: "approve" });
+
+      expect(res.status).toBe(404);
+
+      // Verify quotation status did not change
+      const unchanged = await OrderModel.findById(order._id).lean();
+      expect(unchanged?.quotation?.status).toBe("pending_approval");
+    });
+
+    it("enforces RBAC: rejects quotation approval by supervisor role with 403 Forbidden", async () => {
+      const order = await OrderModel.create({
+        tenantId,
+        orderNumber: `ORD-RBAC-SUP-${Date.now()}`,
+        clientId: new Types.ObjectId(clientId),
+        productDescription: "Tees",
+        quantity: 100,
+        deliveryDeadline: "2026-12-01",
+        spec: { fabric: "cotton", gsm: 180 },
+        status: "quotation_pending_approval",
+        quotation: {
+          unitPricePaise: 30000,
+          totalPaise: 3000000,
+          etaDate: "2026-12-01",
+          status: "pending_approval",
+        },
+        version: 1,
+      });
+
+      const res = await request(app)
+        .post(`/api/v1/orders/${order._id}/quotation/approve`)
+        .set("Authorization", supervisorToken)
+        .send({ action: "approve" });
+
+      expect(res.status).toBe(403);
+    });
+
+    it("enforces RBAC: rejects quotation approval by client realm with 403 Forbidden", async () => {
+      const order = await OrderModel.create({
+        tenantId,
+        orderNumber: `ORD-RBAC-CLI-${Date.now()}`,
+        clientId: new Types.ObjectId(clientId),
+        productDescription: "Polo",
+        quantity: 100,
+        deliveryDeadline: "2026-12-01",
+        spec: { fabric: "cotton", gsm: 180 },
+        status: "quotation_pending_approval",
+        quotation: {
+          unitPricePaise: 30000,
+          totalPaise: 3000000,
+          etaDate: "2026-12-01",
+          status: "pending_approval",
+        },
+        version: 1,
+      });
+
+      const res = await request(app)
+        .post(`/api/v1/orders/${order._id}/quotation/approve`)
+        .set("Authorization", clientToken)
+        .send({ action: "approve" });
+
+      expect(res.status).toBe(403);
     });
   });
 

@@ -13,6 +13,7 @@ import {
   OrderUpdateSchema,
   OrderDecisionSchema,
   OrderApproveQuotationSchema,
+  OrderStageAdvanceSchema,
   OrderAssignSupervisorsSchema,
   OrderHoldSchema,
   OrderCancelSchema,
@@ -20,12 +21,22 @@ import {
   OrderManualReceiptSchema,
   OrderReverseReceiptSchema,
   OrderDeliverySchema,
+  PurchaseDecisionCreateSchema,
+  PurchaseDecisionUpdateSchema,
+  DateRangeQuerySchema,
 } from "../validators/index.js";
 
 export const orderRouter: Router = Router();
 const controller = new OrderController();
 
 orderRouter.use(authenticate);
+
+orderRouter.get(
+  "/summary",
+  authorize("GET /api/v1/orders/summary"),
+  validateQuery(DateRangeQuerySchema),
+  controller.getOrderSummary
+);
 
 orderRouter.get(
   "/",
@@ -79,6 +90,14 @@ orderRouter.post(
   authorize("POST /api/v1/orders/:id/quotation/send"),
   validateParams(IdParamSchema),
   controller.sendQuotation
+);
+
+orderRouter.patch(
+  "/:id/stage",
+  authorize("PATCH /api/v1/orders/:id/stage"),
+  validateParams(IdParamSchema),
+  validateBody(OrderStageAdvanceSchema),
+  controller.advanceStage
 );
 
 // Phase D: Handover, Controls, Payments & Deliveries
@@ -167,4 +186,35 @@ orderRouter.post(
   validateParams(IdParamSchema),
   validateBody(OrderDeliverySchema),
   controller.recordDelivery
+);
+
+orderRouter.post(
+  "/:id/monitoring/run",
+  idempotencyMiddleware,
+  authorize("POST /api/v1/orders/:id/monitoring/run"),
+  validateParams(IdParamSchema),
+  controller.runMonitoring
+);
+
+orderRouter.post(
+  "/:id/purchase-decisions",
+  idempotencyMiddleware,
+  authorize("POST /api/v1/orders/:id/purchase-decisions"),
+  validateParams(IdParamSchema),
+  validateBody(PurchaseDecisionCreateSchema),
+  controller.createPurchaseDecision
+);
+
+orderRouter.patch(
+  "/:id/purchase-decisions/:decisionId",
+  authorize("PATCH /api/v1/orders/:id/purchase-decisions/:decisionId"),
+  validateBody(PurchaseDecisionUpdateSchema),
+  controller.updatePurchaseDecision
+);
+
+orderRouter.get(
+  "/:id/material-readiness",
+  authorize("GET /api/v1/orders/:id/material-readiness"),
+  validateParams(IdParamSchema),
+  controller.getMaterialReadiness
 );

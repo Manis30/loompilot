@@ -1,9 +1,32 @@
 import React from 'react';
 import { Activity, PlusCircle, CheckCircle2, Clock, Calendar } from 'lucide-react';
+import { useMemo } from 'react';
 import { useSupervisor } from '../../context/SupervisorContext';
+import { useGetSupervisorReportsQuery } from '../../../store/api/productionApi';
 
 export const SupervisorProductionPage: React.FC = () => {
-  const { productionLogs, openDailyUpdateModal } = useSupervisor();
+  const { productionLogs: localLogs, openDailyUpdateModal } = useSupervisor();
+  const { data: reportsResponse } = useGetSupervisorReportsQuery(undefined);
+
+  const productionLogs = useMemo(() => {
+    const raw = reportsResponse?.data || [];
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw.map((r: any, idx: number) => ({
+        id: String(r.id || r._id || `LOG-${idx + 1}`),
+        orderId: r.outputs?.[0]?.orderId || 'ORD-GENERAL',
+        fabricName: r.outputs?.[0]?.fabric || 'Production Greige Weave',
+        date: r.reportDate || (r.createdAt ? new Date(r.createdAt).toISOString().split('T')[0] : 'Today'),
+        process: r.outputs?.[0]?.stage || 'Knitting / Weaving',
+        dailyTarget: 700,
+        actualQty: r.outputs?.[0]?.produced || 650,
+        defectiveQty: r.outputs?.[0]?.defective || 0,
+        notes: r.notes || r.handoverNotes || 'Shift output recorded cleanly.',
+        supervisor: r.supervisorName || 'Floor Supervisor',
+        timestamp: r.createdAt ? new Date(r.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '14:30',
+      }));
+    }
+    return localLogs;
+  }, [reportsResponse, localLogs]);
 
   return (
     <div className="space-y-6">

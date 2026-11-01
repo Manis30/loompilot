@@ -47,8 +47,11 @@ const envSchema = z.object({
   SMTP_PASS: z.string().default(""),
   MAIL_FROM: z.string().default("no-reply@loompilot.local"),
 
-  FILE_STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
+  FILE_STORAGE_DRIVER: z.enum(["local", "s3", "cloudinary"]).default("local"),
   FILE_STORAGE_PATH: z.string().default("./uploads"),
+  CLOUDINARY_CLOUD_NAME: z.string().default(""),
+  CLOUDINARY_API_KEY: z.string().default(""),
+  CLOUDINARY_API_SECRET: z.string().default(""),
 
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900000), // 15 minutes
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(1000),
@@ -109,8 +112,11 @@ export function validateEnv(raw: Record<string, string | undefined> = process.en
     SMTP_PASS: raw["SMTP_PASS"] ?? "",
     MAIL_FROM: raw["MAIL_FROM"] ?? raw["SMTP_FROM"] ?? "no-reply@loompilot.local",
 
-    FILE_STORAGE_DRIVER: raw["FILE_STORAGE_DRIVER"] ?? "local",
+    FILE_STORAGE_DRIVER: raw["FILE_STORAGE_PROVIDER"] ?? raw["FILE_STORAGE_DRIVER"] ?? "local",
     FILE_STORAGE_PATH: raw["FILE_STORAGE_PATH"] ?? "./uploads",
+    CLOUDINARY_CLOUD_NAME: raw["CLOUDINARY_CLOUD_NAME"] ?? "",
+    CLOUDINARY_API_KEY: raw["CLOUDINARY_API_KEY"] ?? "",
+    CLOUDINARY_API_SECRET: raw["CLOUDINARY_API_SECRET"] ?? "",
 
     RATE_LIMIT_WINDOW_MS: raw["RATE_LIMIT_WINDOW_MS"] ?? 900000,
     RATE_LIMIT_MAX: raw["RATE_LIMIT_MAX"] ?? 1000,

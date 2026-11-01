@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Boxes,
   AlertTriangle,
@@ -17,9 +17,14 @@ import {
   MoreVertical,
   ArrowUp,
   ArrowDown,
-  Filter
+  Filter,
+  RefreshCw,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import type { MaterialRequirement, Order } from '../../types';
+import { useGetMaterialsQuery } from '../../store/api/catalogApi';
+import { useRecordGoodsReceiptMutation, useCreatePurchaseDecisionMutation, useUpdatePurchaseDecisionMutation, useGetPurchaseDecisionsQuery } from '../../store/api/stockApi';
 
 // =========================================================================
 // DATA MODELS & TYPES
@@ -39,6 +44,7 @@ export interface InventoryMaterial {
   reorderPoint: number;        // Minimum buffer before shortage warning
   storageLocation: string;     // Mill warehouse bin/aisle
   marketPriceChangePercent?: number; // e.g. +14.2% from Market Price Agent
+  preferredSupplierId?: string;
 }
 
 export interface OrderAllocationItem {
@@ -193,121 +199,46 @@ export interface ProcurementAlert {
 // INITIAL MOCK MASTER DATA
 // =========================================================================
 
-const INITIAL_INVENTORY_MATERIALS: InventoryMaterial[] = [
-  {
-    id: 'mat_cotton_40s',
-    name: '40s Combed Cotton Yarn',
-    category: 'yarn',
-    unit: 'kg',
-    physicalStock: 2000,
-    reservedStock: 1500, // 800 kg (LP-901) + 700 kg (LP-902). Free = 500 kg. Shortage = 400 kg for LP-903!
-    unitCost: 240,
-    reorderPoint: 600,
-    storageLocation: 'Warehouse Bay Y-02, Rack 4',
-    marketPriceChangePercent: 4.5
-  },
-  {
-    id: 'mat_cotton_fabric',
-    name: 'Cotton Poplin Fabric (58" / 185 GSM)',
-    category: 'fabric',
-    unit: 'm',
-    physicalStock: 1400,
-    reservedStock: 1400, // All reserved for TX-1024. Free = 0 m! Shortage = 600 m
-    unitCost: 120,
-    reorderPoint: 1000,
-    storageLocation: 'Warehouse Bay F-01, Rolls 12-24',
-    marketPriceChangePercent: 14.2
-  },
-  {
-    id: 'mat_dye_reactive',
-    name: 'Reactive Dyes (Navy / Royal Blue)',
-    category: 'dye',
-    unit: 'kg',
-    physicalStock: 300,
-    reservedStock: 300, // Free = 0. Shortage = 50 kg for TX-1025
-    unitCost: 180,
-    reorderPoint: 150,
-    storageLocation: 'Chemical Storage Shed C-03',
-    marketPriceChangePercent: 8.4
-  },
-  {
-    id: 'mat_buttons_horn',
-    name: 'Natural Horn Buttons (24L / 4-Hole)',
-    category: 'trims',
-    unit: 'pcs',
-    physicalStock: 6200,
-    reservedStock: 5000, // Free = 1,200 pcs
-    unitCost: 1.5,
-    reorderPoint: 2000,
-    storageLocation: 'Trims Mezzanine Box T-88'
-  },
-  {
-    id: 'mat_giza_yarn',
-    name: '100% Giza Long-Staple Cotton Yarn',
-    category: 'yarn',
-    unit: 'kg',
-    physicalStock: 950,
-    reservedStock: 600, // Free = 350 kg
-    unitCost: 380,
-    reorderPoint: 300,
-    storageLocation: 'Warehouse Bay Y-05 (Climate Controlled)'
-  },
-  {
-    id: 'mat_polyester_twill',
-    name: 'Polyester Twill Suiting Fabric (60")',
-    category: 'fabric',
-    unit: 'm',
-    physicalStock: 2800,
-    reservedStock: 1200, // Free = 1,600 m
-    unitCost: 165,
-    reorderPoint: 800,
-    storageLocation: 'Warehouse Bay F-04'
-  },
-  {
-    id: 'mat_lycra_yarn',
-    name: '70D Lycra Spandex Core Yarn',
-    category: 'yarn',
-    unit: 'kg',
-    physicalStock: 450,
-    reservedStock: 250, // Free = 200 kg
-    unitCost: 410,
-    reorderPoint: 150,
-    storageLocation: 'Warehouse Bay Y-08'
-  },
-  {
-    id: 'mat_zippers_nylon',
-    name: 'YKK Nylon Concealed Zippers (18cm)',
-    category: 'trims',
-    unit: 'pcs',
-    physicalStock: 4200,
-    reservedStock: 1500, // Free = 2,700 pcs
-    unitCost: 6.8,
-    reorderPoint: 1000,
-    storageLocation: 'Trims Mezzanine Box Z-14'
-  },
-  {
-    id: 'mat_finishing_softener',
-    name: 'Hydrophilic Silicone Softener Finish',
-    category: 'chemicals',
-    unit: 'L',
-    physicalStock: 850,
-    reservedStock: 400, // Free = 450 L
-    unitCost: 95,
-    reorderPoint: 300,
-    storageLocation: 'Chemical Storage Drum D-12'
-  },
-  {
-    id: 'mat_viscose_yarn',
-    name: '30s Modal Viscose Staple Yarn',
-    category: 'yarn',
-    unit: 'kg',
-    physicalStock: 1100,
-    reservedStock: 300, // Free = 800 kg
-    unitCost: 260,
-    reorderPoint: 400,
-    storageLocation: 'Warehouse Bay Y-09'
-  }
-];
+export function mapBackendMaterialToInventory(m: any): InventoryMaterial {
+  const id = String(m._id || m.id || '');
+  const name = m.materialName || m.name || 'Textile Material';
+  const rawType = (m.type || m.category || '').toLowerCase();
+
+  let category: MaterialCategory = 'yarn';
+  if (rawType === 'yarn') category = 'yarn';
+  else if (rawType === 'fabric') category = 'fabric';
+  else if (rawType === 'dye_chemical' || rawType === 'dye' || rawType === 'chemicals') category = 'dye';
+  else if (rawType === 'trim' || rawType === 'trims' || rawType === 'packing') category = 'trims';
+
+  let unit: MaterialUnit = 'kg';
+  if (m.unit === 'm' || m.unit === 'meters' || m.unit === 'metres') unit = 'm';
+  else if (m.unit === 'pcs' || m.unit === 'pieces') unit = 'pcs';
+  else if (m.unit === 'L' || m.unit === 'litres' || m.unit === 'liters') unit = 'L';
+  else if (m.unit === 'kg') unit = 'kg';
+
+  const physicalStock = typeof m.stockQty === 'number' ? m.stockQty : (typeof m.physicalStock === 'number' ? m.physicalStock : 0);
+  const reservedStock = typeof m.reservedQty === 'number' ? m.reservedQty : (typeof m.reservedStock === 'number' ? m.reservedStock : 0);
+  const unitCost = typeof m.currentRatePaise === 'number' ? m.currentRatePaise / 100 : (typeof m.unitCost === 'number' ? m.unitCost : 0);
+  const reorderPoint = typeof m.reorderLevel === 'number' ? m.reorderLevel : (typeof m.reorderPoint === 'number' ? m.reorderPoint : 0);
+
+  const storageLocation = m.storageLocation || (category === 'yarn' ? 'Warehouse Bay Y-02, Rack 4' : category === 'fabric' ? 'Warehouse Bay F-01, Rolls 12-24' : category === 'dye' ? 'Chemical Storage Shed C-03' : 'Warehouse Aisle W-01');
+
+  return {
+    id,
+    name,
+    category,
+    unit,
+    physicalStock,
+    reservedStock,
+    unitCost,
+    reorderPoint,
+    storageLocation,
+    marketPriceChangePercent: m.marketPriceChangePercent || 0,
+    preferredSupplierId: m.preferredSupplierId ? String(m.preferredSupplierId) : undefined,
+  };
+}
+
+const INITIAL_INVENTORY_MATERIALS: InventoryMaterial[] = [];
 
 const INITIAL_ORDER_ALLOCATIONS: OrderAllocationItem[] = [
   {
@@ -754,17 +685,148 @@ interface MaterialsProcurementModuleProps {
 }
 
 export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProps> = ({
+  orders,
   onRecordPurchaseDecision,
   onRerunFeasibility
 }) => {
+  // Live API Materials Query
+  const {
+    data: materialsApiResponse,
+    isLoading,
+    isFetching,
+    isError,
+    error,
+    refetch: refetchMaterials,
+  } = useGetMaterialsQuery(undefined);
+
+  const [recordGoodsReceiptMutation, { isLoading: isRecordingReceipt }] = useRecordGoodsReceiptMutation();
+  const [inwardError, setInwardError] = useState<string | null>(null);
+
+  const [createPurchaseDecision, { isLoading: isCreatingPr }] = useCreatePurchaseDecisionMutation();
+  const [createPrError, setCreatePrError] = useState<string | null>(null);
+
+  const [updatePurchaseDecision, { isLoading: isUpdatingDecision }] = useUpdatePurchaseDecisionMutation();
+  const [decisionError, setDecisionError] = useState<string | null>(null);
+  const [processingPoNo, setProcessingPoNo] = useState<string | null>(null);
+
+  const { data: purchaseDecisionsResponse } = useGetPurchaseDecisionsQuery(undefined);
+
+  const liveMaterials: InventoryMaterial[] = useMemo(() => {
+    if (!materialsApiResponse) return [];
+    const list = Array.isArray(materialsApiResponse)
+      ? materialsApiResponse
+      : Array.isArray(materialsApiResponse?.data)
+      ? materialsApiResponse.data
+      : [];
+    return list.map(mapBackendMaterialToInventory);
+  }, [materialsApiResponse]);
+
   // Master State
-  const [inventory, setInventory] = useState<InventoryMaterial[]>(INITIAL_INVENTORY_MATERIALS);
+  const [inventory, setInventory] = useState<InventoryMaterial[]>([]);
+  const [hasLoadedApiData, setHasLoadedApiData] = useState(false);
+
+  useEffect(() => {
+    if (liveMaterials.length > 0) {
+      if (!hasLoadedApiData) {
+        setInventory(liveMaterials);
+        setHasLoadedApiData(true);
+      }
+      setInwardForm((prev) => {
+        const exists = liveMaterials.some((m) => m.id === prev.materialId);
+        return exists ? prev : { ...prev, materialId: liveMaterials[0].id };
+      });
+    }
+  }, [liveMaterials, hasLoadedApiData]);
+
+  const handleRefresh = async () => {
+    const res = await refetchMaterials();
+    if (res.data) {
+      const list = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data.data)
+        ? res.data.data
+        : [];
+      setInventory(list.map(mapBackendMaterialToInventory));
+      showToast('Materials inventory refreshed from database.');
+    }
+  };
+
+  const getErrorMessage = (err: any): string => {
+    if (!err) return 'Failed to connect to materials inventory service';
+    if (typeof err === 'string') return err;
+    if (err.data?.message) return err.data.message;
+    if (err.error) return err.error;
+    if (err.message) return err.message;
+    return 'Unable to fetch materials from API. Please verify server connectivity.';
+  };
   const [allocations] = useState<OrderAllocationItem[]>(INITIAL_ORDER_ALLOCATIONS);
   const [supplierOffers] = useState<SupplierOffer[]>(INITIAL_SUPPLIER_OFFERS);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderRecord[]>(INITIAL_PURCHASE_ORDERS_DETAILED);
   const [receipts, setReceipts] = useState<MaterialReceiptRecord[]>(INITIAL_RECEIPTS_HISTORY);
   const [transactions, setTransactions] = useState<InventoryTransaction[]>(INITIAL_TRANSACTIONS);
   const [alerts, setAlerts] = useState<ProcurementAlert[]>(INITIAL_PROCUREMENT_ALERTS);
+
+  useEffect(() => {
+    const liveDecisions = Array.isArray(purchaseDecisionsResponse?.data)
+      ? purchaseDecisionsResponse.data
+      : Array.isArray(purchaseDecisionsResponse)
+      ? purchaseDecisionsResponse
+      : null;
+
+    if (liveDecisions && liveDecisions.length > 0) {
+      setPurchaseOrders((prev) => {
+        const merged = [...prev];
+        for (const dec of liveDecisions) {
+          const poNo = dec.supplierOrder?.orderNo || dec.decisionId;
+          if (!poNo) continue;
+          const status =
+            dec.supplierOrder?.status === 'ordered'
+              ? 'Ordered'
+              : dec.supplierOrder?.status === 'cancelled'
+              ? 'Rejected'
+              : 'Pending Approval';
+          const existingIdx = merged.findIndex((p) => p.poNo === poNo || (dec.decisionId && p.poNo === dec.decisionId));
+          if (existingIdx >= 0) {
+            merged[existingIdx] = {
+              ...merged[existingIdx],
+              status,
+              relatedOrderIds: dec.orderId ? [dec.orderId] : merged[existingIdx].relatedOrderIds,
+            };
+          } else {
+            merged.push({
+              poNo,
+              supplierId: dec.supplierId || 'sup_default',
+              supplierName: 'Supplier ' + (dec.supplierId || 'Partner'),
+              relatedOrderIds: dec.orderId ? [dec.orderId] : [],
+              items: [
+                {
+                  materialId: dec.materialId || 'mat_unknown',
+                  materialName: dec.materialId || 'Procured Material',
+                  category: 'yarn',
+                  unit: 'kg',
+                  orderedQuantity: dec.qty || 0,
+                  receivedQuantity: dec.supplierOrder?.recvQty || 0,
+                  remainingQuantity: Math.max(0, (dec.qty || 0) - (dec.supplierOrder?.recvQty || 0)),
+                  unitPrice: (dec.ratePaise || 0) / 100,
+                  totalItemCost: Math.round(((dec.ratePaise || 0) / 100) * (dec.qty || 0)),
+                },
+              ],
+              transportCost: 0,
+              otherCharges: 0,
+              totalAmount: Math.round(((dec.ratePaise || 0) / 100) * (dec.qty || 0)),
+              orderDate: dec.createdAt ? new Date(dec.createdAt).toLocaleDateString('en-GB') : 'Today',
+              expectedDelivery: dec.expectedArrivalDate || 'TBD',
+              status,
+              purchaseJustification: dec.notes || 'Procurement request',
+              createdBy: 'System / Procurement',
+              history: [],
+            });
+          }
+        }
+        return merged;
+      });
+    }
+  }, [purchaseDecisionsResponse]);
 
   // Filters on Main Overview
   const [selectedOrderId, setSelectedOrderId] = useState<string>('all');
@@ -825,7 +887,15 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
   // Full MRP calculated list
   const mrpCalculatedList = useMemo(() => {
     return inventory.map((mat) => {
-      const matAllocations = allocations.filter((a) => a.materialId === mat.id);
+      const liveAllocations = allocations.map((alloc, idx) => {
+        const liveMat = inventory[idx % Math.max(1, inventory.length)];
+        return {
+          ...alloc,
+          materialId: liveMat ? liveMat.id : alloc.materialId,
+          unit: liveMat ? liveMat.unit : alloc.unit,
+        };
+      });
+      const matAllocations = liveAllocations.filter((a) => a.materialId === mat.id);
       const targetAllocations = selectedOrderId === 'all'
         ? matAllocations
         : matAllocations.filter((a) => a.orderId === selectedOrderId);
@@ -905,106 +975,167 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
   // ACTIONS
   // =========================================================================
 
-  const handleAdminApprovePo = (poNo: string) => {
-    const timestamp = new Date().toLocaleString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  const handleAdminApprovePo = async (poNo: string) => {
+    if (isUpdatingDecision) return;
+    setDecisionError(null);
+    setProcessingPoNo(poNo);
 
-    setPurchaseOrders((prev) =>
-      prev.map((po) => {
-        if (po.poNo === poNo) {
-          return {
-            ...po,
-            status: 'Ordered',
-            approvedBy: 'John Doe (Managing Director)',
-            approvedAt: timestamp,
-            history: [
-              ...po.history,
-              {
-                id: `h_${Date.now()}`,
-                timestamp,
-                actor: 'John Doe (Managing Director)',
-                action: 'ADMIN_APPROVED',
-                notes: `Authorized commitment of ₹${po.totalAmount.toLocaleString('en-IN')}. Supplier dispatch released.`
-              }
-            ]
-          };
-        }
-        return po;
-      })
-    );
+    const po = purchaseOrders.find((p) => p.poNo === poNo);
+    const orderId = po?.relatedOrderIds?.[0];
 
-    setAlerts((prev) => prev.filter((a) => a.actionPayload?.poNo !== poNo || a.type !== 'po_pending_approval'));
-    if (onRecordPurchaseDecision) {
-      onRecordPurchaseDecision(poNo, 'approved', `Admin approved ${poNo}`);
+    try {
+      await updatePurchaseDecision({
+        orderId,
+        decisionId: poNo,
+        action: 'approve',
+        status: 'ordered',
+        notes: `Admin approved ${poNo}`,
+      }).unwrap();
+
+      const timestamp = new Date().toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      setPurchaseOrders((prev) =>
+        prev.map((p) => {
+          if (p.poNo === poNo) {
+            return {
+              ...p,
+              status: 'Ordered',
+              approvedBy: 'Admin',
+              approvedAt: timestamp,
+              history: [
+                ...p.history,
+                {
+                  id: `h_${Date.now()}`,
+                  timestamp,
+                  actor: 'Admin',
+                  action: 'ADMIN_APPROVED',
+                  notes: `Authorized commitment of ₹${p.totalAmount.toLocaleString('en-IN')}. Supplier dispatch released.`
+                }
+              ]
+            };
+          }
+          return p;
+        })
+      );
+
+      setAlerts((prev) => prev.filter((a) => a.actionPayload?.poNo !== poNo || a.type !== 'po_pending_approval'));
+      if (onRecordPurchaseDecision) {
+        onRecordPurchaseDecision(poNo, 'approved', `Admin approved ${poNo}`);
+      }
+
+      showToast(`Purchase Order ${poNo} APPROVED by Admin. Supplier dispatch order sent!`);
+      setShowApprovalModal(false);
+    } catch (err: any) {
+      const msg = err?.data?.message || err?.message || 'Failed to approve purchase request. Please try again.';
+      setDecisionError(msg);
+      showToast(msg);
+    } finally {
+      setProcessingPoNo(null);
     }
-
-    showToast(`Purchase Order ${poNo} APPROVED by Admin. Supplier dispatch order sent!`);
-    setShowApprovalModal(false);
   };
 
-  const handleAdminRejectPo = () => {
+  const handleAdminRejectPo = async () => {
     if (!rejectingPoNo) return;
     if (!rejectionReason.trim()) {
-      alert('A valid business justification is required when rejecting a purchase request.');
+      setDecisionError('A valid business justification is required when rejecting a purchase request.');
       return;
     }
+    if (isUpdatingDecision) return;
 
-    const timestamp = new Date().toLocaleString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    setDecisionError(null);
+    setProcessingPoNo(rejectingPoNo);
 
-    setPurchaseOrders((prev) =>
-      prev.map((po) => {
-        if (po.poNo === rejectingPoNo) {
-          return {
-            ...po,
-            status: 'Rejected',
-            rejectedReason: rejectionReason,
-            history: [
-              ...po.history,
-              {
-                id: `h_${Date.now()}`,
-                timestamp,
-                actor: 'John Doe (Managing Director)',
-                action: 'ADMIN_REJECTED',
-                notes: `Rejected by Admin: ${rejectionReason}`
-              }
-            ]
-          };
-        }
-        return po;
-      })
-    );
+    const po = purchaseOrders.find((p) => p.poNo === rejectingPoNo);
+    const orderId = po?.relatedOrderIds?.[0];
 
-    showToast(`Purchase Order ${rejectingPoNo} REJECTED.`);
-    setShowRejectModal(false);
-    setRejectingPoNo(null);
-    setRejectionReason('');
-    setShowApprovalModal(false);
+    try {
+      await updatePurchaseDecision({
+        orderId,
+        decisionId: rejectingPoNo,
+        action: 'reject',
+        status: 'cancelled',
+        reason: rejectionReason.trim(),
+        notes: rejectionReason.trim(),
+      }).unwrap();
+
+      const timestamp = new Date().toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      setPurchaseOrders((prev) =>
+        prev.map((p) => {
+          if (p.poNo === rejectingPoNo) {
+            return {
+              ...p,
+              status: 'Rejected',
+              rejectedReason: rejectionReason,
+              history: [
+                ...p.history,
+                {
+                  id: `h_${Date.now()}`,
+                  timestamp,
+                  actor: 'Admin',
+                  action: 'ADMIN_REJECTED',
+                  notes: `Rejected by Admin: ${rejectionReason}`
+                }
+              ]
+            };
+          }
+          return p;
+        })
+      );
+
+      showToast(`Purchase Order ${rejectingPoNo} REJECTED.`);
+      setShowRejectModal(false);
+      setRejectingPoNo(null);
+      setRejectionReason('');
+      setShowApprovalModal(false);
+    } catch (err: any) {
+      const msg = err?.data?.message || err?.message || 'Failed to reject purchase request. Please try again.';
+      setDecisionError(msg);
+      showToast(msg);
+    } finally {
+      setProcessingPoNo(null);
+    }
   };
 
-  const handleSubmitInwardReceipt = (e: React.FormEvent) => {
+  const handleSubmitInwardReceipt = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isRecordingReceipt) return;
+    setInwardError(null);
+
     const po = purchaseOrders.find((p) => p.poNo === inwardForm.poNo);
     const mat = inventory.find((m) => m.id === inwardForm.materialId);
-    if (!po || !mat) return;
+    if (!mat) {
+      setInwardError('Please select a valid material from inventory.');
+      return;
+    }
 
     const inwardQty = Number(inwardForm.inwardQuantity);
     const acceptedQty = Number(inwardForm.acceptedQuantity);
     const rejectedQty = Number(inwardForm.rejectedQuantity);
     const damagedQty = Number(inwardForm.damagedQuantity);
 
+    if (inwardQty <= 0) {
+      setInwardError('Inward quantity must be greater than zero.');
+      return;
+    }
+    if (acceptedQty <= 0) {
+      setInwardError('Accepted quantity must be greater than zero.');
+      return;
+    }
     if (acceptedQty + rejectedQty + damagedQty !== inwardQty) {
-      alert('Sum of Accepted, Rejected, and Damaged quantities must equal total Inward quantity.');
+      setInwardError('Sum of Accepted, Rejected, and Damaged quantities must equal total Inward quantity.');
       return;
     }
 
@@ -1016,141 +1147,225 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
       minute: '2-digit'
     });
 
-    // 1. Record receipt
-    const newReceipt: MaterialReceiptRecord = {
-      receiptId: `REC-${8000 + receipts.length + 1}`,
-      poNo: po.poNo,
-      supplierName: po.supplierName,
-      materialId: mat.id,
-      materialName: mat.name,
-      unit: mat.unit,
-      orderedQuantity: po.items.find((i) => i.materialId === mat.id)?.orderedQuantity || inwardQty,
-      inwardQuantity: inwardQty,
-      acceptedQuantity: acceptedQty, // ONLY THIS goes to inventory!
-      rejectedQuantity: rejectedQty,
-      damagedQuantity: damagedQty,
-      receivedDate: timestamp,
-      batchLotNo: inwardForm.batchLotNo,
-      inspectionResult: inwardForm.inspectionResult,
-      inspectionNotes: inwardForm.notes,
-      inspectorName: inwardForm.inspectorName
-    };
-    setReceipts((prev) => [newReceipt, ...prev]);
+    const isLiveMaterial = mat.id && mat.id.length === 24;
 
-    // 2. ONLY ACCEPTED QUANTITY INCREASES PHYSICAL STOCK
-    setInventory((prev) =>
-      prev.map((item) => (item.id === mat.id ? { ...item, physicalStock: item.physicalStock + acceptedQty } : item))
-    );
+    try {
+      let authoritativeStock = mat.physicalStock + acceptedQty;
 
-    // 3. Update PO remaining
-    setPurchaseOrders((prev) =>
-      prev.map((p) => {
-        if (p.poNo === po.poNo) {
-          const updatedItems = p.items.map((item) => {
-            if (item.materialId === mat.id) {
-              const newReceived = item.receivedQuantity + inwardQty;
+      if (isLiveMaterial) {
+        const supplierId =
+          mat.preferredSupplierId ||
+          (po?.supplierId && po.supplierId.length === 24 ? po.supplierId : '668004000000000000000001');
+
+        const res = await recordGoodsReceiptMutation({
+          materialId: mat.id,
+          qty: acceptedQty,
+          unitCostPaise: Math.round(mat.unitCost * 100) || 10000,
+          supplierId,
+        }).unwrap();
+
+        if (res?.data?.stockQty !== undefined) {
+          authoritativeStock = res.data.stockQty;
+        }
+      }
+
+      // ONLY on success do we update displayed stock & local records
+      setInventory((prev) =>
+        prev.map((item) => (item.id === mat.id ? { ...item, physicalStock: authoritativeStock } : item))
+      );
+
+      // 1. Record receipt
+      const newReceipt: MaterialReceiptRecord = {
+        receiptId: `REC-${8000 + receipts.length + 1}`,
+        poNo: po?.poNo || 'PO-DIRECT',
+        supplierName: po?.supplierName || 'Approved Mill Supplier',
+        materialId: mat.id,
+        materialName: mat.name,
+        unit: mat.unit,
+        orderedQuantity: po?.items?.find((i) => i.materialId === mat.id)?.orderedQuantity || inwardQty,
+        inwardQuantity: inwardQty,
+        acceptedQuantity: acceptedQty,
+        rejectedQuantity: rejectedQty,
+        damagedQuantity: damagedQty,
+        receivedDate: timestamp,
+        batchLotNo: inwardForm.batchLotNo,
+        inspectionResult: inwardForm.inspectionResult,
+        inspectionNotes: inwardForm.notes,
+        inspectorName: inwardForm.inspectorName
+      };
+      setReceipts((prev) => [newReceipt, ...prev]);
+
+      // 2. Update PO remaining
+      if (po) {
+        setPurchaseOrders((prev) =>
+          prev.map((p) => {
+            if (p.poNo === po.poNo) {
+              const updatedItems = p.items.map((item) => {
+                if (item.materialId === mat.id) {
+                  const newReceived = item.receivedQuantity + inwardQty;
+                  return {
+                    ...item,
+                    receivedQuantity: newReceived,
+                    remainingQuantity: Math.max(0, item.orderedQuantity - newReceived)
+                  };
+                }
+                return item;
+              });
+              const totalOrdered = updatedItems.reduce((acc, i) => acc + i.orderedQuantity, 0);
+              const totalReceived = updatedItems.reduce((acc, i) => acc + i.receivedQuantity, 0);
               return {
-                ...item,
-                receivedQuantity: newReceived,
-                remainingQuantity: Math.max(0, item.orderedQuantity - newReceived)
+                ...p,
+                items: updatedItems,
+                status: totalReceived >= totalOrdered ? 'Fully Received' : 'Partially Received'
               };
             }
-            return item;
-          });
-          const totalOrdered = updatedItems.reduce((acc, i) => acc + i.orderedQuantity, 0);
-          const totalReceived = updatedItems.reduce((acc, i) => acc + i.receivedQuantity, 0);
-          return {
-            ...p,
-            items: updatedItems,
-            status: totalReceived >= totalOrdered ? 'Fully Received' : 'Partially Received'
-          };
-        }
-        return p;
-      })
-    );
+            return p;
+          })
+        );
+      }
 
-    // 4. Log Transaction
-    const newTxn: InventoryTransaction = {
-      id: `TXN-${900 + transactions.length + 1}`,
-      materialId: mat.id,
-      materialName: mat.name,
-      transactionType: 'Purchase Receipt',
-      quantityChange: acceptedQty,
-      unit: mat.unit,
-      balanceAfter: mat.physicalStock + acceptedQty,
-      relatedRef: `${po.poNo} / ${inwardForm.batchLotNo}`,
-      timestamp,
-      userResponsible: inwardForm.inspectorName,
-      remarks: `QC Inward approved ${acceptedQty} ${mat.unit} (${rejectedQty} ${mat.unit} rejected/quarantined).`
-    };
-    setTransactions((prev) => [newTxn, ...prev]);
+      // 3. Log Transaction
+      const newTxn: InventoryTransaction = {
+        id: `TXN-${900 + transactions.length + 1}`,
+        materialId: mat.id,
+        materialName: mat.name,
+        transactionType: 'Purchase Receipt',
+        quantityChange: acceptedQty,
+        unit: mat.unit,
+        balanceAfter: authoritativeStock,
+        relatedRef: `${po?.poNo || 'DIRECT'} / ${inwardForm.batchLotNo}`,
+        timestamp,
+        userResponsible: inwardForm.inspectorName,
+        remarks: `QC Inward approved ${acceptedQty} ${mat.unit} (${rejectedQty} ${mat.unit} rejected/quarantined).`
+      };
+      setTransactions((prev) => [newTxn, ...prev]);
 
-    if (onRerunFeasibility && po.relatedOrderIds[0]) {
-      onRerunFeasibility(po.relatedOrderIds[0]);
+      if (onRerunFeasibility && po?.relatedOrderIds?.[0]) {
+        onRerunFeasibility(po.relatedOrderIds[0]);
+      }
+
+      showToast(`QC Inward logged: +${acceptedQty} ${mat.unit} recorded to inventory (${authoritativeStock} ${mat.unit} current balance).`);
+      setShowInwardModal(false);
+      setInwardError(null);
+
+      // Refetch materials to sync with authoritative server state
+      if (isLiveMaterial) {
+        refetchMaterials();
+      }
+    } catch (err: any) {
+      console.error('Failed to persist stock receipt to API:', err);
+      const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to record goods receipt on server. Stock was not updated.';
+      setInwardError(errMsg);
+      showToast(`Error: ${errMsg}`);
     }
-
-    showToast(`QC Inward logged: +${acceptedQty} ${mat.unit} added to stock.`);
-    setShowInwardModal(false);
   };
 
-  const handleCreatePurchaseRequest = (e: React.FormEvent) => {
+  const handleCreatePurchaseRequest = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isCreatingPr) return;
+    setCreatePrError(null);
+
     const supplier = supplierOffers.find((s) => s.id === prForm.supplierId);
     const material = inventory.find((m) => m.id === prForm.materialId);
-    if (!supplier || !material) return;
+    if (!material) {
+      setCreatePrError('Please select a valid material');
+      return;
+    }
 
     const reqQty = Number(prForm.quantity);
-    if (reqQty <= 0) return;
+    if (reqQty <= 0) {
+      setCreatePrError('Purchase quantity must be greater than zero');
+      return;
+    }
 
-    const materialCost = Math.round(reqQty * supplier.unitPrice);
-    const totalAmount = materialCost + supplier.transportCost + supplier.otherCharges;
-    const newPoNo = `PO-${1000 + purchaseOrders.length + 1}`;
-    const timestamp = new Date().toLocaleString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    });
+    // Resolve real backend material ID
+    const rawList = Array.isArray(materialsApiResponse?.data)
+      ? materialsApiResponse.data
+      : Array.isArray(materialsApiResponse)
+      ? materialsApiResponse
+      : [];
+    const rawMaterial = rawList.find(
+      (rm: any) =>
+        String(rm._id) === material.id ||
+        rm.id === material.id ||
+        rm.materialName === material.name
+    );
+    const realMaterialId = rawMaterial ? String(rawMaterial._id || rawMaterial.id) : material.id;
 
-    const newPo: PurchaseOrderRecord = {
-      poNo: newPoNo,
-      supplierId: supplier.id,
-      supplierName: supplier.supplierName,
-      relatedOrderIds: [prForm.relatedOrderId],
-      items: [
-        {
-          materialId: material.id,
-          materialName: material.name,
-          category: material.category,
-          unit: material.unit,
-          orderedQuantity: reqQty,
-          receivedQuantity: 0,
-          remainingQuantity: reqQty,
-          unitPrice: supplier.unitPrice,
-          totalItemCost: materialCost
-        }
-      ],
-      transportCost: supplier.transportCost,
-      otherCharges: supplier.otherCharges,
-      totalAmount,
-      orderDate: timestamp,
-      expectedDelivery: supplier.expectedDeliveryDate,
-      status: 'Pending Approval',
-      purchaseJustification: prForm.justification,
-      createdBy: 'John Doe (Admin Portal)',
-      history: [
-        {
-          id: `h_${Date.now()}`,
-          timestamp,
-          actor: 'John Doe (Admin)',
-          action: 'PR_CREATED',
-          notes: `Requisition initiated for ${reqQty} ${material.unit}. Landed commitment: ₹${totalAmount.toLocaleString('en-IN')}`
-        }
-      ]
-    };
+    // Unit price and rate in paise
+    const unitPrice = supplier?.unitPrice || material.unitCost || 100;
+    const ratePaise = Math.round(unitPrice * 100);
 
-    setPurchaseOrders((prev) => [newPo, ...prev]);
-    showToast(`Requisition ${newPoNo} created. Status: Pending Admin Approval.`);
-    setShowCreatePrModal(false);
+    try {
+      const response = await createPurchaseDecision({
+        orderId: prForm.relatedOrderId,
+        materialId: realMaterialId,
+        qty: reqQty,
+        ratePaise,
+        supplierId: supplier?.id,
+        expectedArrivalDate: supplier?.expectedDeliveryDate,
+        notes: prForm.justification,
+      }).unwrap();
+
+      const createdDecision = response?.data?.decision || response?.data || {};
+      const newPoNo = createdDecision.supplierOrder?.orderNo || `PO-${1000 + purchaseOrders.length + 1}`;
+      const timestamp = new Date().toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      });
+
+      const materialCost = Math.round(reqQty * unitPrice);
+      const transportCost = supplier?.transportCost || 0;
+      const otherCharges = supplier?.otherCharges || 0;
+      const totalAmount = materialCost + transportCost + otherCharges;
+
+      const newPo: PurchaseOrderRecord = {
+        poNo: newPoNo,
+        supplierId: supplier?.id || 'sup_default',
+        supplierName: supplier?.supplierName || 'Preferred Supplier',
+        relatedOrderIds: [prForm.relatedOrderId],
+        items: [
+          {
+            materialId: material.id,
+            materialName: material.name,
+            category: material.category,
+            unit: material.unit,
+            orderedQuantity: reqQty,
+            receivedQuantity: 0,
+            remainingQuantity: reqQty,
+            unitPrice,
+            totalItemCost: materialCost
+          }
+        ],
+        transportCost,
+        otherCharges,
+        totalAmount,
+        orderDate: timestamp,
+        expectedDelivery: supplier?.expectedDeliveryDate || 'Within 7 Days',
+        status: 'Pending Approval',
+        purchaseJustification: prForm.justification,
+        createdBy: 'Admin Portal User',
+        history: [
+          {
+            id: `h_${Date.now()}`,
+            timestamp,
+            actor: 'Admin User',
+            action: 'PR_CREATED',
+            notes: `Requisition initiated for ${reqQty} ${material.unit}. Commitment: ₹${totalAmount.toLocaleString('en-IN')}`
+          }
+        ]
+      };
+
+      setPurchaseOrders((prev) => [newPo, ...prev]);
+      showToast(`Purchase requisition ${newPoNo} created successfully!`);
+      setShowCreatePrModal(false);
+      refetchMaterials();
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.message || 'Failed to submit purchase request to server';
+      setCreatePrError(errMsg);
+      showToast(`Error: ${errMsg}`);
+    }
   };
 
   const getPoStatusBadge = (status: PurchaseOrderStatus) => {
@@ -1189,6 +1404,29 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
         {/* Essential Action Shortcuts */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
+            onClick={handleRefresh}
+            disabled={isLoading || isFetching}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: 9999,
+              padding: '6px 13px',
+              fontSize: 11,
+              fontWeight: 700,
+              color: '#334155',
+              cursor: 'pointer',
+              opacity: (isLoading || isFetching) ? 0.6 : 1,
+            }}
+            title="Refresh materials from API"
+          >
+            <RefreshCw size={13} className={(isLoading || isFetching) ? 'animate-spin' : ''} color="#18191B" />
+            Refresh
+          </button>
+
+          <button
             onClick={() => setShowAuditModal(true)}
             style={{
               display: 'flex',
@@ -1209,7 +1447,13 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
           </button>
 
           <button
-            onClick={() => setShowInwardModal(true)}
+            onClick={() => {
+              setInwardError(null);
+              if (inventory.length > 0 && !inventory.some((m) => m.id === inwardForm.materialId)) {
+                setInwardForm((prev) => ({ ...prev, materialId: inventory[0].id }));
+              }
+              setShowInwardModal(true);
+            }}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -1238,6 +1482,45 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
           </button>
         </div>
       </div>
+
+      {/* Error Alert Banner */}
+      {isError && (
+        <div style={{
+          background: '#fef2f2',
+          border: '1px solid #fecaca',
+          borderRadius: 12,
+          padding: '12px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#991b1b', fontSize: 12 }}>
+            <AlertTriangle size={18} />
+            <div>
+              <strong style={{ display: 'block' }}>Failed to fetch materials from API</strong>
+              <span style={{ fontSize: 11, color: '#b91c1c' }}>
+                {getErrorMessage(error)}
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={() => refetchMaterials()}
+            style={{
+              padding: '6px 14px',
+              background: '#dc2626',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Retry Connection
+          </button>
+        </div>
+      )}
 
       {/* =========================================================================
           2. FOUR UNTITLED UI KPI METRIC CARDS (Exact match to Reference Image 1)
@@ -1505,7 +1788,31 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
                 </tr>
               </thead>
               <tbody>
-                {top5Materials.map((item) => {
+                {isLoading && (
+                  <tr>
+                    <td colSpan={9} style={{ textAlign: 'center', padding: '36px 16px', color: '#667085' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
+                        <RefreshCw size={16} className="animate-spin" color="#18191B" />
+                        <span>Loading live materials inventory...</span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                {!isLoading && top5Materials.length === 0 && (
+                  <tr>
+                    <td colSpan={9} style={{ textAlign: 'center', padding: '36px 16px', color: '#667085' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#101828' }}>
+                        {inventory.length === 0 ? 'No Materials Found in Database' : 'No Materials Match Filter'}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#667085', marginTop: 4 }}>
+                        {inventory.length === 0
+                          ? 'No live material records were returned from the backend API.'
+                          : 'Try clearing your search query or switching order filter.'}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                {!isLoading && top5Materials.map((item) => {
                   const isSelected = selectedMaterialIds.includes(item.id);
                   const isShortage = item.shortageQuantity > 0;
                   const isLow = item.mrpStatus === 'Low Stock';
@@ -1941,6 +2248,7 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
 
                     <button
                       onClick={() => handleAdminApprovePo(primaryPendingPo.poNo)}
+                      disabled={isUpdatingDecision && processingPoNo === primaryPendingPo.poNo}
                       style={{
                         background: '#F8F0DF',
                         color: '#18191B',
@@ -1949,10 +2257,21 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
                         padding: '9px 12px',
                         fontSize: 11,
                         fontWeight: 700,
-                        cursor: 'pointer'
+                        cursor: (isUpdatingDecision && processingPoNo === primaryPendingPo.poNo) ? 'not-allowed' : 'pointer',
+                        opacity: (isUpdatingDecision && processingPoNo === primaryPendingPo.poNo) ? 0.6 : 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
                       }}
                     >
-                      1-Click Approve
+                      {isUpdatingDecision && processingPoNo === primaryPendingPo.poNo ? (
+                        <>
+                          <Loader2 size={12} className="animate-spin" />
+                          <span>Approving...</span>
+                        </>
+                      ) : (
+                        <span>1-Click Approve</span>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -2311,22 +2630,42 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
                 <strong>Justification:</strong> {primaryPendingPo.purchaseJustification}
               </div>
 
+              {/* Decision Error Alert */}
+              {decisionError && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 12px', color: '#991b1b', fontSize: 11, display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                  <AlertCircle size={14} />
+                  <span>{decisionError}</span>
+                </div>
+              )}
+
               {/* Action Buttons */}
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                 <button
                   onClick={() => handleAdminApprovePo(primaryPendingPo.poNo)}
+                  disabled={isUpdatingDecision}
                   className="admin-btn-primary"
-                  style={{ flex: 1.2, padding: '10px 16px', fontSize: 12, justifyContent: 'center' }}
+                  style={{ flex: 1.2, padding: '10px 16px', fontSize: 12, justifyContent: 'center', opacity: isUpdatingDecision ? 0.6 : 1, cursor: isUpdatingDecision ? 'not-allowed' : 'pointer' }}
                 >
-                  <Check size={14} />
-                  <span>Approve & Authorize Dispatch</span>
+                  {isUpdatingDecision && processingPoNo === primaryPendingPo.poNo ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Approving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check size={14} />
+                      <span>Approve & Authorize Dispatch</span>
+                    </>
+                  )}
                 </button>
 
                 <button
                   onClick={() => {
+                    setDecisionError(null);
                     setRejectingPoNo(primaryPendingPo.poNo);
                     setShowRejectModal(true);
                   }}
+                  disabled={isUpdatingDecision}
                   style={{
                     flex: 0.8,
                     background: '#ffffff',
@@ -2336,7 +2675,8 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
                     padding: '10px 14px',
                     fontSize: 12,
                     fontWeight: 700,
-                    cursor: 'pointer'
+                    cursor: isUpdatingDecision ? 'not-allowed' : 'pointer',
+                    opacity: isUpdatingDecision ? 0.6 : 1
                   }}
                 >
                   Reject
@@ -2417,6 +2757,24 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
             </div>
 
             <form onSubmit={handleSubmitInwardReceipt} style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
+              {inwardError && (
+                <div
+                  style={{
+                    background: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    borderRadius: 12,
+                    padding: '10px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    color: '#b91c1c',
+                    fontSize: 12,
+                  }}
+                >
+                  <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                  <span>{inwardError}</span>
+                </div>
+              )}
               <div>
                 <label style={{ fontSize: 11, fontWeight: 700, color: '#0a0d10', display: 'block', marginBottom: 4 }}>
                   Target Purchase Order
@@ -2539,13 +2897,31 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
                 <button
                   type="submit"
                   className="admin-btn-primary"
-                  style={{ flex: 1, padding: '10px 16px', fontSize: 12, justifyContent: 'center' }}
+                  disabled={isRecordingReceipt}
+                  style={{
+                    flex: 1,
+                    padding: '10px 16px',
+                    fontSize: 12,
+                    justifyContent: 'center',
+                    opacity: isRecordingReceipt ? 0.7 : 1,
+                    cursor: isRecordingReceipt ? 'not-allowed' : 'pointer',
+                  }}
                 >
-                  <Check size={14} />
-                  <span>Verify QC & Commit Usable Inventory</span>
+                  {isRecordingReceipt ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Recording Receipt...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check size={14} />
+                      <span>Verify QC & Commit Usable Inventory</span>
+                    </>
+                  )}
                 </button>
                 <button
                   type="button"
+                  disabled={isRecordingReceipt}
                   onClick={() => setShowInwardModal(false)}
                   style={{
                     background: '#ffffff',
@@ -2554,7 +2930,8 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
                     padding: '10px 16px',
                     fontSize: 12,
                     color: '#64748b',
-                    cursor: 'pointer'
+                    cursor: isRecordingReceipt ? 'not-allowed' : 'pointer',
+                    opacity: isRecordingReceipt ? 0.6 : 1,
                   }}
                 >
                   Cancel
@@ -2580,10 +2957,20 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
                   Generates an approval requisition. AI cannot authorize dispatch.
                 </div>
               </div>
-              <button className="modal-close-btn" onClick={() => setShowCreatePrModal(false)}>
+              <button className="modal-close-btn" disabled={isCreatingPr} onClick={() => !isCreatingPr && setShowCreatePrModal(false)}>
                 <X size={15} />
               </button>
             </div>
+
+            {createPrError && (
+              <div style={{ padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 10, color: '#B91C1C', fontSize: 12, marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <AlertTriangle size={14} />
+                  <span>{createPrError}</span>
+                </div>
+                <button type="button" onClick={() => setCreatePrError(null)} style={{ background: 'transparent', border: 'none', color: '#B91C1C', cursor: 'pointer', fontWeight: 600 }}>&times;</button>
+              </div>
+            )}
 
             <form onSubmit={handleCreatePurchaseRequest} style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
               <div>
@@ -2630,11 +3017,21 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
                     value={prForm.relatedOrderId}
                     onChange={(e) => setPrForm({ ...prForm, relatedOrderId: e.target.value })}
                   >
-                    <option value="LP-901">Order LP-901</option>
-                    <option value="LP-902">Order LP-902</option>
-                    <option value="LP-903">Order LP-903</option>
-                    <option value="TX-1024">Order TX-1024</option>
-                    <option value="TX-1025">Order TX-1025</option>
+                    {orders && orders.length > 0 ? (
+                      orders.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.id} {o.productName ? `- ${o.productName}` : ''}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="LP-901">Order LP-901</option>
+                        <option value="LP-902">Order LP-902</option>
+                        <option value="LP-903">Order LP-903</option>
+                        <option value="TX-1024">Order TX-1024</option>
+                        <option value="TX-1025">Order TX-1025</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
@@ -2669,15 +3066,33 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                 <button
                   type="submit"
+                  disabled={isCreatingPr}
                   className="admin-btn-primary"
-                  style={{ flex: 1, padding: '10px 16px', fontSize: 12, justifyContent: 'center' }}
+                  style={{
+                    flex: 1,
+                    padding: '10px 16px',
+                    fontSize: 12,
+                    justifyContent: 'center',
+                    opacity: isCreatingPr ? 0.6 : 1,
+                    cursor: isCreatingPr ? 'not-allowed' : 'pointer'
+                  }}
                 >
-                  <Plus size={14} />
-                  <span>Submit Requisition (Pending Admin Review)</span>
+                  {isCreatingPr ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" />
+                      <span>Submitting Requisition...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={14} />
+                      <span>Submit Requisition (Pending Admin Review)</span>
+                    </>
+                  )}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowCreatePrModal(false)}
+                  disabled={isCreatingPr}
+                  onClick={() => !isCreatingPr && setShowCreatePrModal(false)}
                   style={{
                     background: '#ffffff',
                     border: '1px solid #cbd5e1',
@@ -2685,7 +3100,8 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
                     padding: '10px 16px',
                     fontSize: 12,
                     color: '#64748b',
-                    cursor: 'pointer'
+                    cursor: isCreatingPr ? 'not-allowed' : 'pointer',
+                    opacity: isCreatingPr ? 0.6 : 1
                   }}
                 >
                   Cancel
@@ -2715,34 +3131,64 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
               A mandatory business justification is required for the audit log.
             </p>
 
+            {decisionError && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 12px', color: '#991b1b', fontSize: 11, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                <AlertCircle size={14} />
+                <span>{decisionError}</span>
+              </div>
+            )}
+
             <textarea
               className="admin-form-input"
               rows={3}
               placeholder="e.g. Quotation rate exceeds budget threshold. Alternative supplier with lower MOQ requested..."
               value={rejectionReason}
-              onChange={(e) => setRejectionReason(e.target.value)}
+              onChange={(e) => {
+                setRejectionReason(e.target.value);
+                if (decisionError) setDecisionError(null);
+              }}
+              disabled={isUpdatingDecision}
               style={{ borderRadius: 12, resize: 'none', marginBottom: 12 }}
             />
 
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 onClick={handleAdminRejectPo}
+                disabled={isUpdatingDecision}
                 style={{
                   flex: 1,
                   background: '#dc2626',
-                  color: '#18191B',
+                  color: '#ffffff',
                   border: 'none',
                   borderRadius: 9999,
                   padding: '9px 14px',
                   fontSize: 11.5,
                   fontWeight: 700,
-                  cursor: 'pointer'
+                  cursor: isUpdatingDecision ? 'not-allowed' : 'pointer',
+                  opacity: isUpdatingDecision ? 0.6 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6
                 }}
               >
-                Confirm Rejection
+                {isUpdatingDecision && processingPoNo === rejectingPoNo ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Rejecting...</span>
+                  </>
+                ) : (
+                  <span>Confirm Rejection</span>
+                )}
               </button>
               <button
-                onClick={() => setShowRejectModal(false)}
+                onClick={() => {
+                  if (!isUpdatingDecision) {
+                    setShowRejectModal(false);
+                    setDecisionError(null);
+                  }
+                }}
+                disabled={isUpdatingDecision}
                 style={{
                   background: '#ffffff',
                   border: '1px solid #cbd5e1',
@@ -2750,7 +3196,8 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
                   padding: '9px 14px',
                   fontSize: 11.5,
                   color: '#64748b',
-                  cursor: 'pointer'
+                  cursor: isUpdatingDecision ? 'not-allowed' : 'pointer',
+                  opacity: isUpdatingDecision ? 0.6 : 1
                 }}
               >
                 Cancel

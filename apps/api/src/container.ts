@@ -11,6 +11,7 @@ import { HttpAgentsClient } from "./integrations/agents/http-agents-client.js";
 import { FakeAgentsClient } from "./integrations/agents/fake-agents-client.js";
 import { IFileStorage } from "./interfaces/file-storage.interface.js";
 import { LocalDiskFileStorage } from "./integrations/storage/local-disk-storage.js";
+import { CloudinaryStorage } from "./integrations/storage/cloudinary-storage.js";
 import { IJobQueue } from "./interfaces/job-queue.interface.js";
 import { BullMqJobQueue } from "./jobs/bullmq-queue.js";
 import { IPaymentGateway } from "./interfaces/payment-gateway.interface.js";
@@ -50,7 +51,14 @@ export function createContainer(): AppContainer {
         })
       : new FakeAgentsClient();
 
-  const fileStorage: IFileStorage = new LocalDiskFileStorage(env.FILE_STORAGE_PATH);
+  const fileStorage: IFileStorage =
+    env.FILE_STORAGE_DRIVER === "cloudinary" && env.CLOUDINARY_CLOUD_NAME
+      ? new CloudinaryStorage({
+          cloudName: env.CLOUDINARY_CLOUD_NAME,
+          apiKey: env.CLOUDINARY_API_KEY,
+          apiSecret: env.CLOUDINARY_API_SECRET,
+        })
+      : new LocalDiskFileStorage(env.FILE_STORAGE_PATH);
 
   const jobQueue: IJobQueue = new BullMqJobQueue(redisClient);
 
@@ -93,4 +101,8 @@ export function getContainer(): AppContainer {
     return createContainer();
   }
   return containerInstance;
+}
+
+export function setContainer(container: AppContainer): void {
+  containerInstance = container;
 }

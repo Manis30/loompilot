@@ -603,7 +603,16 @@ export class OrdersRepository {
       }
     }
 
-    const newReceivedPaise = (milestone.receivedPaise || 0) + receipt.amountPaise;
+    const currentReceived = milestone.receivedPaise || 0;
+    if (currentReceived + receipt.amountPaise > milestone.amountPaise) {
+      throw new AppError(
+        ErrorCode.OVERPAYMENT,
+        `Payment amount of ₹${(receipt.amountPaise / 100).toFixed(2)} exceeds remaining due of ₹${((milestone.amountPaise - currentReceived) / 100).toFixed(2)} for milestone '${milestone.milestone}'`,
+        400
+      );
+    }
+
+    const newReceivedPaise = currentReceived + receipt.amountPaise;
     const isAdvance = milestone.trigger === "advance";
 
     const updateOps: Record<string, any> = {
@@ -662,7 +671,16 @@ export class OrdersRepository {
 
     const updated = await this.model
       .findOneAndUpdate(
-        { tenantId, _id: orderId },
+        {
+          tenantId,
+          _id: orderId,
+          $expr: {
+            $lte: [
+              { $add: [{ $ifNull: ["$production.deliveredQty", 0] }, delivery.qty] },
+              "$quantity",
+            ],
+          },
+        },
         {
           $push: { deliveries: delivery },
           $inc: { "production.deliveredQty": delivery.qty, version: 1 },
@@ -672,7 +690,15 @@ export class OrdersRepository {
       .lean<IOrder>()
       .exec();
 
-    return updated!;
+    if (!updated) {
+      throw new AppError(
+        ErrorCode.VALIDATION_FAILED,
+        `Concurrent delivery exceeds remaining unfulfilled quantity for order`,
+        400
+      );
+    }
+
+    return updated;
   }
 
   async addPurchaseDecision(
@@ -699,11 +725,18 @@ export class OrdersRepository {
       );
     }
 
+    const decisionDoc = {
+      ...decision,
+      materialId: typeof decision.materialId === "string" ? new Types.ObjectId(decision.materialId) : decision.materialId,
+      supplierId: typeof decision.supplierId === "string" ? new Types.ObjectId(decision.supplierId) : decision.supplierId,
+      decidedBy: typeof decision.decidedBy === "string" ? new Types.ObjectId(decision.decidedBy) : decision.decidedBy,
+    };
+
     const updated = await this.model
       .findOneAndUpdate(
         { tenantId, _id: orderId },
         {
-          $push: { purchaseDecisions: decision },
+          $push: { purchaseDecisions: decisionDoc },
           $inc: { version: 1 },
         },
         { new: true, session: session ?? null }
@@ -738,11 +771,16 @@ export class OrdersRepository {
       );
     }
 
+    const reservationDoc = {
+      ...reservation,
+      materialId: typeof reservation.materialId === "string" ? new Types.ObjectId(reservation.materialId) : reservation.materialId,
+    };
+
     const updated = await this.model
       .findOneAndUpdate(
         { tenantId, _id: orderId },
         {
-          $push: { reservations: reservation },
+          $push: { reservations: reservationDoc },
           $inc: { version: 1 },
         },
         { new: true, session: session ?? null }
@@ -895,6 +933,14 @@ export class OrdersRepository {
     const decision = order.purchaseDecisions?.find((d) => d.decisionId === decisionId);
     if (!decision) return null;
 
+    if (decision.supplierOrder?.status === "cancelled") {
+      throw new AppError(
+        ErrorCode.VALIDATION_FAILED,
+        "Cannot receive goods against a cancelled purchase decision",
+        400
+      );
+    }
+
     const currentRecv = decision.supplierOrder?.recvQty || 0;
     const newRecv = currentRecv + receivedQty;
     const targetQty = decision.qty;
@@ -920,6 +966,241 @@ export class OrdersRepository {
       )
       .lean<IOrder>()
       .exec();
+  }
+
+  async findByPurchaseDecisionId(
+    tenantId: string,
+    decisionId: string,
+    projection: Record<string, any> = ORDER_DETAIL_PROJECTION,
+    tx?: TxContext
+  ): Promise<IOrder | null> {
+    const session = this.getSession(tx);
+    return this.model
+      .findOne(
+        {
+          tenantId,
+          $or: [
+            { "purchaseDecisions.decisionId": decisionId },
+            { "purchaseDecisions.supplierOrder.orderNo": decisionId },
+          ],
+        },
+        projection
+      )
+      .session(session ?? null)
+      .lean<IOrder>()
+      .exec();
+  }
+
+  async updatePurchaseDecision(
+    tenantId: string,
+    orderId: string | Types.ObjectId,
+    decisionId: string,
+    data: {
+      expectedArrivalDate?: string;
+      status?: "ordered" | "cancelled";
+      notes?: string;
+    },
+    tx?: TxContext
+  ): Promise<IOrder | null> {
+    const session = this.getSession(tx);
+    const order = await this.model
+      .findOne({
+        tenantId,
+        _id: orderId,
+        $or: [
+          { "purchaseDecisions.decisionId": decisionId },
+          { "purchaseDecisions.supplierOrder.orderNo": decisionId },
+        ],
+      })
+      .session(session ?? null)
+      .lean<IOrder>()
+      .exec();
+
+    if (!order) return null;
+
+    const decision = order.purchaseDecisions?.find(
+      (d) => d.decisionId === decisionId || d.supplierOrder?.orderNo === decisionId
+    );
+    if (!decision) return null;
+
+    if (data.status === "cancelled") {
+      if ((decision.supplierOrder?.recvQty ?? 0) > 0) {
+        throw new AppError(
+          ErrorCode.VALIDATION_FAILED,
+          "Cannot cancel a purchase decision where items have already been received",
+          400
+        );
+      }
+    }
+
+    const setObj: Record<string, any> = {};
+    if (data.expectedArrivalDate !== undefined) {
+      setObj["purchaseDecisions.$.expectedArrivalDate"] = data.expectedArrivalDate;
+    }
+    if (data.status !== undefined) {
+      setObj["purchaseDecisions.$.supplierOrder.status"] = data.status;
+    }
+
+    return this.model
+      .findOneAndUpdate(
+        {
+          tenantId,
+          _id: orderId,
+          "purchaseDecisions.decisionId": decision.decisionId,
+        },
+        {
+          $set: setObj,
+          $inc: { version: 1 },
+        },
+        { new: true, session: session ?? null }
+      )
+      .lean<IOrder>()
+      .exec();
+  }
+
+  async consumeReservation(
+    tenantId: string,
+    orderId: string | Types.ObjectId,
+    materialId: string | Types.ObjectId,
+    _qty: number,
+    tx?: TxContext
+  ): Promise<IOrder | null> {
+    const session = this.getSession(tx);
+    const order = await this.model
+      .findOne({
+        tenantId,
+        _id: orderId,
+        "reservations.materialId": new Types.ObjectId(materialId),
+        "reservations.status": "active",
+      })
+      .session(session ?? null)
+      .lean<IOrder>()
+      .exec();
+
+    if (!order) return null;
+
+    return this.model
+      .findOneAndUpdate(
+        {
+          tenantId,
+          _id: orderId,
+          "reservations.materialId": new Types.ObjectId(materialId),
+          "reservations.status": "active",
+        },
+        {
+          $set: {
+            "reservations.$.status": "consumed",
+          },
+          $inc: { version: 1 },
+        },
+        { new: true, session: session ?? null }
+      )
+      .lean<IOrder>()
+      .exec();
+  }
+
+  async findPurchaseDecisionsPaginated(
+    tenantId: string,
+    filter: {
+      status?: string;
+      materialId?: string;
+      supplierId?: string;
+      orderId?: string;
+      search?: string;
+    },
+    pagination: PaginationQuery
+  ): Promise<PaginatedResult<any>> {
+    const matchStage: Record<string, any> = {
+      tenantId,
+      "purchaseDecisions.0": { $exists: true },
+    };
+    if (filter.orderId) {
+      matchStage._id = new Types.ObjectId(filter.orderId);
+    }
+
+    const pipeline: any[] = [
+      { $match: matchStage },
+      { $unwind: "$purchaseDecisions" },
+    ];
+
+    const decisionMatch: Record<string, any> = {};
+    if (filter.status) {
+      decisionMatch["purchaseDecisions.supplierOrder.status"] = filter.status;
+    }
+    if (filter.materialId) {
+      decisionMatch["purchaseDecisions.materialId"] = new Types.ObjectId(filter.materialId);
+    }
+    if (filter.supplierId) {
+      decisionMatch["purchaseDecisions.supplierId"] = new Types.ObjectId(filter.supplierId);
+    }
+    if (filter.search) {
+      const regex = new RegExp(filter.search, "i");
+      decisionMatch.$or = [
+        { orderNumber: regex },
+        { "purchaseDecisions.decisionId": regex },
+        { "purchaseDecisions.supplierOrder.orderNo": regex },
+      ];
+    }
+
+    if (Object.keys(decisionMatch).length > 0) {
+      pipeline.push({ $match: decisionMatch });
+    }
+
+    pipeline.push(
+      {
+        $lookup: {
+          from: "materials",
+          localField: "purchaseDecisions.materialId",
+          foreignField: "_id",
+          as: "materialInfo",
+        },
+      },
+      {
+        $lookup: {
+          from: "suppliers",
+          localField: "purchaseDecisions.supplierId",
+          foreignField: "_id",
+          as: "supplierInfo",
+        },
+      },
+      {
+        $project: {
+          orderId: "$_id",
+          orderNumber: 1,
+          orderStatus: "$status",
+          decisionId: "$purchaseDecisions.decisionId",
+          optionId: "$purchaseDecisions.optionId",
+          materialId: "$purchaseDecisions.materialId",
+          materialName: { $arrayElemAt: ["$materialInfo.materialName", 0] },
+          materialType: { $arrayElemAt: ["$materialInfo.type", 0] },
+          unit: { $arrayElemAt: ["$materialInfo.unit", 0] },
+          supplierId: "$purchaseDecisions.supplierId",
+          supplierName: { $arrayElemAt: ["$supplierInfo.supplierName", 0] },
+          qty: "$purchaseDecisions.qty",
+          ratePaise: "$purchaseDecisions.ratePaise",
+          totalPaise: { $multiply: ["$purchaseDecisions.qty", "$purchaseDecisions.ratePaise"] },
+          expectedArrivalDate: "$purchaseDecisions.expectedArrivalDate",
+          decidedBy: "$purchaseDecisions.decidedBy",
+          decidedAt: "$purchaseDecisions.decidedAt",
+          supplierOrder: "$purchaseDecisions.supplierOrder",
+        },
+      }
+    );
+
+    const countPipeline = [...pipeline, { $count: "total" }];
+    const countResult = await this.model.aggregate(countPipeline).exec();
+    const total = countResult.length > 0 ? countResult[0].total : 0;
+
+    const skip = (pagination.page - 1) * pagination.limit;
+    pipeline.push({ $sort: { decidedAt: -1, _id: -1 } });
+    pipeline.push({ $skip: skip }, { $limit: pagination.limit });
+
+    const data = await this.model.aggregate(pipeline).exec();
+
+    return {
+      data,
+      meta: createPaginationMeta(total, pagination.page, pagination.limit),
+    };
   }
 
   async updateRevisionStatus(
@@ -1215,6 +1496,222 @@ export class OrdersRepository {
       tenantId,
       clientId: new Types.ObjectId(clientId),
     }).exec();
+  }
+
+  async setProductionMonitoring(
+    tenantId: string,
+    orderId: string | Types.ObjectId,
+    monitoring: any,
+    tx?: TxContext
+  ): Promise<IOrder> {
+    const session = this.getSession(tx);
+    const updated = await this.model
+      .findOneAndUpdate(
+        { tenantId, _id: orderId },
+        {
+          $set: { "production.monitoring": monitoring },
+          $inc: { version: 1 },
+        },
+        { new: true, session: session ?? null }
+      )
+      .lean<IOrder>()
+      .exec();
+
+    if (!updated) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+    }
+    return updated;
+  }
+
+  async getOrderSummary(
+    tenantId: string,
+    filter: { dateFrom?: string; dateTo?: string; clientId?: string } = {}
+  ): Promise<{
+    countsByStatus: Record<string, number>;
+    totalOrders: number;
+    production: {
+      totalTargetQty: number;
+      totalProducedQty: number;
+      totalDeliveredQty: number;
+      activeProductionOrders: number;
+    };
+    performance: {
+      onTrackCount: number;
+      delayedCount: number;
+    };
+    financials: {
+      totalValuePaise: number;
+      totalPaidPaise: number;
+      totalPendingPaise: number;
+    };
+    deliveries: {
+      totalDeliveries: number;
+      totalInvoicedPaise: number;
+    };
+  }> {
+    const match: Record<string, any> = { tenantId };
+    if (filter.clientId) {
+      match.clientId = Types.ObjectId.isValid(filter.clientId)
+        ? new Types.ObjectId(filter.clientId)
+        : filter.clientId;
+    }
+    if (filter.dateFrom || filter.dateTo) {
+      match.createdAt = {};
+      if (filter.dateFrom) match.createdAt.$gte = new Date(filter.dateFrom);
+      if (filter.dateTo) match.createdAt.$lte = new Date(filter.dateTo);
+    }
+
+    const now = new Date();
+
+    const pipeline = [
+      { $match: match },
+      {
+        $facet: {
+          byStatus: [
+            { $group: { _id: "$status", count: { $sum: 1 } } },
+          ],
+          production: [
+            {
+              $group: {
+                _id: null,
+                totalOrders: { $sum: 1 },
+                totalTargetQty: { $sum: { $ifNull: ["$quantity", 0] } },
+                totalProducedQty: { $sum: { $ifNull: ["$production.producedQty", 0] } },
+                totalDeliveredQty: { $sum: { $ifNull: ["$production.deliveredQty", 0] } },
+                activeProductionOrders: {
+                  $sum: {
+                    $cond: [
+                      { $in: ["$status", ["assigned", "in_production", "ready_for_delivery", "partially_delivered"]] },
+                      1,
+                      0,
+                    ],
+                  },
+                },
+                totalValuePaise: {
+                  $sum: {
+                    $ifNull: ["$financials.totalPaise", { $ifNull: ["$quotation.totalPaise", 0] }],
+                  },
+                },
+                totalPaidPaise: {
+                  $sum: { $ifNull: ["$financials.totalPaidPaise", 0] },
+                },
+              },
+            },
+          ],
+          performance: [
+            {
+              $match: {
+                status: { $in: ["assigned", "in_production", "ready_for_delivery", "partially_delivered"] },
+              },
+            },
+            {
+              $project: {
+                isDelayed: {
+                  $or: [
+                    { $eq: ["$production.monitoring.status", "behind"] },
+                    {
+                      $and: [
+                        { $ne: ["$deliveryDeadline", null] },
+                        { $lt: [{ $toDate: "$deliveryDeadline" }, now] },
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                delayedCount: { $sum: { $cond: ["$isDelayed", 1, 0] } },
+                onTrackCount: { $sum: { $cond: ["$isDelayed", 0, 1] } },
+              },
+            },
+          ],
+          deliveries: [
+            { $unwind: "$deliveries" },
+            {
+              $group: {
+                _id: null,
+                totalDeliveries: { $sum: 1 },
+                totalInvoicedPaise: { $sum: { $ifNull: ["$deliveries.invoiceAmountPaise", 0] } },
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const [result] = await this.model.aggregate(pipeline).exec();
+
+    const countsByStatus: Record<string, number> = {};
+    if (result?.byStatus) {
+      for (const item of result.byStatus) {
+        countsByStatus[item._id] = item.count;
+      }
+    }
+
+    const prod = result?.production?.[0] || {};
+    const perf = result?.performance?.[0] || {};
+    const deliv = result?.deliveries?.[0] || {};
+
+    const totalOrders = prod.totalOrders || 0;
+    const totalValuePaise = prod.totalValuePaise || 0;
+    const totalPaidPaise = prod.totalPaidPaise || 0;
+    const totalPendingPaise = Math.max(0, totalValuePaise - totalPaidPaise);
+
+    return {
+      countsByStatus,
+      totalOrders,
+      production: {
+        totalTargetQty: prod.totalTargetQty || 0,
+        totalProducedQty: prod.totalProducedQty || 0,
+        totalDeliveredQty: prod.totalDeliveredQty || 0,
+        activeProductionOrders: prod.activeProductionOrders || 0,
+      },
+      performance: {
+        onTrackCount: perf.onTrackCount || 0,
+        delayedCount: perf.delayedCount || 0,
+      },
+      financials: {
+        totalValuePaise,
+        totalPaidPaise,
+        totalPendingPaise,
+      },
+      deliveries: {
+        totalDeliveries: deliv.totalDeliveries || 0,
+        totalInvoicedPaise: deliv.totalInvoicedPaise || 0,
+      },
+    };
+  }
+
+  async getProcurementSummary(tenantId: string): Promise<{
+    activePurchasesCount: number;
+    pendingPurchasesQty: number;
+  }> {
+    const pipeline = [
+      { $match: { tenantId } },
+      { $unwind: "$purchaseDecisions" },
+      {
+        $match: {
+          $or: [
+            { "purchaseDecisions.supplierOrder.status": "ordered" },
+            { "purchaseDecisions.status": "ordered" },
+          ],
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          activePurchasesCount: { $sum: 1 },
+          pendingPurchasesQty: { $sum: { $ifNull: ["$purchaseDecisions.qty", 0] } },
+        },
+      },
+    ];
+    const [res] = await this.model.aggregate(pipeline).exec();
+    return {
+      activePurchasesCount: res?.activePurchasesCount || 0,
+      pendingPurchasesQty: res?.pendingPurchasesQty || 0,
+    };
   }
 }
 

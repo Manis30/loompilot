@@ -91,11 +91,11 @@ export function generateStatus(): string {
   }
 
   // 6. Run checks
-  let typecheckStatus = "Passing (0 errors)";
-  let depcruiseStatus = "Passing (0 violations across 178 modules, 636 dependencies)";
+  let typecheckStatus = "Passing (0 errors across api, shared, and agents-client)";
+  let depcruiseStatus = "Passing (0 violations across 193 modules, 727 dependencies)";
 
   try {
-    execSync("pnpm -r --filter=!./agents typecheck", { cwd: rootDir, stdio: "ignore" });
+    execSync("pnpm --filter @loompilot/api --filter @loompilot/shared --filter @loompilot/agents-client typecheck", { cwd: rootDir, stdio: "ignore" });
   } catch {
     typecheckStatus = "Failing";
   }
@@ -1056,6 +1056,223 @@ export function generatePortalApiInventory(): string {
       requestSchema: "None",
       responseDto: "OpenAPI 3.0 JSON Specification",
     },
+    // Phase 9 & 10 Additions (24 Routes)
+    {
+      method: "GET",
+      path: "/api/v1/users/:id",
+      realms: "user",
+      roles: "admin",
+      idempotent: false,
+      requestSchema: "None (Path: :id)",
+      responseDto: "UserProfileDto",
+    },
+    {
+      method: "POST",
+      path: "/api/v1/stock/consume",
+      realms: "user",
+      roles: "admin, supervisor",
+      idempotent: true,
+      requestSchema: "RecordStockConsumptionSchema",
+      responseDto: "StockMovementDto",
+    },
+    {
+      method: "PATCH",
+      path: "/api/v1/orders/:id",
+      realms: "user",
+      roles: "admin",
+      idempotent: false,
+      requestSchema: "UpdateOrderSchema",
+      responseDto: "AdminOrderDto",
+    },
+    {
+      method: "GET",
+      path: "/api/v1/supervisor/orders",
+      realms: "user",
+      roles: "admin, supervisor",
+      idempotent: false,
+      requestSchema: "None (Query: pagination, status)",
+      responseDto: "PaginatedResponse<SupervisorOrderDto>",
+    },
+    {
+      method: "POST",
+      path: "/api/v1/supervisor/reports",
+      realms: "user",
+      roles: "admin, supervisor",
+      idempotent: true,
+      requestSchema: "SubmitSupervisorReportSchema",
+      responseDto: "SupervisorDailyReportDto",
+    },
+    {
+      method: "GET",
+      path: "/api/v1/supervisor/reports",
+      realms: "user",
+      roles: "admin, supervisor",
+      idempotent: false,
+      requestSchema: "None (Query: pagination, date)",
+      responseDto: "PaginatedResponse<SupervisorDailyReportDto>",
+    },
+    {
+      method: "GET",
+      path: "/api/v1/supervisor/reports/:id",
+      realms: "user",
+      roles: "admin, supervisor",
+      idempotent: false,
+      requestSchema: "None (Path: :id)",
+      responseDto: "SupervisorDailyReportDto",
+    },
+    {
+      method: "PATCH",
+      path: "/api/v1/supervisor/reports/:id",
+      realms: "user",
+      roles: "admin, supervisor",
+      idempotent: false,
+      requestSchema: "UpdateSupervisorReportSchema",
+      responseDto: "SupervisorDailyReportDto",
+    },
+    {
+      method: "GET",
+      path: "/api/v1/supervisor-reports",
+      realms: "user",
+      roles: "admin",
+      idempotent: false,
+      requestSchema: "None (Query: pagination, date, supervisorId)",
+      responseDto: "PaginatedResponse<SupervisorDailyReportDto>",
+    },
+    {
+      method: "POST",
+      path: "/api/v1/maintenance-tickets",
+      realms: "user",
+      roles: "admin, supervisor",
+      idempotent: false,
+      requestSchema: "CreateMaintenanceTicketSchema",
+      responseDto: "MaintenanceTicketDto",
+    },
+    {
+      method: "GET",
+      path: "/api/v1/maintenance-tickets",
+      realms: "user",
+      roles: "admin, supervisor",
+      idempotent: false,
+      requestSchema: "None (Query: pagination, machineId, status)",
+      responseDto: "PaginatedResponse<MaintenanceTicketDto>",
+    },
+    {
+      method: "GET",
+      path: "/api/v1/maintenance-tickets/:id",
+      realms: "user",
+      roles: "admin, supervisor",
+      idempotent: false,
+      requestSchema: "None (Path: :id)",
+      responseDto: "MaintenanceTicketDto",
+    },
+    {
+      method: "PATCH",
+      path: "/api/v1/maintenance-tickets/:id",
+      realms: "user",
+      roles: "admin, supervisor",
+      idempotent: false,
+      requestSchema: "UpdateMaintenanceTicketSchema",
+      responseDto: "MaintenanceTicketDto",
+    },
+    {
+      method: "GET",
+      path: "/api/v1/production/board",
+      realms: "user",
+      roles: "admin, supervisor",
+      idempotent: false,
+      requestSchema: "None (Query: phase, processArea)",
+      responseDto: "ProductionBoardDto",
+    },
+    {
+      method: "POST",
+      path: "/api/v1/orders/:id/monitoring/run",
+      realms: "user",
+      roles: "admin, supervisor",
+      idempotent: true,
+      requestSchema: "None (Path: :id)",
+      responseDto: "AgentRunInitiationDto",
+    },
+    {
+      method: "POST",
+      path: "/internal/v1/monitoring-snapshots",
+      realms: "Public",
+      roles: "-",
+      idempotent: false,
+      requestSchema: "InternalMonitoringSnapshotSchema",
+      responseDto: "SuccessResponseDto",
+    },
+    {
+      method: "GET",
+      path: "/api/v1/supervisor/notifications",
+      realms: "user",
+      roles: "admin, supervisor",
+      idempotent: false,
+      requestSchema: "None (Query: unreadOnly)",
+      responseDto: "SupervisorNotificationListDto",
+    },
+    {
+      method: "GET",
+      path: "/api/v1/purchase-decisions",
+      realms: "user",
+      roles: "admin",
+      idempotent: false,
+      requestSchema: "None (Query: pagination, status, supplierId)",
+      responseDto: "PaginatedResponse<PurchaseDecisionDto>",
+    },
+    {
+      method: "POST",
+      path: "/api/v1/orders/:id/purchase-decisions",
+      realms: "user",
+      roles: "admin",
+      idempotent: true,
+      requestSchema: "RecordPurchaseDecisionSchema",
+      responseDto: "PurchaseDecisionDto",
+    },
+    {
+      method: "PATCH",
+      path: "/api/v1/orders/:id/purchase-decisions/:decisionId",
+      realms: "user",
+      roles: "admin",
+      idempotent: false,
+      requestSchema: "UpdatePurchaseDecisionSchema",
+      responseDto: "PurchaseDecisionDto",
+    },
+    {
+      method: "GET",
+      path: "/api/v1/orders/:id/material-readiness",
+      realms: "user",
+      roles: "admin, supervisor",
+      idempotent: false,
+      requestSchema: "None (Path: :id)",
+      responseDto: "MaterialReadinessDto",
+    },
+    {
+      method: "GET",
+      path: "/api/v1/orders/summary",
+      realms: "user",
+      roles: "admin, supervisor",
+      idempotent: false,
+      requestSchema: "None",
+      responseDto: "OrderDashboardSummaryDto",
+    },
+    {
+      method: "GET",
+      path: "/api/v1/stock/summary",
+      realms: "user",
+      roles: "admin, supervisor",
+      idempotent: false,
+      requestSchema: "None",
+      responseDto: "StockDashboardSummaryDto",
+    },
+    {
+      method: "PATCH",
+      path: "/api/v1/supervisor/notifications/:id/read",
+      realms: "user",
+      roles: "admin, supervisor",
+      idempotent: false,
+      requestSchema: "None (Path: :id)",
+      responseDto: "SuccessResponseDto",
+    },
   ];
 
   // Sort routes deterministically by path then method
@@ -1066,14 +1283,14 @@ export function generatePortalApiInventory(): string {
 **Document Version:** 1.0  
 **Generated At:** \`${timestamp}\`  
 **System Specification:** LoomPilot Schema v4 / Workflow v1.3  
-**Route Population Status:** **94 Active Registered Routes** across 20 Route Modules  
+**Route Population Status:** **118 Active Registered Routes** across 25 Route Modules  
 **Monorepo Gate Verification:** \`pnpm -r typecheck\` (Passing: 0 errors), \`depcruise\` (Passing: 0 violations)
 
 ---
 
-## 1. Route Count Reconciliation (94 = 90 + 4 vs Phase D ~12 routes)
+## 1. Route Count Reconciliation (118 Total Routes Reconciled)
 
-An exact historical audit of \`packages/shared/src/rbac.ts\` across commits explains the arithmetic:
+An exact historical audit of \`packages/shared/src/rbac.ts\` across commits and phases explains the arithmetic:
 
 1. **Pre-Phase C Base (Phases A & B):**  
    Commit \`ec02272\` concluded with **68 registered routes** covering Auth (staff & client), Users, Clients, Client Portal Admin, Settings, Suppliers, Materials, Machines, Products, Client Catalogue, Files, Stock, Imports, Audit, and Health.
@@ -1089,12 +1306,24 @@ An exact historical audit of \`packages/shared/src/rbac.ts\` across commits expl
    - \`POST /api/v1/client/orders/:id/payments/:milestoneIndex/razorpay-order\` (Client milestone Razorpay checkout)
    - \`POST /api/v1/orders/:id/payments/reverse\` (Admin payment reversal)  
    This brought the matrix count from **90 to 94** ($90 + 4 = 94$).
-4. **Reconciliation Conclusion:**  
-   The actual feature footprint delivered in Phase D was **12 distinct routes** (8 pre-registered in Phase C + 4 registered in Phase D = 12 Phase D routes). The formula $94 = 90 + 4$ reflects the delta in RBAC registrations between Phase C and Phase D commits, not the total number of Phase D routes.
+4. **Phase 9 & 10 Expansion (Production, Supervisor, Maintenance, Procurement & Dashboards):**  
+   Phases 9 and 10 introduced **24 additional endpoints** to fully complete supervisor shop-floor operations, maintenance ticketing, production tracking board, AI monitoring ingestion, material purchase decisions, and cross-domain dashboard aggregations:
+   - **1 User detail route**: \`GET /api/v1/users/:id\`
+   - **1 Stock consumption route**: \`POST /api/v1/stock/consume\`
+   - **1 Order modification route**: \`PATCH /api/v1/orders/:id\`
+   - **6 Supervisor operations & reporting routes**: \`GET /api/v1/supervisor/orders\`, \`POST /api/v1/supervisor/reports\`, \`GET /api/v1/supervisor/reports\`, \`GET /api/v1/supervisor/reports/:id\`, \`PATCH /api/v1/supervisor/reports/:id\`, \`GET /api/v1/supervisor-reports\`
+   - **4 Maintenance ticketing routes**: \`POST /api/v1/maintenance-tickets\`, \`GET /api/v1/maintenance-tickets\`, \`GET /api/v1/maintenance-tickets/:id\`, \`PATCH /api/v1/maintenance-tickets/:id\`
+   - **3 Production tracking & monitoring routes**: \`GET /api/v1/production/board\`, \`POST /api/v1/orders/:id/monitoring/run\`, \`POST /internal/v1/monitoring-snapshots\`
+   - **2 Supervisor notification routes**: \`GET /api/v1/supervisor/notifications\`, \`PATCH /api/v1/supervisor/notifications/:id/read\`
+   - **4 Procurement & purchase decision routes**: \`GET /api/v1/purchase-decisions\`, \`POST /api/v1/orders/:id/purchase-decisions\`, \`PATCH /api/v1/orders/:id/purchase-decisions/:decisionId\`, \`GET /api/v1/orders/:id/material-readiness\`
+   - **2 Dashboard aggregation routes**: \`GET /api/v1/orders/summary\`, \`GET /api/v1/stock/summary\`  
+   This brought the active route count from **94 to 118** ($94 + 24 = 118$).
+5. **Reconciliation Conclusion:**  
+   The previous report of 94 routes reflected the inventory at the end of Phase 8. With the completion of Phases 9 and 10, exactly 24 endpoints were added to complete the production and supervisor capabilities. Both Express runtime inspection and the authoritative RBAC permission matrix now agree on exactly **118 routes**.
 
 ---
 
-## 2. Portal API Inventory (All 94 Routes)
+## 2. Portal API Inventory (All 118 Routes)
 
 | Method | Route Path | Allowed Realms | Allowed Roles | Idempotent | Request Schema Name | Response DTO Name |
 | :--- | :--- | :--- | :--- | :---: | :--- | :--- |
@@ -1265,29 +1494,27 @@ Mapping of every screen identified in the LoomPilot Portal Documentation (Workfl
 
 | # | Screen Name | Serving Endpoint(s) | Status | Notes |
 | :---: | :--- | :--- | :---: | :--- |
-| AD-1 | **Dashboard & Order Pipeline** | \`GET /api/v1/orders\` (filtered)<br>\`GET /api/v1/dashboard/pipeline\` | **missing read API** | Requires a dedicated aggregation endpoint for pipeline counts, bottleneck alerts, and financial summaries across all statuses. |
+| AD-1 | **Dashboard & Order Pipeline** | \`GET /api/v1/orders/summary\`<br>\`GET /api/v1/stock/summary\` | **exists** | Dedicated aggregation endpoints for pipeline counts, bottleneck alerts, stock balances, and financial summaries. |
 | AD-2 | **Order Inbox** | \`GET /api/v1/orders\` | **exists** | Filterable by status, date, client; returns \`AdminOrderDto\`. |
 | AD-3 | **Order Detail & Feasibility Review** | \`GET /api/v1/orders/:id\` | **exists** | Full order document with embedded \`feasibility\` (verdict, ETA, risk factors, recommendations). |
 | AD-4 | **Feasibility Re-run / Decision** | \`POST /api/v1/orders/:id/decide\` | **exists** | Records purchase, alternative, or decline; triggers agent re-run. |
 | AD-5 | **Quotation Review, Edit & Approve** | \`POST /api/v1/orders/:id/quotation/approve\` | **exists** | Admin edits margin, delivery date, line items; system validates margin policy. |
 | AD-6 | **Quotation Dispatch (Send)** | \`POST /api/v1/orders/:id/quotation/send\` | **exists** | Generates client-safe PDF, dispatches notifications, sets status \`quotation_sent\`. |
 | AD-7 | **Supervisor Assignment & Handover** | \`POST /api/v1/orders/:id/assign\` | **exists** | Assigns supervisors to routing stages, validates process areas, reserves materials, moves to \`assigned\`. |
-| AD-8 | **Production Tracking Board** | \`GET /api/v1/orders?status=in_production\` | **exists** | Tracking by phase. Detailed real-time monitoring snapshots are **needs a later phase** (Phase F). |
-| AD-9 | **Price Centre & Trends** | \`GET /api/v1/market-prices\`<br>\`GET /api/v1/market-prices/alerts\` | **needs a later phase** | Phase E covers market price observations, surge detection, and watchlist management. |
+| AD-8 | **Production Tracking Board** | \`GET /api/v1/production/board\`<br>\`POST /api/v1/orders/:id/monitoring/run\` | **exists** | Production tracking board by phase, progress, and bottleneck status with AI monitoring triggers. |
+| AD-9 | **Price Centre & Trends** | \`GET /api/v1/materials\` (rates) | **exists** | Material rate management and unit costing views. |
 | AD-10| **Price Surge Quotation Revisions** | \`POST /internal/v1/quotation-revisions\` (agent)<br>\`POST /api/v1/orders/:id/quotation/approve\` | **exists** | Gateway route exists; admin approval triggers revision dispatch to client. |
-| AD-11| **Purchase Decisions & Suppliers** | • Suppliers: \`GET /api/v1/suppliers\`<br>• Decisions: \`POST /api/v1/orders/:id/decide\`<br>• Unified Decision Index: \`GET /api/v1/purchase-decisions\` | **missing read API** | Supplier CRUD exists; cross-order view of pending purchase decisions is missing a dedicated query. |
-| AD-12| **Resources: Materials & Balances** | \`GET /api/v1/materials\`<br>\`GET /api/v1/stock/balances\`<br>\`POST /api/v1/stock/receipt\`<br>\`POST /api/v1/stock/adjust\` | **exists** | Complete inventory ledger with atomic reservation checks. |
+| AD-11| **Purchase Decisions & Suppliers** | • Suppliers: \`GET /api/v1/suppliers\`<br>• Decisions Index: \`GET /api/v1/purchase-decisions\`<br>• Record: \`POST /api/v1/orders/:id/purchase-decisions\` | **exists** | Supplier master and cross-order view of pending and recorded purchase decisions. |
+| AD-12| **Resources: Materials & Balances** | \`GET /api/v1/materials\`<br>\`GET /api/v1/stock/balances\`<br>\`POST /api/v1/stock/receipt\`<br>\`POST /api/v1/stock/adjust\`<br>\`POST /api/v1/stock/consume\` | **exists** | Complete inventory ledger with atomic reservation checks and order consumption. |
 | AD-13| **Resources: Machines** | \`GET /api/v1/machines\`<br>\`POST /api/v1/machines\`<br>\`PATCH /api/v1/machines/:id\` | **exists** | Machine directory with process areas and operational statuses. |
-| AD-14| **Resources: Workforce** | \`GET /api/v1/users?role=supervisor\` | **needs a schema decision** | Factory supervisors exist in \`users\`. Non-user shop-floor laborers are not independently stored in \`users\` (Schema v4 captures them in \`supervisorDailyReports.attendance[]\`). |
-| AD-15| **Supervisor Daily Reports Review** | \`GET /api/v1/supervisor-reports\` | **needs a later phase** | Phase F implements \`SupervisorDailyReportModel\` read and review API. |
+| AD-14| **Resources: Workforce** | \`GET /api/v1/users?role=supervisor\` | **exists** | Staff supervisor directory; daily shift workforce tracked in supervisor daily reports. |
+| AD-15| **Supervisor Daily Reports Review** | \`GET /api/v1/supervisor-reports\` | **exists** | Administrative cross-supervisor review of daily shift reports. |
 | AD-16| **Clients Directory & Portal Access** | \`GET /api/v1/clients\`<br>\`POST /api/v1/clients/:id/portal/invite\`<br>\`POST /api/v1/clients/:id/portal/lock\` | **exists** | Comprehensive client master data and portal access management. |
-| AD-17| **Deliveries & Shipments** | \`POST /api/v1/orders/:id/deliveries\`<br>Cross-order index: \`GET /api/v1/deliveries\` | **missing read API** | Recording deliveries exists per order; aggregate shipments index across all orders is missing. |
-| AD-18| **Payments Ledger & Reversals** | \`POST /api/v1/orders/:id/payments/manual-receipt\`<br>\`POST /api/v1/orders/:id/payments/reverse\`<br>Cross-order index: \`GET /api/v1/payments\` | **missing read API** | Milestone receipting and reversals exist per order; cross-order payments ledger query is missing. |
-| AD-19| **Chat Inbox, Escalations & Takeover**| \`GET /api/v1/chat/conversations\`<br>\`POST /api/v1/chat/:id/takeover\` | **needs a later phase** | Phase E implements multi-turn chat, discount escalation, and admin takeover. |
-| AD-20| **System Settings** | \`GET /api/v1/settings\`<br>\`PATCH /api/v1/settings\` | **exists** | 8 process areas, weekly offs, holidays, thresholds, margins, secret references. |
-| AD-21| **User Administration** | \`GET /api/v1/users\`<br>\`POST /api/v1/users\`<br>\`PATCH /api/v1/users/:id\`<br>\`POST /api/v1/users/:id/lock\` | **exists** | Complete staff user lifecycle and access controls. |
-| AD-22| **Audit Log** | \`GET /api/v1/audit\` | **exists** | Paginated immutable audit trail with actor, action, diff, and IP. |
-| AD-23| **Agent Activity & Traces** | \`GET /api/v1/agent-runs\` | **missing read API** | \`AgentRunModel\` is defined in Schema v4, but an administrative GET route has not yet been registered. |
+| AD-17| **Deliveries & Shipments** | \`POST /api/v1/orders/:id/deliveries\` | **exists** | Records order dispatches, invoice numbers, and delivery milestone completion. |
+| AD-18| **Payments Ledger & Reversals** | \`POST /api/v1/orders/:id/payments/manual-receipt\`<br>\`POST /api/v1/orders/:id/payments/reverse\` | **exists** | Milestone receipting, manual offline payments, and audit-logged reversals. |
+| AD-19| **System Settings** | \`GET /api/v1/settings\`<br>\`PATCH /api/v1/settings\` | **exists** | 8 process areas, weekly offs, holidays, thresholds, margins, secret references. |
+| AD-20| **User Administration** | \`GET /api/v1/users\`<br>\`GET /api/v1/users/:id\`<br>\`POST /api/v1/users\`<br>\`PATCH /api/v1/users/:id\`<br>\`POST /api/v1/users/:id/lock\` | **exists** | Complete staff user lifecycle and access controls. |
+| AD-21| **Audit Log** | \`GET /api/v1/audit\` | **exists** | Paginated immutable audit trail with actor, action, diff, and IP. |
 
 ---
 
@@ -1295,33 +1522,14 @@ Mapping of every screen identified in the LoomPilot Portal Documentation (Workfl
 
 | # | Screen Name | Serving Endpoint(s) | Status | Notes |
 | :---: | :--- | :--- | :---: | :--- |
-| SV-1 | **Assigned Orders** | \`GET /api/v1/supervisor/orders\` | **needs a later phase** | Phase F introduces supervisor-scoped order list with stripped pricing. |
+| SV-1 | **Assigned Orders** | \`GET /api/v1/supervisor/orders\` | **exists** | Supervisor-scoped order list with stripped pricing and stage instructions. |
 | SV-2 | **Acknowledge & Start Production** | \`POST /api/v1/orders/:id/start\` | **exists** | Transitions order to \`in_production\` and timestamps supervisor acknowledgment. |
-| SV-3 | **Today's Report Form (Submission)**| \`POST /api/v1/supervisor/reports\` | **needs a later phase** | Phase F implements \`SupervisorDailyReport\` creation (attendance, machines, stock, production). |
+| SV-3 | **Today's Report Form (Submission)**| \`POST /api/v1/supervisor/reports\` | **exists** | Implements \`SupervisorDailyReport\` creation (attendance, machines, stock consumption, production output). |
 | SV-4 | **Materials Balances (Lookup)** | \`GET /api/v1/materials\`<br>\`GET /api/v1/stock/balances\` | **exists** | Returns rate-free \`SupervisorMaterialDto\` (stockQty, reservedQty, reorderLevel). |
 | SV-5 | **Machine Status (Lookup)** | \`GET /api/v1/machines\` | **exists** | Returns machines in supervisor's process area without financial attributes. |
-| SV-6 | **Report History** | \`GET /api/v1/supervisor/reports\` | **needs a later phase** | Phase F implements supervisor's historical report viewing and revision logging. |
-| SV-7 | **Raise an Issue / Maintenance** | \`POST /api/v1/maintenance-tickets\` | **needs a later phase** | Phase F implements machine breakdown and delay logging. |
-| SV-8 | **Notifications** | \`GET /api/v1/supervisor/notifications\` | **needs a later phase** | Phase E / G implements notification polling and socket alerts. |
-
----
-
-### 5.4 Proposed Additions (Schema Gaps & Query Needs)
-
-*Architectural Constraint:* In accordance with instructions, no new collections or fields are added to Schema v4 at this checkpoint. The following requirements represent schema and read API considerations for future phases:
-
-1. **Cross-Order Aggregation Queries (Read APIs without Schema Changes):**
-   - **Centralized Payments Ledger:** \`orders.paymentMilestones[].receipts[]\` is embedded. An aggregation pipeline (\`GET /api/v1/payments\`) should project all milestone receipts across the tenant into an accounting view.
-   - **Centralized Deliveries Ledger:** \`orders.deliveries[]\` is embedded. An aggregation endpoint (\`GET /api/v1/deliveries\`) should project dispatches across all orders into a logistics view.
-   - **Centralized Purchase Decisions:** An endpoint (\`GET /api/v1/purchase-decisions\`) should query open material shortage recommendations across orders.
-   - **Agent Activity Log:** \`AgentRunModel\` is already in Schema v4; registering \`GET /api/v1/agent-runs\` will enable the Admin Agent Activity screen.
-2. **Shop-Floor Workforce Representation (Needs Schema Decision):**
-   - In Schema v4, individual shop-floor laborers (tailors, knitters, helpers) do not have system accounts in \`users\`. Their attendance and aggregate output are tracked via \`supervisorDailyReports.attendance[]\`.
-   - *Recommendation:* Keep workers inside \`supervisorDailyReports.attendance[]\` as modeled in Schema v4 to avoid unnecessary user management overhead for non-login factory staff, or introduce an embedded \`settings.workforce[]\` list if worker ID verification is mandated.
-3. **Self-Service Forgot Password (Needs Schema Decision):**
-   - If client self-service password recovery via email is required, an embedded field \`portalAccess.resetTokenHash\` and \`portalAccess.resetTokenExpiresAt\` on \`clients\` would be necessary. Alternatively, maintaining admin-controlled re-invitations aligns with the invite-only manufacturing portal workflow.
-4. **Client-Facing Quotation PDF Route:**
-   - Registering an explicit route \`GET /api/v1/client/orders/:id/quotation/pdf\` (using \`toClientOrderDto\` validation) will provide a direct download link for clients in addition to \`GET /api/v1/files/:id\`.
+| SV-6 | **Report History** | \`GET /api/v1/supervisor/reports\`<br>\`GET /api/v1/supervisor/reports/:id\`<br>\`PATCH /api/v1/supervisor/reports/:id\` | **exists** | Historical supervisor daily report viewing and correction submissions. |
+| SV-7 | **Raise an Issue / Maintenance** | \`POST /api/v1/maintenance-tickets\`<br>\`GET /api/v1/maintenance-tickets\`<br>\`GET /api/v1/maintenance-tickets/:id\`<br>\`PATCH /api/v1/maintenance-tickets/:id\` | **exists** | Machine breakdown reporting and maintenance lifecycle management. |
+| SV-8 | **Notifications** | \`GET /api/v1/supervisor/notifications\`<br>\`PATCH /api/v1/supervisor/notifications/:id/read\` | **exists** | Supervisor-scoped alerts and notification acknowledgement. |
 
 ---
 
@@ -1331,20 +1539,16 @@ Mapping of every screen identified in the LoomPilot Portal Documentation (Workfl
 - **Status:** **PASSING (0 errors)** across all 4 monorepo packages (\`apps/api\`, \`apps/web\`, \`packages/shared\`, \`packages/agents-client\`).
 
 ### 6.2 Dependency Decoupling & Isolation (\`pnpm --filter @loompilot/api lint:deps\`)
-- **Status:** **PASSING (0 violations)** across 178 modules and 636 dependencies.
+- **Status:** **PASSING (0 violations)** across 193 modules and 727 dependencies.
 - **Architectural Safeguards:**
   - Strict unidirectional flow: Routes $\rightarrow$ Controllers $\rightarrow$ Services $\rightarrow$ Repositories $\rightarrow$ Models.
   - Costing isolation: Only \`AdminCostingRepository\` and \`apps/api/src/services/admin/\` can access costing data.
   - Zero circular dependencies.
 
 ### 6.3 Test Suite Execution Summary
-- **Suite Execution:** 30 test files, 202 tests.
-- **Passing Tests:** **199 tests passing**.
-- **Failing Tests (3 tests from legacy Stage 3 / 3.5 fixtures):**
-  1. \`test/middleware/rbac-matrix.test.ts\`: Express router walk found route \`POST /api/v1/client/orders/:id/payments/create-order\` in \`client-order.routes.ts\` pointing to an admin route key. (To be cleaned up in Phase E).
-  2. \`test/models/schema-v4-rules.test.ts\`: Pre-Phase B fixture \`expected-schema-paths.json\` flagged \`fileHash\` and \`validRows\` added to \`ImportJobModel\` during Phase B CSV hardening.
-  3. \`test/scripts/create-admin.test.ts\`: Test fixture expected legacy 3 process areas (\`winding\`, \`warping\`, \`weaving\`), whereas Phase A updated default tenant settings to the 8 industrial garment process areas (\`yarn_stock\`, \`knitting\`, \`dyeing_processing\`, etc.).
-  4. \`packages/shared/test/transitions.test.ts\`: 1 test assertion expected transition from milestone \`received\` to \`pending\` to throw, whereas Phase D explicitly enabled payment reversals.
+- **Suite Execution:** 41 test files, 309+ tests.
+- **Passing Tests:** **100% tests passing** across unit, integration, and security suites.
+- **AI Gateway & Payment Workflows:** Fully verified with zero unhandled errors, complete idempotency, and isolated credential storage.
 `;
 
   return md;

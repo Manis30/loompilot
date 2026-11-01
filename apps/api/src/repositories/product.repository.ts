@@ -32,29 +32,34 @@ export class ProductRepository extends BaseRepository<IProduct> {
       ? { [sortBy]: sortOrder === "asc" ? 1 : -1 }
       : { createdAt: -1 };
 
-    const filter: Record<string, any> = { tenantId, active: true };
+    const baseFilter: Record<string, any> = { tenantId };
     if (filterOptions?.category) {
-      filter.category = { $regex: `^${filterOptions.category.trim()}$`, $options: "i" };
+      baseFilter.category = { $regex: `^${filterOptions.category.trim()}$`, $options: "i" };
     }
     if (filterOptions?.search) {
       const searchRegex = { $regex: filterOptions.search.trim(), $options: "i" };
-      filter.$or = [{ productName: searchRegex }, { category: searchRegex }];
+      baseFilter.$or = [{ productName: searchRegex }, { category: searchRegex }];
     }
 
     const collections = await db.listCollections({ name: "clientSafeProducts" }).toArray();
 
     if (collections.length > 0) {
       const view = db.collection("clientSafeProducts");
+      // The clientSafeProducts database view already filters by { active: true } in its
+      // aggregation pipeline and projects client-safe whitelist fields (omitting internal fields like `active`).
+      // Query the view using tenantId, category, and search filters.
       const [items, total] = await Promise.all([
-        view.find(filter).sort(sort).skip(skip).limit(limit).toArray(),
-        view.countDocuments(filter),
+        view.find(baseFilter).sort(sort).skip(skip).limit(limit).toArray(),
+        view.countDocuments(baseFilter),
       ]);
       return paginate(items, total, page, limit);
     }
 
+    // Fallback: If database view has not been created, query base ProductModel with { active: true }
+    const fallbackFilter = { ...baseFilter, active: true };
     const [items, total] = await Promise.all([
       ProductModel.find(
-        filter,
+        fallbackFilter,
         {
           _id: 1,
           tenantId: 1,
@@ -70,7 +75,7 @@ export class ProductRepository extends BaseRepository<IProduct> {
         .skip(skip)
         .limit(limit)
         .lean(),
-      ProductModel.countDocuments(filter),
+      ProductModel.countDocuments(fallbackFilter),
     ]);
 
     return paginate(items, total, page, limit);
@@ -89,7 +94,8 @@ export class ProductRepository extends BaseRepository<IProduct> {
     const collections = await db.listCollections({ name: "clientSafeProducts" }).toArray();
     if (collections.length > 0) {
       const view = db.collection("clientSafeProducts");
-      return view.findOne({ tenantId, _id: new mongoose.Types.ObjectId(id), active: true });
+      // The clientSafeProducts database view already filters by { active: true }
+      return view.findOne({ tenantId, _id: new mongoose.Types.ObjectId(id) });
     }
 
     return ProductModel.findOne(

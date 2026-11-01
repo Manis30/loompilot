@@ -13,21 +13,129 @@ import {
   PlusCircle,
   Users,
 } from 'lucide-react';
+import { useMemo } from 'react';
 import { useSupervisor } from '../../context/SupervisorContext';
+import { useApp } from '../../context/AppContext';
+import { useGetSupervisorOrdersQuery, useAdvanceOrderStageMutation } from '../../../store/api/ordersApi';
+import { useGetMachinesQuery, useGetClientsQuery, useGetProductsQuery } from '../../../store/api/catalogApi';
+import { useGetMaintenanceTicketsQuery } from '../../../store/api/productionApi';
+import { mapApiSupervisorOrder } from '../../../utils/orderMapper';
+import { SUPERVISOR_PRODUCTION_STAGES } from '../../data/supervisorMockData';
 
 export const SupervisorDashboardPage: React.FC = () => {
   const {
-    orders,
-    machines,
+    orders: localOrders,
+    machines: localMachines,
     employees,
-    issues,
+    issues: localIssues,
     openDailyUpdateModal,
     advanceOrderStage,
   } = useSupervisor();
+  const { addToast } = useApp();
+
+  const { data: supervisorOrdersResponse } = useGetSupervisorOrdersQuery(undefined);
+  const { data: machinesResponse } = useGetMachinesQuery(undefined);
+  const { data: ticketsResponse } = useGetMaintenanceTicketsQuery(undefined);
+  const { data: clientsResponse } = useGetClientsQuery(undefined);
+  const { data: productsResponse } = useGetProductsQuery(undefined);
+  const [advanceOrderStageMutation] = useAdvanceOrderStageMutation();
+
+  const clientsMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const raw = clientsResponse?.data || [];
+    if (Array.isArray(raw)) {
+      raw.forEach((c: any) => {
+        if (c.id || c._id) map.set(String(c.id || c._id), c);
+      });
+    }
+    return map;
+  }, [clientsResponse]);
+
+  const productsMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const raw = productsResponse?.data || [];
+    if (Array.isArray(raw)) {
+      raw.forEach((p: any) => {
+        if (p.id || p._id) map.set(String(p.id || p._id), p);
+      });
+    }
+    return map;
+  }, [productsResponse]);
+
+  const orders = useMemo(() => {
+    const raw = supervisorOrdersResponse?.data || [];
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw.map((item) => mapApiSupervisorOrder(item, clientsMap));
+    }
+    return localOrders;
+  }, [supervisorOrdersResponse, clientsMap, localOrders]);
+
+  const machines = useMemo(() => {
+    const raw = machinesResponse?.data || [];
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw.map((m: any) => ({
+        id: String(m.machineNumber || m.id || m._id),
+        name: m.name || `Loom ${m.machineNumber}`,
+        type: m.type || 'Airjet Loom',
+        process: m.process || 'Knitting / Weaving',
+        status: (m.status === 'active' || m.status === 'running' ? 'Running' : m.status === 'maintenance' ? 'Breakdown' : 'Available') as 'Running' | 'Breakdown' | 'Available' | 'Maintenance',
+        lastUpdated: 'Live telemetry',
+        rpm: m.rpm || 750,
+        efficiency: `${m.efficiencyPercent || 92}%`,
+        assignedOrder: m.currentOrderId || 'LP-901',
+        line: m.shed || 'Shed A',
+      }));
+    }
+    return localMachines;
+  }, [machinesResponse, localMachines]);
+
+  const issues = useMemo(() => {
+    const raw = ticketsResponse?.data || [];
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw.map((t: any) => ({
+        id: String(t.ticketNumber || t.id || t._id),
+        date: t.createdAt ? new Date(t.createdAt).toLocaleDateString() : 'Today',
+        time: t.createdAt ? new Date(t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now',
+        machineId: t.machineId || 'Loom-01',
+        shed: t.shed || 'Shed A',
+        issueType: t.issueType || 'Mechanical',
+        description: t.description || t.title || 'Maintenance check',
+        reportedBy: t.reportedBy || 'Floor Supervisor',
+        status: t.status === 'resolved' || t.status === 'closed' ? 'Resolved' : 'Pending',
+        priority: t.priority || 'Medium',
+      }));
+    }
+    return localIssues;
+  }, [ticketsResponse, localIssues]);
 
   const totalTarget = orders.reduce((acc, o) => acc + (o.dailyTarget || 0), 0);
   const activeMachines = machines.filter((m) => m.status === 'Running').length;
   const criticalIssues = issues.filter((i) => i.status !== 'Resolved').length;
+
+  const handleAdvanceStage = async (ord: any) => {
+    const currentIndex = SUPERVISOR_PRODUCTION_STAGES.findIndex((s) => s === ord.currentStage);
+    if (currentIndex === -1 || currentIndex >= SUPERVISOR_PRODUCTION_STAGES.length - 1) return;
+    const nextStage = SUPERVISOR_PRODUCTION_STAGES[currentIndex + 1];
+
+    const targetId = ord.backendId || ord.id;
+    try {
+      await advanceOrderStageMutation({
+        id: targetId,
+        stage: nextStage.toLowerCase().replace(/\s+/g, '_'),
+      }).unwrap();
+      advanceOrderStage(ord.id);
+      addToast(`Order ${ord.id} advanced to ${nextStage}`, 'success');
+    } catch (err: any) {
+      console.error('Backend advance stage error:', err);
+      const errMsg =
+        err?.data?.message ||
+        err?.data?.error?.message ||
+        err?.error ||
+        err?.message ||
+        'Failed to advance order stage on server';
+      addToast(errMsg, 'error');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -182,7 +290,7 @@ export const SupervisorDashboardPage: React.FC = () => {
                     </td>
                     <td className="py-3.5 px-3 text-right">
                       <button
-                        onClick={() => advanceOrderStage(ord.id)}
+                        onClick={() => handleAdvanceStage(ord)}
                         className="px-2.5 py-1 rounded-lg text-[11px] font-bold text-white bg-[#252622] hover:bg-[#E65338] transition-colors"
                         title="Advance order to next lifecycle stage"
                       >

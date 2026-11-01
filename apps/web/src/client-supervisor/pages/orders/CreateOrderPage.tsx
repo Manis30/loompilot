@@ -4,6 +4,9 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useApp } from '../../context/AppContext';
+import { useSubmitClientOrderMutation } from '../../../store/api/ordersApi';
+import { useGetClientProductsQuery } from '../../../store/api/catalogApi';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { PRODUCTION_STAGES_MASTER } from '../../data/mockData';
 import { Order } from '../../types';
@@ -44,6 +47,11 @@ export const CreateOrderPage: React.FC = () => {
   const navigate = useNavigate();
   const { products, addOrder, addToast } = useApp();
   const { user } = useAuth();
+  const { data: catalogProductsResponse } = useGetClientProductsQuery(undefined);
+  const [submitClientOrderMutation, { isLoading: isSubmittingApi }] = useSubmitClientOrderMutation();
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const liveProducts = catalogProductsResponse?.data || products;
 
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [submittedOrder, setSubmittedOrder] = useState<Order | null>(null);
@@ -115,74 +123,108 @@ export const CreateOrderPage: React.FC = () => {
     if (currentStep > 1) setCurrentStep((prev) => prev - 1);
   };
 
-  const onSubmit = (data: OrderFormData) => {
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const orderId = `LP-2026-${randomSuffix}`;
+  const onSubmit = async (data: OrderFormData) => {
+    setSubmitError(null);
 
-    const newOrder: Order = {
-      id: orderId,
-      productId: data.productId,
-      productName: data.productName,
-      category: data.productType === 'custom' ? 'Custom Textile' : 'Woven Fabrics',
-      colorway: data.colorway,
-      orderedMetres: data.quantityMetres,
-      producedMetres: 0,
-      remainingMetres: data.quantityMetres,
-      progressPercent: 0,
-      unitPrice: 225, // Mock baseline pending admin quote
-      totalValue: data.quantityMetres * 225,
-      orderDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-      expectedDelivery: data.deliveryDate,
-      currentStageNumber: 1,
-      currentStageName: 'Quote Accepted',
-      status: 'Awaiting Quotation',
-      spotlight: false,
-      specifications: {
-        gsm: data.gsm,
-        width: `${data.widthInches} inches`,
-        yarnCount: 'Engineered spinning formulation',
-        weave: data.construction,
-        finish: data.specialFinish,
-        packaging: 'Standard industrial roll packaging',
-      },
-      deliveryAddress: data.deliveryAddress,
-      stages: PRODUCTION_STAGES_MASTER.map((s, idx) => ({
-        step: s.step,
-        name: s.name,
-        status: idx === 0 ? 'active' : 'upcoming',
-        date: idx === 0 ? 'Awaiting Quote Review' : 'Pending',
-        notes: idx === 0 ? 'Order request received. Merchandiser is calculating loom capacity and pricing.' : 'Pending quote acceptance.',
-      })),
-      milestones: [
-        {
-          id: `MS-${randomSuffix}-1`,
-          phase: 'Milestone 1 — 30% Advance on Acceptance',
-          amount: Math.round(data.quantityMetres * 225 * 0.3),
-          status: 'pending',
-          invoiceId: `INV-2026-0${randomSuffix}`,
-          dueDate: 'Upon Acceptance',
-        },
-        {
-          id: `MS-${randomSuffix}-2`,
-          phase: 'Milestone 2 — 40% Loom Weaving Milestone',
-          amount: Math.round(data.quantityMetres * 225 * 0.4),
-          status: 'upcoming',
-          invoiceId: `INV-2026-0${randomSuffix + 1}`,
-          dueDate: 'Mid Production',
-        },
-        {
-          id: `MS-${randomSuffix}-3`,
-          phase: 'Milestone 3 — 30% Pre-Dispatch Balance',
-          amount: Math.round(data.quantityMetres * 225 * 0.3),
-          status: 'upcoming',
-          invoiceId: `INV-2026-0${randomSuffix + 2}`,
-          dueDate: 'Prior Dispatch',
-        },
-      ],
-    };
+    const realProduct = Array.isArray(liveProducts)
+      ? liveProducts.find((p: any) => (p.id || p._id) === data.productId)
+      : undefined;
+    const validProductId = realProduct ? String(realProduct.id || realProduct._id) : undefined;
 
-    addOrder(newOrder);
-    setSubmittedOrder(newOrder);
+    try {
+      const res = await submitClientOrderMutation({
+        productId: validProductId,
+        productDescription: data.productName,
+        quantity: Number(data.quantityMetres),
+        deliveryDeadline: data.deliveryDate,
+        deliveryAddress: data.deliveryAddress,
+        spec: {
+          gsm: Number(data.gsm),
+          fabric: data.construction,
+          colours: [data.colorway],
+        },
+        notes: data.specialFinish,
+      }).unwrap();
+
+      const createdBackendOrder = res?.data;
+      if (!createdBackendOrder) {
+        throw new Error('Server did not return created order record.');
+      }
+
+      const orderId = createdBackendOrder.orderNumber || createdBackendOrder._id || createdBackendOrder.id;
+
+      const newOrder: Order = {
+        id: orderId,
+        backendId: createdBackendOrder._id || createdBackendOrder.id,
+        productId: validProductId || data.productId,
+        productName: data.productName,
+        category: data.productType === 'custom' ? 'Custom Textile' : 'Woven Fabrics',
+        colorway: data.colorway,
+        orderedMetres: data.quantityMetres,
+        producedMetres: 0,
+        remainingMetres: data.quantityMetres,
+        progressPercent: 0,
+        unitPrice: 225,
+        totalValue: data.quantityMetres * 225,
+        orderDate: createdBackendOrder.orderDate ? new Date(createdBackendOrder.orderDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        expectedDelivery: data.deliveryDate,
+        currentStageNumber: 1,
+        currentStageName: 'Quote Accepted',
+        status: 'Awaiting Quotation',
+        spotlight: false,
+        specifications: {
+          gsm: data.gsm,
+          width: `${data.widthInches} inches`,
+          yarnCount: 'Engineered spinning formulation',
+          weave: data.construction,
+          finish: data.specialFinish,
+          packaging: 'Standard industrial roll packaging',
+        },
+        deliveryAddress: data.deliveryAddress,
+        stages: PRODUCTION_STAGES_MASTER.map((s, idx) => ({
+          step: s.step,
+          name: s.name,
+          status: idx === 0 ? 'active' : 'upcoming',
+          date: idx === 0 ? 'Awaiting Quote Review' : 'Pending',
+          notes: idx === 0 ? 'Order request received. Merchandiser is calculating loom capacity and pricing.' : 'Pending quote acceptance.',
+        })),
+        milestones: [
+          {
+            id: `MS-${orderId}-1`,
+            phase: 'Milestone 1 — 30% Advance on Acceptance',
+            amount: Math.round(data.quantityMetres * 225 * 0.3),
+            status: 'pending',
+            invoiceId: `INV-${orderId}-01`,
+            dueDate: 'Upon Acceptance',
+          },
+          {
+            id: `MS-${orderId}-2`,
+            phase: 'Milestone 2 — 40% Loom Weaving Milestone',
+            amount: Math.round(data.quantityMetres * 225 * 0.4),
+            status: 'upcoming',
+            invoiceId: `INV-${orderId}-02`,
+            dueDate: 'Mid Production',
+          },
+          {
+            id: `MS-${orderId}-3`,
+            phase: 'Milestone 3 — 30% Pre-Dispatch Balance',
+            amount: Math.round(data.quantityMetres * 225 * 0.3),
+            status: 'upcoming',
+            invoiceId: `INV-${orderId}-03`,
+            dueDate: 'Prior Dispatch',
+          },
+        ],
+      };
+
+      addOrder(newOrder);
+      setSubmittedOrder(newOrder);
+      addToast(`Order ${orderId} submitted to mill successfully!`, 'success');
+    } catch (err: any) {
+      console.error('Backend order submission error:', err);
+      const msg = err?.data?.error?.message || err?.data?.message || err?.error || err?.message || 'Failed to submit manufacturing order to mill server.';
+      setSubmitError(msg);
+      addToast(msg, 'error');
+    }
   };
 
   return (

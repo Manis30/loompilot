@@ -20,9 +20,79 @@ import {
   INITIAL_SUPERVISOR_NOTIFICATIONS,
   SUPERVISOR_PRODUCTION_STAGES,
 } from '../data/supervisorMockData';
+import { useAppSelector } from '../../store/hooks';
+import { useGetMeQuery } from '../../store/api/authApi';
+
+const isDemoEnabled = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
+
+const mapAuthUserToSupervisorProfile = (user: {
+  id?: string;
+  name?: string;
+  email?: string;
+  role?: string;
+  avatarUrl?: string;
+  processAreas?: string[];
+}): SupervisorProfile => {
+  const name = user.name || 'Floor Supervisor';
+  const initials =
+    name
+      .split(' ')
+      .filter(Boolean)
+      .map((part) => part[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || 'SP';
+
+  const areas =
+    Array.isArray(user.processAreas) && user.processAreas.length > 0
+      ? user.processAreas.join(' & ')
+      : 'Weaving & Loom Shed Division';
+
+  return {
+    name,
+    title: 'Production Supervisor',
+    empId: user.id ? `LP-SUP-${user.id.slice(-4).toUpperCase()}` : 'LP-SUP-STAFF',
+    email: user.email || '',
+    phone: '+91 98765 43210',
+    department: areas,
+    area: `Loom Shed (${areas})`,
+    shift: 'Shift A (Morning: 06:00 AM – 02:30 PM)',
+    facility: 'LoomPilot Facility 1, Coimbatore Textile Hub',
+    reportingTo: 'Plant Operations Desk',
+    avatar: initials,
+    status: 'On Shift',
+    joinedDate: 'Active Staff',
+    experience: 'Textile Operations',
+    certifications: [
+      'Master Weaver Certification (SITRA)',
+      'ISO 9001:2015 Textile Quality Auditor',
+    ],
+  };
+};
+
+const getInitialSupervisorProfile = (): SupervisorProfile | null => {
+  if (isDemoEnabled) {
+    return INITIAL_SUPERVISOR_PROFILE;
+  }
+  try {
+    const token = localStorage.getItem('loompilot_token');
+    const realm = localStorage.getItem('loompilot_realm');
+    const rawUser = localStorage.getItem('loompilot_user');
+    if (!token || realm !== 'user' || !rawUser) {
+      return null;
+    }
+    const parsed = JSON.parse(rawUser);
+    if (parsed.role === 'supervisor') {
+      return mapAuthUserToSupervisorProfile(parsed);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
 
 interface SupervisorContextType {
-  profile: SupervisorProfile;
+  profile: SupervisorProfile | null;
   orders: SupervisorOrder[];
   employees: Employee[];
   materials: RawMaterial[];
@@ -53,7 +123,45 @@ const STORAGE_KEYS = {
 const SupervisorContext = createContext<SupervisorContextType | undefined>(undefined);
 
 export const SupervisorProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [profile] = useState<SupervisorProfile>(INITIAL_SUPERVISOR_PROFILE);
+  const authUser = useAppSelector((state) => state.auth.user);
+  const authToken = useAppSelector((state) => state.auth.token);
+  const authRealm = useAppSelector((state) => state.auth.realm);
+
+  // Authenticated supervisor profile from the auth flow (null when session is missing in normal mode)
+  const [profile, setProfile] = useState<SupervisorProfile | null>(getInitialSupervisorProfile);
+
+  // Live session verification from existing auth API
+  const { data: meData, isSuccess: isMeSuccess, isError: isMeError } = useGetMeQuery(
+    undefined,
+    { skip: !authToken || authRealm !== 'user' }
+  );
+
+  useEffect(() => {
+    if (authToken && authRealm === 'user' && authUser?.role === 'supervisor') {
+      setProfile(mapAuthUserToSupervisorProfile(authUser));
+    } else if (!authToken || authRealm !== 'user') {
+      setProfile(isDemoEnabled ? INITIAL_SUPERVISOR_PROFILE : null);
+    }
+  }, [authToken, authRealm, authUser]);
+
+  useEffect(() => {
+    if (isMeSuccess && meData) {
+      const p = (meData as any)?.profile;
+      if ((meData as any)?.realm === 'user' && p?.role === 'supervisor') {
+        setProfile(mapAuthUserToSupervisorProfile(p));
+      } else if (!isDemoEnabled) {
+        setProfile(null);
+      }
+    } else if (isMeError && !isDemoEnabled) {
+      setProfile(null);
+    }
+  }, [isMeSuccess, isMeError, meData]);
+
+  useEffect(() => {
+    if (!isDemoEnabled && !profile && typeof window !== 'undefined' && window.location.pathname.startsWith('/supervisor')) {
+      window.location.replace('/login');
+    }
+  }, [profile]);
 
   const [orders, setOrders] = useState<SupervisorOrder[]>(() => {
     try {
@@ -156,7 +264,7 @@ export const SupervisorProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       actualQty: produced,
       defectiveQty: defective,
       notes,
-      supervisor: profile.name,
+      supervisor: profile?.name || 'Shift Supervisor',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
@@ -253,6 +361,10 @@ export const SupervisorProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const unreadNotifCount = notifications.filter((n) => !n.isRead).length;
 
+  if (!isDemoEnabled && !profile && typeof window !== 'undefined' && window.location.pathname.startsWith('/supervisor')) {
+    return null;
+  }
+
   return (
     <SupervisorContext.Provider
       value={{
@@ -287,4 +399,3 @@ export const useSupervisor = () => {
   }
   return context;
 };
-

@@ -1,9 +1,40 @@
 import React, { useState } from 'react';
 import { Bell, CheckCircle2, Clock, AlertTriangle, ArrowRight } from 'lucide-react';
+import { useMemo } from 'react';
 import { useSupervisor } from '../../context/SupervisorContext';
+import { useGetSupervisorNotificationsQuery, useMarkNotificationReadMutation } from '../../../store/api/productionApi';
 
 export const SupervisorNotificationsPage: React.FC = () => {
-  const { notifications, markNotificationAsRead } = useSupervisor();
+  const { notifications: localNotifs, markNotificationAsRead: localMarkRead } = useSupervisor();
+  const { data: notifsResponse } = useGetSupervisorNotificationsQuery(undefined);
+  const [markNotificationReadMutation] = useMarkNotificationReadMutation();
+
+  const notifications = useMemo(() => {
+    const raw = notifsResponse?.data || [];
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw.map((n: any) => ({
+        id: String(n.id || n._id),
+        type: (n.type === 'breakdown' ? 'breakdown' : n.type === 'deadline' ? 'deadline' : 'order') as 'order' | 'breakdown' | 'deadline' | 'admin',
+        title: n.title || 'Shift Notification',
+        message: n.message || n.content || '',
+        timestamp: n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent',
+        timeFormatted: n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+        isRead: !!n.read || !!n.isRead,
+        linkPage: '/supervisor/orders',
+        refId: n.orderId || n.entityId || 'N/A',
+      }));
+    }
+    return localNotifs;
+  }, [notifsResponse, localNotifs]);
+
+  const markNotificationAsRead = (id: string) => {
+    try {
+      markNotificationReadMutation(id);
+    } catch (e) {
+      console.warn('API mark notification read warning:', e);
+    }
+    localMarkRead(id);
+  };
   const [filterType, setFilterType] = useState<string>('All');
 
   const filteredNotifs = notifications.filter((n) => {
