@@ -26,6 +26,10 @@ import {
 } from 'lucide-react';
 import { useSupervisor } from '../../context/SupervisorContext';
 import { useSubmitSupervisorReportMutation } from '../../../store/api/productionApi';
+import { useLogoutStaffMutation } from '../../../store/api/authApi';
+import { useAppDispatch } from '../../../store/hooks';
+import { logout as authLogout } from '../../../store/slices/authSlice';
+import { clearAuthCookies } from '../../../utils/cookieUtils';
 import { useApp } from '../../context/AppContext';
 import { cn } from '../../utils/cn';
 
@@ -94,6 +98,23 @@ export const SupervisorLayout: React.FC = () => {
   const [defectiveMeters, setDefectiveMeters] = useState<number>(12);
   const [shiftNotes, setShiftNotes] = useState('Shift A airjet velocity steady. Warp tension calibrated.');
   const [submitSupervisorReportMutation, { isLoading: isSubmittingReport }] = useSubmitSupervisorReportMutation();
+  const [logoutStaffMutation] = useLogoutStaffMutation();
+  const dispatch = useAppDispatch();
+
+  const handleSupervisorSignOut = async () => {
+    try {
+      await logoutStaffMutation().unwrap().catch(() => {});
+    } catch {}
+    dispatch(authLogout());
+    clearAuthCookies();
+    try {
+      localStorage.removeItem('loompilot_token');
+      localStorage.removeItem('loompilot_user');
+      localStorage.removeItem('loompilot_realm');
+    } catch {}
+    addToast('Logged out of supervisor session.', 'info');
+    navigate('/login');
+  };
 
   // If not authenticated, redirect to login
   if (!profile) {
@@ -414,10 +435,7 @@ export const SupervisorLayout: React.FC = () => {
                     </button>
 
                     <button
-                      onClick={() => {
-                        navigate('/login');
-                        addToast('Logged out of supervisor session.', 'info');
-                      }}
+                      onClick={handleSupervisorSignOut}
                       className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-[#E65338] hover:bg-[#E65338]/10 transition-colors text-left"
                     >
                       <LogOut size={15} />

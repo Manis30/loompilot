@@ -37,18 +37,26 @@ export async function authenticate(
   next: NextFunction
 ): Promise<void> {
   const authHeader = req.headers.authorization;
+  let token: string | undefined;
 
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.slice(7).trim();
+  } else if (req.cookies) {
+    token =
+      req.cookies.access_token ||
+      req.cookies.loompilot_token ||
+      req.cookies.accessToken;
+  }
+
+  if (!token) {
     return next(
       new AppError(
         ErrorCode.UNAUTHENTICATED,
-        "Missing or malformed Authorization header. Expected 'Bearer <token>'",
+        "Authentication required. Missing token in Authorization header or cookies.",
         401
       )
     );
   }
-
-  const token = authHeader.slice(7).trim();
 
   try {
     const claims = TokenService.verifyAccessToken(token);

@@ -31,6 +31,7 @@ import { mapApiOrderToAdminOrder } from './utils/orderMapper';
 import { useGetMeQuery, useLogoutStaffMutation } from './store/api/authApi';
 import { useAppDispatch } from './store/hooks';
 import { logout as authLogout } from './store/slices/authSlice';
+import { clearAuthCookies } from './utils/cookieUtils';
 import { AdminLogin } from './components/auth/AdminLogin';
 import { AdminSidebar, type AdminNavTab } from './components/layout/AdminSidebar';
 
@@ -1052,6 +1053,7 @@ export const AdminPortalApp: React.FC = () => {
               logoutStaffMutation().unwrap().catch(() => {});
             } catch {}
             dispatch(authLogout());
+            clearAuthCookies();
             try {
               localStorage.removeItem('loompilot_token');
               localStorage.removeItem('loompilot_user');
@@ -1060,6 +1062,7 @@ export const AdminPortalApp: React.FC = () => {
               console.warn(e);
             }
             setAdminUser(null);
+            window.location.href = '/login';
           }}
         />
 

@@ -489,6 +489,12 @@ export const SupervisorsResourcesModule: React.FC<SupervisorsResourcesModuleProp
   // Selections
   const [selectedSupervisorId, setSelectedSupervisorId] = useState<string>('usr_sup_1');
   const [selectedOrderToAssign, setSelectedOrderToAssign] = useState<string>('LP-903');
+
+  useEffect(() => {
+    if (orders && orders.length > 0 && !orders.some((o) => o.id === selectedOrderToAssign)) {
+      setSelectedOrderToAssign(orders[0].id);
+    }
+  }, [orders, selectedOrderToAssign]);
   const [selectedMachineShedFilter, setSelectedMachineShedFilter] = useState<string>('all');
   const [machineSearchQuery, setMachineSearchQuery] = useState<string>('');
   const [workerSearchQuery, setWorkerSearchQuery] = useState<string>('');

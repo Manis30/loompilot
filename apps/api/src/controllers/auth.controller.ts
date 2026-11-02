@@ -4,15 +4,32 @@ import { getEnv } from "../config/env.js";
 
 const authService = new AuthService();
 
-function getCookieOptions(path = "/api/v1") {
+function getCookieOptions(path = "/", httpOnly = false) {
   const env = getEnv();
   return {
-    httpOnly: true,
+    httpOnly,
     secure: env.NODE_ENV === "production",
-    sameSite: "strict" as const,
+    sameSite: "lax" as const,
     path,
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   };
+}
+
+function clearAllAuthCookies(res: Response) {
+  const paths = ["/", "/api/v1", "/api/v1/auth", "/api/v1/client/auth"];
+  const cookieNames = [
+    "access_token",
+    "loompilot_token",
+    "loompilot_role",
+    "refreshToken",
+    "refreshToken_global",
+    "accessToken",
+  ];
+  for (const name of cookieNames) {
+    for (const path of paths) {
+      res.clearCookie(name, { path });
+    }
+  }
 }
 
 export class AuthController {
@@ -29,7 +46,14 @@ export class AuthController {
         requestId: (req as any).id,
       });
 
-      res.cookie("refreshToken", result.rawRefreshToken, getCookieOptions("/api/v1/auth"));
+      // Set HTTP-only refresh tokens
+      res.cookie("refreshToken", result.rawRefreshToken, getCookieOptions("/api/v1/auth", true));
+      res.cookie("refreshToken_global", result.rawRefreshToken, getCookieOptions("/", true));
+
+      // Set access token & role cookies (sent for all API requests and accessible to client)
+      res.cookie("access_token", result.accessToken, getCookieOptions("/", false));
+      res.cookie("loompilot_token", result.accessToken, getCookieOptions("/", false));
+      res.cookie("loompilot_role", result.user.role, getCookieOptions("/", false));
 
       res.status(200).json({
         accessToken: result.accessToken,
@@ -54,7 +78,14 @@ export class AuthController {
         requestId: (req as any).id,
       });
 
-      res.cookie("refreshToken", result.rawRefreshToken, getCookieOptions("/api/v1/client/auth"));
+      // Set HTTP-only refresh tokens
+      res.cookie("refreshToken", result.rawRefreshToken, getCookieOptions("/api/v1/client/auth", true));
+      res.cookie("refreshToken_global", result.rawRefreshToken, getCookieOptions("/", true));
+
+      // Set access token & role cookies (sent for all API requests and accessible to client)
+      res.cookie("access_token", result.accessToken, getCookieOptions("/", false));
+      res.cookie("loompilot_token", result.accessToken, getCookieOptions("/", false));
+      res.cookie("loompilot_role", "client", getCookieOptions("/", false));
 
       res.status(200).json({
         accessToken: result.accessToken,
@@ -68,7 +99,7 @@ export class AuthController {
 
   static async refreshUser(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const rawRefreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
+      const rawRefreshToken = req.cookies?.refreshToken || req.cookies?.refreshToken_global || req.body?.refreshToken;
 
       const result = await authService.refresh({
         rawRefreshToken,
@@ -78,7 +109,10 @@ export class AuthController {
         requestId: (req as any).id,
       });
 
-      res.cookie("refreshToken", result.newRawRefreshToken, getCookieOptions("/api/v1/auth"));
+      res.cookie("refreshToken", result.newRawRefreshToken, getCookieOptions("/api/v1/auth", true));
+      res.cookie("refreshToken_global", result.newRawRefreshToken, getCookieOptions("/", true));
+      res.cookie("access_token", result.accessToken, getCookieOptions("/", false));
+      res.cookie("loompilot_token", result.accessToken, getCookieOptions("/", false));
 
       res.status(200).json({
         accessToken: result.accessToken,
@@ -91,7 +125,7 @@ export class AuthController {
 
   static async refreshClient(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const rawRefreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
+      const rawRefreshToken = req.cookies?.refreshToken || req.cookies?.refreshToken_global || req.body?.refreshToken;
 
       const result = await authService.refresh({
         rawRefreshToken,
@@ -101,7 +135,10 @@ export class AuthController {
         requestId: (req as any).id,
       });
 
-      res.cookie("refreshToken", result.newRawRefreshToken, getCookieOptions("/api/v1/client/auth"));
+      res.cookie("refreshToken", result.newRawRefreshToken, getCookieOptions("/api/v1/client/auth", true));
+      res.cookie("refreshToken_global", result.newRawRefreshToken, getCookieOptions("/", true));
+      res.cookie("access_token", result.accessToken, getCookieOptions("/", false));
+      res.cookie("loompilot_token", result.accessToken, getCookieOptions("/", false));
 
       res.status(200).json({
         accessToken: result.accessToken,
@@ -114,7 +151,7 @@ export class AuthController {
 
   static async logoutUser(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const rawRefreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
+      const rawRefreshToken = req.cookies?.refreshToken || req.cookies?.refreshToken_global || req.body?.refreshToken;
 
       await authService.logout({
         rawRefreshToken,
@@ -123,7 +160,7 @@ export class AuthController {
         requestId: (req as any).id,
       });
 
-      res.clearCookie("refreshToken", { path: "/api/v1/auth" });
+      clearAllAuthCookies(res);
       res.status(200).json({ success: true, message: "Logged out successfully" });
     } catch (err) {
       next(err);
@@ -132,7 +169,7 @@ export class AuthController {
 
   static async logoutClient(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const rawRefreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
+      const rawRefreshToken = req.cookies?.refreshToken || req.cookies?.refreshToken_global || req.body?.refreshToken;
 
       await authService.logout({
         rawRefreshToken,
@@ -141,7 +178,7 @@ export class AuthController {
         requestId: (req as any).id,
       });
 
-      res.clearCookie("refreshToken", { path: "/api/v1/client/auth" });
+      clearAllAuthCookies(res);
       res.status(200).json({ success: true, message: "Logged out successfully" });
     } catch (err) {
       next(err);
@@ -160,8 +197,7 @@ export class AuthController {
         requestId: (req as any).id,
       });
 
-      res.clearCookie("refreshToken", { path: "/api/v1/auth" });
-      res.clearCookie("refreshToken", { path: "/api/v1/client/auth" });
+      clearAllAuthCookies(res);
       res.status(200).json({ success: true, message: "All sessions terminated" });
     } catch (err) {
       next(err);
@@ -183,8 +219,7 @@ export class AuthController {
         requestId: (req as any).id,
       });
 
-      res.clearCookie("refreshToken", { path: "/api/v1/auth" });
-      res.clearCookie("refreshToken", { path: "/api/v1/client/auth" });
+      clearAllAuthCookies(res);
       res.status(200).json({ success: true, message: "Password changed successfully. All other sessions terminated." });
     } catch (err) {
       next(err);
