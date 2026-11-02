@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { OrderController } from "../controllers/order.controller.js";
+import { ConversationController } from "../controllers/conversation.controller.js";
 import { authenticate } from "../middleware/auth.js";
 import { authorize } from "../middleware/rbac.js";
 import { idempotencyMiddleware } from "../middleware/idempotency.js";
@@ -24,10 +25,13 @@ import {
   PurchaseDecisionCreateSchema,
   PurchaseDecisionUpdateSchema,
   DateRangeQuerySchema,
+  ChatMessageBodySchema,
+  ChatEscalationResolveSchema,
 } from "../validators/index.js";
 
 export const orderRouter: Router = Router();
 const controller = new OrderController();
+const convController = new ConversationController();
 
 orderRouter.use(authenticate);
 
@@ -218,3 +222,27 @@ orderRouter.get(
   validateParams(IdParamSchema),
   controller.getMaterialReadiness
 );
+
+orderRouter.get(
+  "/:id/messages",
+  authorize("GET /api/v1/orders/:id/messages"),
+  validateParams(IdParamSchema),
+  convController.getAdminMessages
+);
+
+orderRouter.post(
+  "/:id/chat",
+  authorize("POST /api/v1/orders/:id/chat"),
+  validateParams(IdParamSchema),
+  validateBody(ChatMessageBodySchema),
+  convController.postAdminChat
+);
+
+orderRouter.post(
+  "/:id/escalation/resolve",
+  authorize("POST /api/v1/orders/:id/escalation/resolve"),
+  validateParams(IdParamSchema),
+  validateBody(ChatEscalationResolveSchema),
+  convController.resolveEscalation
+);
+

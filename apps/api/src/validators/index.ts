@@ -821,3 +821,13 @@ export const AuditQuerySchema = paginationQuerySchema.extend({
   dateTo: z.string().trim().optional(),
 });
 
+export const ChatMessageBodySchema = z.object({
+  message: z.string().min(1, "Message text is required"),
+});
+
+export const ChatEscalationResolveSchema = z.object({
+  approved: z.boolean(),
+  concessionPercent: z.number().min(0).max(100).optional(),
+  notes: z.string().optional(),
+});
+

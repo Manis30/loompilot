@@ -117,6 +117,11 @@ export interface IssueTicket {
   impact: string;
   status: 'Technician Assigned' | 'Under Investigation' | 'Resolved' | 'Open';
   adminResponse?: string;
+  priority?: string;
+  shed?: string;
+  issueType?: string;
+  reportedBy?: string;
+  rawStatus?: string;
 }
 
 export interface SupervisorNotification {

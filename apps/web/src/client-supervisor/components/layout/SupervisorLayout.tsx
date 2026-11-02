@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink, Link, Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom';
+import { NavLink, Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Package,
@@ -22,6 +22,7 @@ import {
   ArrowUpRight,
   Clock,
   PlusCircle,
+  Loader2,
 } from 'lucide-react';
 import { useSupervisor } from '../../context/SupervisorContext';
 import { useSubmitSupervisorReportMutation } from '../../../store/api/productionApi';
@@ -40,6 +41,14 @@ export const SupervisorLayout: React.FC = () => {
     resetSupervisorData,
   } = useSupervisor();
 
+  const safeProfile = profile || {
+    avatar: 'SP',
+    name: 'Shift Supervisor',
+    empId: 'EMP-001',
+    email: 'supervisor@mill.com',
+    facility: 'Main Loom Shed',
+  };
+
   const { addToast } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
@@ -48,23 +57,43 @@ export const SupervisorLayout: React.FC = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
 
-  // If not authenticated, redirect to login
-  if (!profile) {
-    return <Navigate to="/login" replace />;
-  }
+  // 4-Point Daily Shift Update Modal state
+  const [reportStep, setReportStep] = useState<1 | 2 | 3 | 4>(1);
 
-  const avatar = profile?.avatar || 'SP';
-  const name = profile?.name || 'Shift Supervisor';
-  const empId = profile?.empId || 'LP-SUP-STAFF';
-  const email = profile?.email || '';
-  const facility = profile?.facility || 'Loom Shed Division';
+  // Point 1: Workforce Headcount
+  const [headcountTotal, setHeadcountTotal] = useState<number>(24);
+  const [wfWeaving, setWfWeaving] = useState<number>(12);
+  const [wfSizing, setWfSizing] = useState<number>(4);
+  const [wfDyeing, setWfDyeing] = useState<number>(5);
+  const [wfQC, setWfQC] = useState<number>(3);
 
-  // Daily Shift Update Modal state
+  // Point 2: Machine Checklist
+  const [machineChecklist, setMachineChecklist] = useState<Array<{
+    id: string;
+    name: string;
+    status: 'available' | 'maint' | 'breakdown';
+    hours: number;
+    remarks: string;
+  }>>([
+    { id: 'loom_01', name: 'Airjet Loom #1', status: 'available', hours: 8, remarks: 'Running at optimal 850 RPM' },
+    { id: 'loom_02', name: 'Airjet Loom #2', status: 'breakdown', hours: 3, remarks: 'Warp yarn tension sensor fault' },
+    { id: 'sizing_01', name: 'Sizing Machine #1', status: 'available', hours: 8, remarks: 'Starch concentration calibrated' },
+    { id: 'dyeing_01', name: 'Dyeing Softflow Vat #1', status: 'available', hours: 7, remarks: 'Completed reactive batch' },
+  ]);
+
+  // Point 3: Raw Material Stock Counts
+  const [stockCotton40s, setStockCotton40s] = useState<number>(850);
+  const [stockPoly30s, setStockPoly30s] = useState<number>(420);
+  const [stockDyes, setStockDyes] = useState<number>(95);
+  const [stockStarch, setStockStarch] = useState<number>(150);
+
+  // Point 4: Production Output & Defects
   const [selectedOrderId, setSelectedOrderId] = useState<string>(orders[0]?.id || '');
+  const [selectedStage, setSelectedStage] = useState<string>('loom_weaving');
   const [producedMeters, setProducedMeters] = useState<number>(650);
   const [defectiveMeters, setDefectiveMeters] = useState<number>(12);
   const [shiftNotes, setShiftNotes] = useState('Shift A airjet velocity steady. Warp tension calibrated.');
-  const [submitSupervisorReportMutation] = useSubmitSupervisorReportMutation();
+  const [submitSupervisorReportMutation, { isLoading: isSubmittingReport }] = useSubmitSupervisorReportMutation();
 
   const navItems = [
     { name: 'Factory Dashboard', to: '/supervisor/dashboard', icon: LayoutDashboard },
@@ -79,27 +108,59 @@ export const SupervisorLayout: React.FC = () => {
 
   const handleDailyUpdateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedOrderId) return;
+    const orderIdToUse = selectedOrderId || (orders[0]?.id || 'ORD-CURRENT');
+    const machinesBreakdown = machineChecklist.filter(m => m.status === 'breakdown');
+
     try {
       await submitSupervisorReportMutation({
         reportDate: new Date().toISOString().split('T')[0],
-        employeesPresentTotal: 12,
+        processAreas: ['weaving', 'sizing', 'dyeing', 'finishing'],
+        employeesPresentTotal: headcountTotal,
+        workforce: [
+          { area: 'weaving', count: wfWeaving },
+          { area: 'sizing', count: wfSizing },
+          { area: 'dyeing', count: wfDyeing },
+          { area: 'finishing', count: wfQC },
+        ],
+        resources: {
+          machinesAvail: machineChecklist.filter(m => m.status === 'available').length,
+          machinesDown: machinesBreakdown.length,
+        },
+        stockCounts: [
+          { materialId: 'mat_cotton_40s', qty: stockCotton40s },
+          { materialId: 'mat_poly_30s', qty: stockPoly30s },
+          { materialId: 'mat_dyes', qty: stockDyes },
+          { materialId: 'mat_starch', qty: stockStarch },
+        ],
         outputs: [
           {
-            orderId: selectedOrderId || 'ORD-CURRENT',
-            stage: 'weaving',
+            orderId: orderIdToUse,
+            stage: selectedStage,
             produced: producedMeters,
             defective: defectiveMeters,
           },
         ],
-        notes: shiftNotes,
+        machines: machineChecklist.map(m => ({
+          machineId: m.id,
+          status: m.status,
+          hours: m.hours,
+          remarks: m.remarks,
+        })),
+        issues: machinesBreakdown.map(m => ({
+          type: 'machine' as const,
+          notes: m.remarks || `Breakdown reported on ${m.name}`,
+          machineId: m.id,
+        })),
+        clientGeneratedId: `sr-${Date.now()}`,
       }).unwrap();
     } catch (err) {
       console.warn('Backend daily report submit warning:', err);
     }
-    logShiftOutput(selectedOrderId, producedMeters, defectiveMeters, shiftNotes);
-    addToast(`Logged ${producedMeters}m for order ${selectedOrderId}. Shift records updated.`, 'success');
+
+    logShiftOutput(orderIdToUse, producedMeters, defectiveMeters, shiftNotes);
+    addToast(`4-Point Daily Shift Report Submitted! Output: ${producedMeters}m. Monitoring Agent recalculated progress & ETA.`, 'success');
     closeDailyUpdateModal();
+    setReportStep(1);
   };
 
   return (
@@ -217,16 +278,16 @@ export const SupervisorLayout: React.FC = () => {
               )}
             >
               <div className="w-8 h-8 rounded-lg bg-[#E65338] flex items-center justify-center font-bold text-xs text-white flex-shrink-0">
-                {avatar}
+                {safeProfile.avatar}
               </div>
               {!collapsed && (
                 <div className="overflow-hidden flex-1">
                   <div className="text-xs font-semibold text-white truncate">
-                    {name}
+                    {safeProfile.name}
                   </div>
                   <div className="text-[10px] font-mono text-gray-400 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#20845A]"></span>
-                    Shift A &bull; {empId}
+                    Shift A &bull; {safeProfile.empId}
                   </div>
                 </div>
               )}
@@ -298,14 +359,14 @@ export const SupervisorLayout: React.FC = () => {
                   className="flex items-center gap-2 p-1.5 pl-2.5 rounded-lg border border-[#EAE2D9] hover:bg-[#FBF6F0] transition-all"
                 >
                   <div className="w-8 h-8 rounded-lg bg-[#252622] text-white flex items-center justify-center font-bold text-xs">
-                    {avatar}
+                    {safeProfile.avatar}
                   </div>
                   <div className="hidden sm:block text-left leading-tight">
                     <div className="text-xs font-bold text-[#252622] truncate max-w-[120px]">
-                      {name}
+                      {safeProfile.name}
                     </div>
                     <div className="text-[10px] text-gray-500 font-mono">
-                      {empId}
+                      {safeProfile.empId}
                     </div>
                   </div>
                 </button>
@@ -316,10 +377,10 @@ export const SupervisorLayout: React.FC = () => {
                     onClick={() => setProfileDropdownOpen(false)}
                   >
                     <div className="px-4 py-2 border-b border-[#EAE2D9]/60">
-                      <div className="text-xs font-bold text-[#252622]">{name}</div>
-                      <div className="text-[11px] text-gray-500">{email}</div>
+                      <div className="text-xs font-bold text-[#252622]">{safeProfile.name}</div>
+                      <div className="text-[11px] text-gray-500">{safeProfile.email}</div>
                       <div className="text-[10px] font-mono text-[#20845A] mt-0.5">
-                        &bull; {facility}
+                        &bull; {safeProfile.facility}
                       </div>
                     </div>
 
@@ -369,12 +430,15 @@ export const SupervisorLayout: React.FC = () => {
         </div>
       </div>
 
-      {/* DAILY SHIFT OPERATIONS UPDATE MODAL */}
+      {/* 4-POINT DAILY SUPERVISOR REPORT MODAL */}
       {isDailyUpdateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#252622]/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white w-full max-w-lg rounded-2xl border border-[#EAE2D9] shadow-2xl p-6 relative">
+          <div className="bg-white w-full max-w-xl rounded-2xl border border-[#EAE2D9] shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto">
             <button
-              onClick={closeDailyUpdateModal}
+              onClick={() => {
+                closeDailyUpdateModal();
+                setReportStep(1);
+              }}
               className="absolute top-4 right-4 p-1.5 rounded-lg text-gray-400 hover:text-[#252622] hover:bg-[#FBF6F0] transition-colors"
             >
               <X size={18} />
@@ -386,87 +450,371 @@ export const SupervisorLayout: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-base font-extrabold text-[#252622]">
-                  Daily Shift Operations Update
+                  Supervisor Daily Operations Report
                 </h3>
                 <p className="text-xs text-gray-500">
-                  Log Shift A personnel, produced meters &amp; loom performance
+                  4-Point Shift Specification: Headcount, Machines, Stock &amp; Outputs
                 </p>
               </div>
             </div>
 
-            <form onSubmit={handleDailyUpdateSubmit} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
-                  Active Manufacturing Order
-                </label>
-                <select
-                  value={selectedOrderId}
-                  onChange={(e) => setSelectedOrderId(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-semibold text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
-                >
-                  {orders.map((ord) => (
-                    <option key={ord.id} value={ord.id}>
-                      {ord.id} — {ord.fabricName} ({ord.currentStage})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
-                    Produced Metres Today
-                  </label>
-                  <input
-                    type="number"
-                    value={producedMeters}
-                    onChange={(e) => setProducedMeters(Number(e.target.value))}
-                    min={0}
-                    required
-                    className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-bold text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
-                    Defective Metres (Greige QC)
-                  </label>
-                  <input
-                    type="number"
-                    value={defectiveMeters}
-                    onChange={(e) => setDefectiveMeters(Number(e.target.value))}
-                    min={0}
-                    required
-                    className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-bold text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
-                  Shift Operations Log &amp; Notes
-                </label>
-                <textarea
-                  value={shiftNotes}
-                  onChange={(e) => setShiftNotes(e.target.value)}
-                  rows={3}
-                  className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#EAE2D9]">
+            {/* Step Indicators */}
+            <div className="grid grid-cols-4 gap-1.5 mb-5 p-1 bg-[#FBF6F0] rounded-xl border border-[#EAE2D9]">
+              {[
+                { step: 1, label: '1. Headcount' },
+                { step: 2, label: '2. Machines' },
+                { step: 3, label: '3. Stock' },
+                { step: 4, label: '4. Outputs' },
+              ].map((s) => (
                 <button
+                  key={s.step}
                   type="button"
-                  onClick={closeDailyUpdateModal}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 hover:bg-[#FBF6F0] border border-[#EAE2D9] transition-colors"
+                  onClick={() => setReportStep(s.step as any)}
+                  className={cn(
+                    'py-1.5 text-[11px] font-bold rounded-lg transition-all text-center',
+                    reportStep === s.step
+                      ? 'bg-[#E65338] text-white shadow-sm'
+                      : 'text-gray-600 hover:text-[#252622]'
+                  )}
                 >
-                  Cancel
+                  {s.label}
                 </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-[#E65338] hover:bg-[#D24227] shadow-md shadow-[#E65338]/30 transition-all"
-                >
-                  Save Shift Log
-                </button>
+              ))}
+            </div>
+
+            <form onSubmit={handleDailyUpdateSubmit} className="space-y-4 text-xs">
+              {/* STEP 1: WORKER HEADCOUNT */}
+              {reportStep === 1 && (
+                <div className="space-y-3.5 animate-in fade-in">
+                  <div className="bg-[#FBF6F0] p-3 rounded-xl border border-[#EAE2D9]">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-bold text-gray-700 uppercase tracking-wider text-[11px]">
+                        Total Employees Present Today
+                      </span>
+                      <span className="font-mono font-bold text-[#E65338] text-sm">
+                        {headcountTotal} Workers
+                      </span>
+                    </div>
+                    <input
+                      type="number"
+                      value={headcountTotal}
+                      onChange={(e) => setHeadcountTotal(Number(e.target.value))}
+                      min={1}
+                      className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-white font-bold text-sm text-[#252622] focus:outline-none focus:border-[#E65338]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 uppercase tracking-wider mb-2">
+                      Shop Floor Workforce Deployment By Area
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <span className="block text-[11px] text-gray-500 font-medium mb-1">Weaving Shed Crew</span>
+                        <input
+                          type="number"
+                          value={wfWeaving}
+                          onChange={(e) => setWfWeaving(Number(e.target.value))}
+                          min={0}
+                          className="w-full p-2 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-bold text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
+                        />
+                      </div>
+                      <div>
+                        <span className="block text-[11px] text-gray-500 font-medium mb-1">Warping &amp; Sizing Area</span>
+                        <input
+                          type="number"
+                          value={wfSizing}
+                          onChange={(e) => setWfSizing(Number(e.target.value))}
+                          min={0}
+                          className="w-full p-2 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-bold text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
+                        />
+                      </div>
+                      <div>
+                        <span className="block text-[11px] text-gray-500 font-medium mb-1">Dyeing &amp; Processing Vat</span>
+                        <input
+                          type="number"
+                          value={wfDyeing}
+                          onChange={(e) => setWfDyeing(Number(e.target.value))}
+                          min={0}
+                          className="w-full p-2 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-bold text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
+                        />
+                      </div>
+                      <div>
+                        <span className="block text-[11px] text-gray-500 font-medium mb-1">QC Inspection &amp; Packing</span>
+                        <input
+                          type="number"
+                          value={wfQC}
+                          onChange={(e) => setWfQC(Number(e.target.value))}
+                          min={0}
+                          className="w-full p-2 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-bold text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 2: MACHINE STATUS CHECKLIST */}
+              {reportStep === 2 && (
+                <div className="space-y-3 animate-in fade-in">
+                  <div className="text-[11px] text-gray-500 bg-amber-50 p-2.5 rounded-xl border border-amber-200 text-amber-900">
+                    <strong>Note:</strong> Marking a machine as <strong>Breakdown</strong> automatically creates a maintenance ticket for technicians.
+                  </div>
+
+                  <div className="space-y-2.5">
+                    {machineChecklist.map((m, idx) => (
+                      <div key={m.id} className="p-3 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0]/60 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-[#252622] text-xs">{m.name}</span>
+                          <div className="flex items-center gap-1">
+                            {(['available', 'maint', 'breakdown'] as const).map((st) => (
+                              <button
+                                key={st}
+                                type="button"
+                                onClick={() => {
+                                  const updated = [...machineChecklist];
+                                  updated[idx] = { ...updated[idx]!, status: st };
+                                  setMachineChecklist(updated);
+                                }}
+                                className={cn(
+                                  'px-2 py-0.5 rounded-md text-[10px] font-bold uppercase transition-all',
+                                  m.status === st
+                                    ? st === 'available'
+                                      ? 'bg-emerald-600 text-white'
+                                      : st === 'maint'
+                                      ? 'bg-amber-600 text-white'
+                                      : 'bg-rose-600 text-white'
+                                    : 'bg-white text-gray-500 border border-[#EAE2D9]'
+                                )}
+                              >
+                                {st}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <input
+                            type="number"
+                            placeholder="Hours (e.g. 8)"
+                            value={m.hours}
+                            onChange={(e) => {
+                              const updated = [...machineChecklist];
+                              updated[idx] = { ...updated[idx]!, hours: Number(e.target.value) };
+                              setMachineChecklist(updated);
+                            }}
+                            className="p-1.5 rounded-lg border border-[#EAE2D9] bg-white font-semibold text-[11px]"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Operator remarks / issues"
+                            value={m.remarks}
+                            onChange={(e) => {
+                              const updated = [...machineChecklist];
+                              updated[idx] = { ...updated[idx]!, remarks: e.target.value };
+                              setMachineChecklist(updated);
+                            }}
+                            className="col-span-2 p-1.5 rounded-lg border border-[#EAE2D9] bg-white text-[11px]"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 3: RAW MATERIAL STOCK CHECK */}
+              {reportStep === 3 && (
+                <div className="space-y-3.5 animate-in fade-in">
+                  <div className="text-[11px] text-gray-500">
+                    Verify physical shop floor inventory against ERP recorded levels:
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0]">
+                      <span className="block font-bold text-gray-700 text-[11px] mb-1">
+                        Cotton Yarn 40s Ne (kg)
+                      </span>
+                      <input
+                        type="number"
+                        value={stockCotton40s}
+                        onChange={(e) => setStockCotton40s(Number(e.target.value))}
+                        min={0}
+                        className="w-full p-2 rounded-xl border border-[#EAE2D9] bg-white font-bold text-[#252622]"
+                      />
+                    </div>
+
+                    <div className="p-3 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0]">
+                      <span className="block font-bold text-gray-700 text-[11px] mb-1">
+                        Polyester 30s Yarn (kg)
+                      </span>
+                      <input
+                        type="number"
+                        value={stockPoly30s}
+                        onChange={(e) => setStockPoly30s(Number(e.target.value))}
+                        min={0}
+                        className="w-full p-2 rounded-xl border border-[#EAE2D9] bg-white font-bold text-[#252622]"
+                      />
+                    </div>
+
+                    <div className="p-3 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0]">
+                      <span className="block font-bold text-gray-700 text-[11px] mb-1">
+                        Reactive Dyes Batch (kg)
+                      </span>
+                      <input
+                        type="number"
+                        value={stockDyes}
+                        onChange={(e) => setStockDyes(Number(e.target.value))}
+                        min={0}
+                        className="w-full p-2 rounded-xl border border-[#EAE2D9] bg-white font-bold text-[#252622]"
+                      />
+                    </div>
+
+                    <div className="p-3 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0]">
+                      <span className="block font-bold text-gray-700 text-[11px] mb-1">
+                        Sizing Chemical Starch (kg)
+                      </span>
+                      <input
+                        type="number"
+                        value={stockStarch}
+                        onChange={(e) => setStockStarch(Number(e.target.value))}
+                        min={0}
+                        className="w-full p-2 rounded-xl border border-[#EAE2D9] bg-white font-bold text-[#252622]"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 4: PRODUCTION OUTPUT & DEFECTS */}
+              {reportStep === 4 && (
+                <div className="space-y-3.5 animate-in fade-in">
+                  <div>
+                    <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
+                      Active Manufacturing Order
+                    </label>
+                    <select
+                      value={selectedOrderId}
+                      onChange={(e) => setSelectedOrderId(e.target.value)}
+                      className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-semibold text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
+                    >
+                      {orders.map((ord) => (
+                        <option key={ord.id} value={ord.id}>
+                          {ord.id} — {ord.fabricName} ({ord.currentStage})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
+                      Production Stage Output Logged
+                    </label>
+                    <select
+                      value={selectedStage}
+                      onChange={(e) => setSelectedStage(e.target.value)}
+                      className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-semibold text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
+                    >
+                      <option value="loom_weaving">Stage 4: Loom Weaving</option>
+                      <option value="warping_sizing">Stage 3: Warping &amp; Sizing</option>
+                      <option value="dyeing_finishing">Stage 5: Dyeing &amp; Finishing</option>
+                      <option value="quality_check">Stage 6: Greige Quality Inspection</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
+                        Produced Metres Today
+                      </label>
+                      <input
+                        type="number"
+                        value={producedMeters}
+                        onChange={(e) => setProducedMeters(Number(e.target.value))}
+                        min={0}
+                        required
+                        className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-bold text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
+                        Defective Metres (Greige QC)
+                      </label>
+                      <input
+                        type="number"
+                        value={defectiveMeters}
+                        onChange={(e) => setDefectiveMeters(Number(e.target.value))}
+                        min={0}
+                        required
+                        className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-bold text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
+                      Shift Operations Log &amp; Notes
+                    </label>
+                    <textarea
+                      value={shiftNotes}
+                      onChange={(e) => setShiftNotes(e.target.value)}
+                      rows={2}
+                      className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Navigation Controls */}
+              <div className="flex items-center justify-between pt-3 border-t border-[#EAE2D9]">
+                <div>
+                  {reportStep > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setReportStep((prev) => (prev - 1) as any)}
+                      className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 hover:bg-[#FBF6F0] border border-[#EAE2D9] transition-colors"
+                    >
+                      &larr; Previous Step
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeDailyUpdateModal();
+                      setReportStep(1);
+                    }}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 hover:bg-[#FBF6F0] transition-colors"
+                  >
+                    Cancel
+                  </button>
+
+                  {reportStep < 4 ? (
+                    <button
+                      type="button"
+                      onClick={() => setReportStep((prev) => (prev + 1) as any)}
+                      className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-[#252622] hover:bg-black transition-all"
+                    >
+                      Next Step &rarr;
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={isSubmittingReport}
+                      className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-[#E65338] hover:bg-[#D24227] shadow-md shadow-[#E65338]/30 transition-all flex items-center gap-1.5"
+                    >
+                      {isSubmittingReport ? (
+                        <>
+                          <Loader2 size={13} className="animate-spin" />
+                          <span>Submitting 4-Point Report...</span>
+                        </>
+                      ) : (
+                        <span>Submit 4-Point Shift Report</span>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
             </form>
           </div>

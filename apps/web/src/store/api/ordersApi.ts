@@ -432,6 +432,62 @@ export const ordersApi = apiSlice.injectEndpoints({
         { type: 'Order', id: 'CLIENT_LIST' },
       ],
     }),
+
+    getOrderMessages: builder.query<{ success: boolean; data: any }, string>({
+      query: (orderId) => `/orders/${orderId}/messages`,
+      providesTags: (_res, _err, id) => [{ type: 'Order', id: `MESSAGES_${id}` }],
+    }),
+
+    getClientOrderMessages: builder.query<{ success: boolean; data: any }, string>({
+      query: (orderId) => `/client/orders/${orderId}/messages`,
+      providesTags: (_res, _err, id) => [{ type: 'Order', id: `CLIENT_MESSAGES_${id}` }],
+    }),
+
+    sendClientOrderMessage: builder.mutation<
+      { success: boolean; data: any },
+      { orderId: string; message: string }
+    >({
+      query: ({ orderId, message }) => ({
+        url: `/client/orders/${orderId}/chat`,
+        method: 'POST',
+        body: { message },
+      }),
+      invalidatesTags: (_res, _err, { orderId }) => [
+        { type: 'Order', id: `CLIENT_MESSAGES_${orderId}` },
+        { type: 'Order', id: orderId },
+      ],
+    }),
+
+    sendAdminOrderMessage: builder.mutation<
+      { success: boolean; data: any },
+      { orderId: string; message: string }
+    >({
+      query: ({ orderId, message }) => ({
+        url: `/orders/${orderId}/chat`,
+        method: 'POST',
+        body: { message },
+      }),
+      invalidatesTags: (_res, _err, { orderId }) => [
+        { type: 'Order', id: `MESSAGES_${orderId}` },
+        { type: 'Order', id: orderId },
+      ],
+    }),
+
+    resolveEscalation: builder.mutation<
+      { success: boolean; data: any },
+      { orderId: string; resolutionNotes?: string; discountPct?: number; notes?: string }
+    >({
+      query: ({ orderId, ...body }) => ({
+        url: `/orders/${orderId}/escalation/resolve`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: (_res, _err, { orderId }) => [
+        { type: 'Order', id: `MESSAGES_${orderId}` },
+        { type: 'Order', id: orderId },
+        { type: 'Order', id: 'LIST' },
+      ],
+    }),
   }),
 });
 
@@ -462,7 +518,10 @@ export const {
   useClientDeclineQuotationMutation,
   useClientPayMilestoneMutation,
   useClientCreatePaymentOrderMutation,
+  useGetOrderMessagesQuery,
+  useGetClientOrderMessagesQuery,
+  useSendClientOrderMessageMutation,
+  useSendAdminOrderMessageMutation,
+  useResolveEscalationMutation,
 } = ordersApi;
-
-export const useGetOrdersSummaryQuery = useGetOrderSummaryQuery;
 

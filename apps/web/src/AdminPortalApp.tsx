@@ -8,6 +8,8 @@ import {
   useCancelOrderMutation,
   useRecordDeliveryMutation,
   useRecordManualReceiptMutation,
+  useSendAdminOrderMessageMutation,
+  useResolveEscalationMutation,
 } from './store/api/ordersApi';
 import {
   useGetClientsQuery,
@@ -177,6 +179,8 @@ export const AdminPortalApp: React.FC = () => {
   const [cancelOrderMutation] = useCancelOrderMutation();
   const [recordDeliveryMutation] = useRecordDeliveryMutation();
   const [recordManualReceiptMutation] = useRecordManualReceiptMutation();
+  const [sendAdminOrderMessageMutation] = useSendAdminOrderMessageMutation();
+  const [resolveEscalationMutation] = useResolveEscalationMutation();
 
   const clientsMap = useMemo(() => {
     const map = new Map<string, any>();
@@ -727,7 +731,7 @@ export const AdminPortalApp: React.FC = () => {
             invoiceNo,
             invoiceAmountPaise,
             carrier: delivery.carrier?.trim() || undefined,
-            notes: delivery.notes || (delivery.carrier ? `Dispatched via ${delivery.carrier.trim()}` : undefined),
+            notes: (delivery as any).notes || (delivery.carrier ? `Dispatched via ${delivery.carrier.trim()}` : undefined),
           },
           idempotencyKey,
         }).unwrap();
@@ -864,7 +868,7 @@ export const AdminPortalApp: React.FC = () => {
   // CHAT & ESCALATION HANDLERS
   // =========================================================================
 
-  const handleSendChatMessage = (orderId: string, content: string) => {
+  const handleSendChatMessage = async (orderId: string, content: string) => {
     const newMsg: ChatMessage = {
       id: `msg_${Date.now()}`,
       sender: 'admin',
@@ -878,11 +882,22 @@ export const AdminPortalApp: React.FC = () => {
       [orderId]: [...(prev[orderId] || []), newMsg]
     }));
 
+    // Find backend order ID
+    const targetOrder = orders.find(o => o.id === orderId || (o as any).backendId === orderId);
+    const liveOrderId = (targetOrder as any)?.backendId || (orderId.length === 24 ? orderId : undefined);
+    if (liveOrderId) {
+      try {
+        await sendAdminOrderMessageMutation({ orderId: liveOrderId, message: content }).unwrap();
+      } catch (err) {
+        console.warn('Failed to send admin chat reply to server:', err);
+      }
+    }
+
     addAuditLog('ADMIN_CHAT_REPLY', `Admin replied in client conversation for ${orderId}.`, orderId);
     showToast(`Reply sent to client on ${orderId}.`);
   };
 
-  const handleResolveEscalation = (orderId: string, approved: boolean, concessionPercent?: number) => {
+  const handleResolveEscalation = async (orderId: string, approved: boolean, concessionPercent?: number) => {
     setOrders((prev) =>
       prev.map((o) => {
         if (o.id === orderId && o.discountEscalation) {
@@ -902,7 +917,23 @@ export const AdminPortalApp: React.FC = () => {
       ? `Managing Director John Doe has reviewed your account and authorized a ${concessionPercent}% concession on order ${orderId} in appreciation of your seasonal partnership!`
       : `Managing Director John Doe has reviewed your request. Due to locked raw material costs, we cannot grant the discount, but we are prioritizing your shipment on Airjet Shed A.`;
 
-    handleSendChatMessage(orderId, replyText);
+    const targetOrder = orders.find(o => o.id === orderId || (o as any).backendId === orderId);
+    const liveOrderId = (targetOrder as any)?.backendId || (orderId.length === 24 ? orderId : undefined);
+
+    if (liveOrderId && approved) {
+      try {
+        await resolveEscalationMutation({
+          orderId: liveOrderId,
+          discountPct: concessionPercent || 5,
+          resolutionNotes: replyText,
+        }).unwrap();
+        refetchOrders();
+      } catch (err) {
+        console.warn('Backend escalation resolve error:', err);
+      }
+    }
+
+    await handleSendChatMessage(orderId, replyText);
     addAuditLog('DISCOUNT_ESCALATION_RESOLVED', `Admin ${approved ? 'approved' : 'declined'} concession for ${orderId}.`, orderId);
     showToast(`Escalation ${approved ? 'approved' : 'declined'} for order ${orderId}.`);
   };
@@ -1054,7 +1085,6 @@ export const AdminPortalApp: React.FC = () => {
                 isMachinesLoading={isMachinesLoading}
                 refetchMachines={refetchMachines}
                 auditLogs={auditLogsData?.data || auditLogs}
-                isAuditLogsLoading={isAuditLogsLoading}
                 notifications={isDemo ? undefined : (isNotificationsError ? undefined : notificationsData?.data)}
                 isNotificationsLoading={isNotificationsLoading}
                 isNotificationsError={isNotificationsError}

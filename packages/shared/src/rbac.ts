@@ -1137,6 +1137,51 @@ export const ROUTE_PERMISSION_MATRIX: Record<string, RoutePermission> = {
     allowedRoles: ["admin", "supervisor"],
     idempotent: false,
   },
+
+  // Priority 3: Order Negotiation Chat & Escalation Routes
+  "POST /api/v1/client/orders/:id/chat": {
+    routeKey: "POST /api/v1/client/orders/:id/chat",
+    method: "POST",
+    path: "/api/v1/client/orders/:id/chat",
+    description: "Send client message in order negotiation chat with AI concierge / Admin",
+    allowedRealms: ["client"],
+    idempotent: false,
+  },
+  "GET /api/v1/client/orders/:id/messages": {
+    routeKey: "GET /api/v1/client/orders/:id/messages",
+    method: "GET",
+    path: "/api/v1/client/orders/:id/messages",
+    description: "Retrieve conversation history for client order negotiation",
+    allowedRealms: ["client"],
+    idempotent: false,
+  },
+  "POST /api/v1/orders/:id/chat": {
+    routeKey: "POST /api/v1/orders/:id/chat",
+    method: "POST",
+    path: "/api/v1/orders/:id/chat",
+    description: "Send admin reply or takeover in order negotiation chat",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin"],
+    idempotent: false,
+  },
+  "GET /api/v1/orders/:id/messages": {
+    routeKey: "GET /api/v1/orders/:id/messages",
+    method: "GET",
+    path: "/api/v1/orders/:id/messages",
+    description: "Retrieve conversation history for admin/supervisor review",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin", "supervisor"],
+    idempotent: false,
+  },
+  "POST /api/v1/orders/:id/escalation/resolve": {
+    routeKey: "POST /api/v1/orders/:id/escalation/resolve",
+    method: "POST",
+    path: "/api/v1/orders/:id/escalation/resolve",
+    description: "Resolve discount concession escalation with revised quotation",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin"],
+    idempotent: false,
+  },
 };
 
 export const IDEMPOTENT_FLAGGED_ROUTES = new Set(

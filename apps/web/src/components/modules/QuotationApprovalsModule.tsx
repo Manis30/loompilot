@@ -170,6 +170,7 @@ export interface QuotationRecord {
   rejectedBy?: string;
   rejectedAt?: string;
   rejectionReason?: string;
+  clientPdfFileId?: string;
 }
 
 interface QuotationApprovalsModuleProps {
@@ -314,9 +315,9 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
   const [quotationSearchQuery, setQuotationSearchQuery] = useState<string>('');
 
   // =========================================================================
-  // CLIENT REGISTRY
+  // LIVE CLIENT REGISTRY & DATA MAPPERS
   // =========================================================================
-  const [clients] = useState<ClientProfile[]>([
+  const FALLBACK_CLIENTS: ClientProfile[] = [
     {
       id: 'CL-001',
       name: 'Fashion House',
@@ -327,7 +328,7 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
       address: 'Plot 42, Apparel Park, Rayon Road',
       city: 'Tirupur, Tamil Nadu',
       totalOrdersCount: 2,
-      lastInteraction: '29 Oct 2026, 04:30 PM'
+      lastInteraction: 'Today'
     },
     {
       id: 'CL-002',
@@ -339,887 +340,189 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
       address: '14 Industrial Zone, Sarkhej Highway',
       city: 'Ahmedabad, Gujarat',
       totalOrdersCount: 1,
-      lastInteraction: '28 Oct 2026, 03:40 PM'
-    },
-    {
-      id: 'CL-003',
-      name: 'Style World',
-      initials: 'SW',
-      contactPerson: 'Priya Sharma (Senior Merchandiser)',
-      email: 'style@styleworld.com',
-      phone: '+91 98840 98765',
-      address: '88 Textile Tower, Electronic City',
-      city: 'Bengaluru, Karnataka',
-      totalOrdersCount: 1,
-      lastInteraction: '29 Oct 2026, 04:30 PM'
-    },
-    {
-      id: 'CL-004',
-      name: 'Home Living',
-      initials: 'HL',
-      contactPerson: 'Rajesh Verma (Sourcing Director)',
-      email: 'procure@homeliving.com',
-      phone: '+91 94440 22110',
-      address: '5B Mill Compound, Pollachi Road',
-      city: 'Coimbatore, Tamil Nadu',
-      totalOrdersCount: 1,
-      lastInteraction: '29 Oct 2026, 03:20 PM'
-    },
-    {
-      id: 'CL-005',
-      name: 'StyleMart',
-      initials: 'SM',
-      contactPerson: 'Sunita Patel (Purchase Officer)',
-      email: 'buyers@stylemart.com',
-      phone: '+91 91234 56780',
-      address: '22 Ring Road Market, Ring Road',
-      city: 'Surat, Gujarat',
-      totalOrdersCount: 1,
-      lastInteraction: '28 Oct 2026, 05:00 PM'
-    },
-    {
-      id: 'CL-006',
-      name: 'HomeNest',
-      initials: 'HN',
-      contactPerson: 'Rohan Nair (Brand Director)',
-      email: 'orders@homenest.com',
-      phone: '+91 98765 43210',
-      address: '102 Guindy Industrial Estate',
-      city: 'Chennai, Tamil Nadu',
-      totalOrdersCount: 1,
-      lastInteraction: '28 Oct 2026, 02:30 PM'
+      lastInteraction: 'Yesterday'
     }
-  ]);
+  ];
 
-  // =========================================================================
-  // COMPLETE AUDITED QUOTATIONS DATASET
-  // =========================================================================
-  const [quotations, setQuotations] = useState<QuotationRecord[]>([
-    // ---------------------------------------------------------------------
-    // CLIENT CL-001 (Fashion House) · ORDER LP-901
-    // ---------------------------------------------------------------------
-    {
-      id: 'QT-1001',
-      clientId: 'CL-001',
-      clientName: 'Fashion House',
-      orderId: 'LP-901',
-      orderTitle: 'Cotton Shirts & Trousers (5,000 pcs)',
-      quotationType: 'new',
-      typeLabel: 'Original Proposal',
-      version: 'v1.0',
-      status: 'pending_admin_approval',
-      createdDate: '29 Oct 2026, 09:30 AM',
-      expiryDate: '12 Nov 2026',
-      deadlineDate: '05 Nov 2026',
-      deliveryDays: 7,
-      specs: {
-        fabricType: 'Combed Cotton / Twill Blend',
-        yarnCount: '40s Combed & 30s Ring Spun',
-        gsm: 185,
-        weave: 'Oxford & Twill',
-        finishing: 'Bio-Washed Silk Finish',
-        designCount: 3
-      },
-      totalQuantity: 5000,
-      quantityUnit: 'pieces',
-      products: [
-        { id: 'LP-901-A', name: 'Formal Shirt — Design A', designCode: 'FS-A-01', category: 'Formalwear', quantity: 2000, unit: 'pieces', specs: { yarnCount: '40s Combed', gsm: 185, weave: 'Oxford Weave', finishing: 'Bio-Wash' }, unitPrice: 77.6, totalPrice: 155200 },
-        { id: 'LP-901-B', name: 'Formal Pants — Design B', designCode: 'FP-B-02', category: 'Trousers', quantity: 1500, unit: 'pieces', specs: { yarnCount: '30s Ring Spun', gsm: 220, weave: 'Twill Weave', finishing: 'Bio-Enzyme' }, unitPrice: 80.0, totalPrice: 120000 },
-        { id: 'LP-901-C', name: 'Casual Shirt — Design C', designCode: 'CS-C-03', category: 'Casualwear', quantity: 1500, unit: 'pieces', specs: { yarnCount: '40s Combed', gsm: 175, weave: 'Poplin Weave', finishing: 'Silicone Softener' }, unitPrice: 75.2, totalPrice: 112800 }
-      ],
-      costBreakdown: {
-        fabricYarn: 200000,
-        fabricYarnBasis: '40s Combed cotton yarn @ ₹240/kg, 833 kg required',
-        dyeingProcessing: 45000,
-        dyeingProcessingBasis: 'Reactive eco-dyeing & bio-wash finishing @ ₹45/kg',
-        labour: 30000,
-        labourBasis: 'Airjet loom weaving & stitching',
-        overhead: 20000,
-        overheadBasis: 'Plant power & inspection line',
-        wastage: 11025,
-        wastageBasis: '4.5% allowance on fabric & dyeing costs',
-        priceRiskBuffer: 15975,
-        priceRiskBufferBasis: 'Cotton yarn market volatility hedge',
-        otherCosts: 0,
-        otherCostsBasis: 'None',
-        totalCost: 322000
-      },
-      quotedAmount: 388000,
-      expectedProfit: 66000,
-      marginPercent: 17.0,
-      aiRecommendation: {
-        suggestedPrice: 388000,
-        suggestedMargin: 17.0,
-        costAssumptions: 'Based on 40s Combed yarn spot rate ₹240/kg + 4.5% dyeing buffer.',
-        wastageAssumptions: '4.5% cutting allowance.',
-        volatilityConsiderations: 'Raw cotton price surge expected; buffer hedges margin.',
-        deliveryFeasibility: 'Shed A has 4 airjet looms ready.',
-        financialRisks: 'Low default risk; client maintains prompt settlement.',
-        confidenceScore: 94.6
-      },
-      negotiations: [],
-      history: [
-        { id: 'hist_1001_1', timestamp: '29 Oct 2026, 09:30 AM', actor: 'Quotation Agent v2.4', action: 'DRAFT_CREATED', version: 'v1.0', comments: 'Initial commercial proposal generated.' }
-      ]
-    },
-    {
-      id: 'QT-1007',
-      clientId: 'CL-001',
-      clientName: 'Fashion House',
-      orderId: 'LP-901',
-      orderTitle: 'Cotton Shirts & Trousers (5,000 pcs)',
-      quotationType: 'revised',
-      typeLabel: '3.3% Concession Revision',
-      linkedQuotationId: 'QT-1001',
-      version: 'v2.0',
-      status: 'awaiting_client_response',
-      createdDate: '29 Oct 2026, 01:15 PM',
-      expiryDate: '12 Nov 2026',
-      deadlineDate: '05 Nov 2026',
-      deliveryDays: 7,
-      specs: {
-        fabricType: 'Combed Cotton / Twill Blend',
-        yarnCount: '40s Combed & 30s Ring Spun',
-        gsm: 185,
-        weave: 'Oxford & Twill',
-        finishing: 'Bio-Washed Silk Finish',
-        designCount: 3
-      },
-      totalQuantity: 5000,
-      quantityUnit: 'pieces',
-      products: [
-        { id: 'LP-901-A2', name: 'Formal Shirt — Design A', designCode: 'FS-A-01', category: 'Formalwear', quantity: 2000, unit: 'pieces', specs: { yarnCount: '40s Combed', gsm: 185, weave: 'Oxford', finishing: 'Bio-Wash' }, unitPrice: 75.0, totalPrice: 150000 },
-        { id: 'LP-901-B2', name: 'Formal Pants — Design B', designCode: 'FP-B-02', category: 'Trousers', quantity: 1500, unit: 'pieces', specs: { yarnCount: '30s Ring Spun', gsm: 220, weave: 'Twill', finishing: 'Bio-Enzyme' }, unitPrice: 77.33, totalPrice: 116000 },
-        { id: 'LP-901-C2', name: 'Casual Shirt — Design C', designCode: 'CS-C-03', category: 'Casualwear', quantity: 1500, unit: 'pieces', specs: { yarnCount: '40s Combed', gsm: 175, weave: 'Poplin', finishing: 'Softener' }, unitPrice: 72.67, totalPrice: 109000 }
-      ],
-      costBreakdown: {
-        fabricYarn: 198000,
-        fabricYarnBasis: 'Yarn volume rebate negotiated at ₹237/kg',
-        dyeingProcessing: 45000,
-        dyeingProcessingBasis: 'Reactive eco-dyeing & bio-wash finishing',
-        labour: 30000,
-        labourBasis: 'Standard assembly operations',
-        overhead: 19000,
-        overheadBasis: 'Optimized batch machine scheduling',
-        wastage: 10000,
-        wastageBasis: '4.1% allowance',
-        priceRiskBuffer: 16000,
-        priceRiskBufferBasis: 'Market volatility buffer retained',
-        otherCosts: 0,
-        otherCostsBasis: 'Standard packing',
-        totalCost: 318000
-      },
-      quotedAmount: 375000,
-      expectedProfit: 57000,
-      marginPercent: 15.2,
-      aiRecommendation: {
-        suggestedPrice: 375000,
-        suggestedMargin: 15.2,
-        costAssumptions: 'Accommodates client 3.3% concession while securing volume.',
-        wastageAssumptions: '4.1% cut waste.',
-        volatilityConsiderations: 'Protected by ₹16,000 risk buffer.',
-        deliveryFeasibility: 'On track for 05 Nov shipment.',
-        financialRisks: 'Margin remains compliant with company policy (15.2% ≥ 15.0%).',
-        confidenceScore: 92.4
-      },
-      negotiations: [
-        {
-          id: 'neg_1',
-          date: '29 Oct 2026, 11:00 AM',
-          clientRequest: 'Client requested a 3.3% concession to ₹3,75,000 citing bulk seasonal volume commitments.',
-          requestedDiscountPercent: 3.3,
-          requestedPrice: 375000,
-          originalPrice: 388000,
-          revisedPrice: 375000,
-          adminResponse: 'Admin approved concession. Proposal dispatched to client.',
-          status: 'concession_approved'
+  // Derive clients dynamically from live orders
+  const clients = useMemo<ClientProfile[]>(() => {
+    if (ordersResponse?.data && Array.isArray(ordersResponse.data) && ordersResponse.data.length > 0) {
+      const map = new Map<string, ClientProfile>();
+      for (const o of ordersResponse.data) {
+        const cId =
+          typeof o.clientId === 'object' && o.clientId?._id
+            ? String(o.clientId._id)
+            : String(o.clientId || 'CL-001');
+        const cName =
+          typeof o.clientId === 'object' && o.clientId?.name
+            ? o.clientId.name
+            : o.clientName || 'Fashion House';
+        if (!map.has(cId)) {
+          map.set(cId, {
+            id: cId,
+            name: cName,
+            initials:
+              cName
+                .split(' ')
+                .map((n: string) => n[0])
+                .join('')
+                .slice(0, 2)
+                .toUpperCase() || 'CL',
+            contactPerson: o.clientEmail || 'Client Procurement Team',
+            email: o.clientEmail || 'procurement@client.com',
+            phone: '+91 98410 12345',
+            address: 'Industrial Apparel Cluster',
+            city: 'Tirupur / Surat',
+            totalOrdersCount: 1,
+            lastInteraction: 'Today'
+          });
+        } else {
+          map.get(cId)!.totalOrdersCount += 1;
         }
-      ],
-      history: [
-        { id: 'hist_1007_1', timestamp: '29 Oct 2026, 01:15 PM', actor: 'John Doe (Managing Director)', action: 'APPROVED_AND_SENT', version: 'v2.0', comments: 'Approved 3.3% concession. Dispatched to client via portal.' }
-      ],
-      approvedBy: 'John Doe (Managing Director)',
-      approvedAt: '29 Oct 2026, 01:15 PM',
-      dispatchedAt: '29 Oct 2026, 01:20 PM'
-    },
-    {
-      id: 'QT-1010',
-      clientId: 'CL-001',
-      clientName: 'Fashion House',
-      orderId: 'LP-901',
-      orderTitle: 'Cotton Shirts & Trousers (5,000 pcs)',
-      quotationType: 'alternative',
-      typeLabel: 'Alternative: Egyptian Giza Long-Staple',
-      linkedQuotationId: 'QT-1001',
-      version: 'v1.0',
-      status: 'approved',
-      createdDate: '29 Oct 2026, 02:45 PM',
-      expiryDate: '15 Nov 2026',
-      deadlineDate: '08 Nov 2026',
-      deliveryDays: 10,
-      specs: {
-        fabricType: '100% Giza Long-Staple Cotton',
-        yarnCount: '60s Giza Combed',
-        gsm: 195,
-        weave: 'High-Density Satin Twill',
-        finishing: 'Liquid Ammonia Silk Sheen',
-        designCount: 3
-      },
-      totalQuantity: 5000,
-      quantityUnit: 'pieces',
-      products: [
-        { id: 'LP-901-ALT1', name: 'Executive Giza Shirt', designCode: 'EGS-01', category: 'Luxury Formal', quantity: 2000, unit: 'pieces', specs: { yarnCount: '60s Giza', gsm: 195, weave: 'Satin Twill', finishing: 'Liquid Ammonia' }, unitPrice: 84.0, totalPrice: 168000 },
-        { id: 'LP-901-ALT2', name: 'Executive Giza Trousers', designCode: 'EGT-02', category: 'Luxury Formal', quantity: 1500, unit: 'pieces', specs: { yarnCount: '40s Giza Twill', gsm: 235, weave: 'Twill Weave', finishing: 'Silk Sheen' }, unitPrice: 86.67, totalPrice: 130000 },
-        { id: 'LP-901-ALT3', name: 'Executive Casual Shirt', designCode: 'ECS-03', category: 'Luxury Casual', quantity: 1500, unit: 'pieces', specs: { yarnCount: '60s Giza', gsm: 190, weave: 'Poplin', finishing: 'Liquid Ammonia' }, unitPrice: 81.33, totalPrice: 122000 }
-      ],
-      costBreakdown: {
-        fabricYarn: 215000,
-        fabricYarnBasis: '60s Giza Long-Staple yarn @ ₹310/kg',
-        dyeingProcessing: 52000,
-        dyeingProcessingBasis: 'Liquid ammonia mercerization',
-        labour: 32000,
-        labourBasis: 'Specialized finishing technicians',
-        overhead: 18000,
-        overheadBasis: 'Premium line allocation',
-        wastage: 6000,
-        wastageBasis: '2.2% precision cut waste',
-        priceRiskBuffer: 7000,
-        priceRiskBufferBasis: 'Import duty volatility hedge',
-        otherCosts: 0,
-        otherCostsBasis: 'None',
-        totalCost: 330000
-      },
-      quotedAmount: 420000,
-      expectedProfit: 90000,
-      marginPercent: 21.4,
-      aiRecommendation: {
-        suggestedPrice: 420000,
-        suggestedMargin: 21.4,
-        costAssumptions: 'Premium alternative package offering high margin luxury fabric upgrade.',
-        wastageAssumptions: 'Low wastage on precision Italian finishing line.',
-        volatilityConsiderations: 'Giza yarn in factory warehouse stock.',
-        deliveryFeasibility: 'Requires 3 extra days for ammonia treatment (08 Nov delivery).',
-        financialRisks: 'Extremely healthy margin (21.4%).',
-        confidenceScore: 95.8
-      },
-      negotiations: [],
-      history: [
-        { id: 'hist_1010_1', timestamp: '29 Oct 2026, 02:45 PM', actor: 'John Doe (Managing Director)', action: 'APPROVED', version: 'v1.0', comments: 'Approved as premium alternative commercial option.' }
-      ],
-      approvedBy: 'John Doe (Managing Director)',
-      approvedAt: '29 Oct 2026, 03:00 PM'
-    },
-
-    // ---------------------------------------------------------------------
-    // CLIENT CL-001 (Fashion House) · ORDER LP-905
-    // ---------------------------------------------------------------------
-    {
-      id: 'QT-1012',
-      clientId: 'CL-001',
-      clientName: 'Fashion House',
-      orderId: 'LP-905',
-      orderTitle: 'Custom Twill Chinos (2,500 pcs)',
-      quotationType: 'new',
-      typeLabel: 'Initial Commercial Proposal',
-      version: 'v1.0',
-      status: 'pending_admin_approval',
-      createdDate: '29 Oct 2026, 04:10 PM',
-      expiryDate: '14 Nov 2026',
-      deadlineDate: '25 Nov 2026',
-      deliveryDays: 27,
-      specs: {
-        fabricType: 'Heavyweight Cotton Twill',
-        yarnCount: '20s Heavy Ring Spun',
-        gsm: 250,
-        weave: '3/1 Right Hand Twill',
-        finishing: 'Garment Dye & Sand Wash',
-        designCount: 2
-      },
-      totalQuantity: 2500,
-      quantityUnit: 'pieces',
-      products: [
-        { id: 'LP-905-A', name: 'Classic Khaki Chino', designCode: 'CKC-01', category: 'Pants', quantity: 1500, unit: 'pieces', specs: { yarnCount: '20s Heavy Twill', gsm: 250, weave: '3/1 Twill', finishing: 'Sand Wash' }, unitPrice: 112.0, totalPrice: 168000 },
-        { id: 'LP-905-B', name: 'Olive Slim Chino', designCode: 'OSC-02', category: 'Pants', quantity: 1000, unit: 'pieces', specs: { yarnCount: '20s Heavy Twill', gsm: 250, weave: '3/1 Twill', finishing: 'Sand Wash' }, unitPrice: 112.0, totalPrice: 112000 }
-      ],
-      costBreakdown: {
-        fabricYarn: 142000,
-        fabricYarnBasis: '20s Heavy ring spun cotton yarn @ ₹210/kg',
-        dyeingProcessing: 38000,
-        dyeingProcessingBasis: 'Garment piece dyeing & sand washing',
-        labour: 25000,
-        labourBasis: 'Heavy duty bar-tack stitching',
-        overhead: 14000,
-        overheadBasis: 'Stitching and washer utility',
-        wastage: 5000,
-        wastageBasis: '2.8% allowance',
-        priceRiskBuffer: 4000,
-        priceRiskBufferBasis: 'Standard buffer',
-        otherCosts: 0,
-        otherCostsBasis: 'Standard trims',
-        totalCost: 228000
-      },
-      quotedAmount: 280000,
-      expectedProfit: 52000,
-      marginPercent: 18.6,
-      aiRecommendation: {
-        suggestedPrice: 280000,
-        suggestedMargin: 18.6,
-        costAssumptions: 'Standard chino production run scheduled for mid-November.',
-        wastageAssumptions: '2.8% pattern cutting loss.',
-        volatilityConsiderations: 'Stable 20s heavy yarn supply.',
-        deliveryFeasibility: 'Ample time before 25 Nov delivery date.',
-        financialRisks: 'Comfortable 18.6% margin.',
-        confidenceScore: 93.5
-      },
-      negotiations: [],
-      history: [
-        { id: 'hist_1012_1', timestamp: '29 Oct 2026, 04:10 PM', actor: 'Quotation Agent v2.4', action: 'DRAFT_CREATED', version: 'v1.0', comments: 'Initial draft for second seasonal order LP-905.' }
-      ]
-    },
-
-    // ---------------------------------------------------------------------
-    // CLIENT CL-002 (Urban Textiles) · ORDER LP-902
-    // ---------------------------------------------------------------------
-    {
-      id: 'QT-1002',
-      clientId: 'CL-002',
-      clientName: 'Urban Textiles',
-      orderId: 'LP-902',
-      orderTitle: 'Urban Poplin Shirts (8,000 pcs)',
-      quotationType: 'new',
-      typeLabel: 'Initial Proposal (Below Margin Threshold)',
-      version: 'v1.0',
-      status: 'revision_required',
-      createdDate: '28 Oct 2026, 11:15 AM',
-      expiryDate: '11 Nov 2026',
-      deadlineDate: '06 Nov 2026',
-      deliveryDays: 8,
-      specs: {
-        fabricType: '100% Cotton Poplin',
-        yarnCount: '30s Ring Spun',
-        gsm: 190,
-        weave: 'Poplin & Oxford',
-        finishing: 'Mercerized',
-        designCount: 2
-      },
-      totalQuantity: 8000,
-      quantityUnit: 'pieces',
-      products: [
-        { id: 'LP-902-A', name: 'Urban Cotton Oxford Shirt', designCode: 'UCO-01', category: 'Shirts', quantity: 5000, unit: 'pieces', specs: { yarnCount: '30s Ring Spun', gsm: 190, weave: 'Oxford', finishing: 'Mercerized' }, unitPrice: 68.75, totalPrice: 343750 },
-        { id: 'LP-902-B', name: 'Urban Poplin Shirt', designCode: 'UPS-02', category: 'Shirts', quantity: 3000, unit: 'pieces', specs: { yarnCount: '30s Ring Spun', gsm: 190, weave: 'Poplin', finishing: 'Pre-Shrunk' }, unitPrice: 68.75, totalPrice: 206250 }
-      ],
-      costBreakdown: {
-        fabricYarn: 310000,
-        fabricYarnBasis: '30s Ring Spun cotton @ ₹215/kg',
-        dyeingProcessing: 65000,
-        dyeingProcessingBasis: 'Continuous pad steam dyeing',
-        labour: 45000,
-        labourBasis: 'High-speed airjet weaving',
-        overhead: 30000,
-        overheadBasis: 'Plant power utility',
-        wastage: 15000,
-        wastageBasis: '4.0% material loss allowance',
-        priceRiskBuffer: 15000,
-        priceRiskBufferBasis: 'Supplier lead time variance',
-        otherCosts: 0,
-        otherCostsBasis: 'Standard packing',
-        totalCost: 480000
-      },
-      quotedAmount: 550000,
-      expectedProfit: 70000,
-      marginPercent: 12.7,
-      aiRecommendation: {
-        suggestedPrice: 568000,
-        suggestedMargin: 15.5,
-        costAssumptions: 'Client insisted on ₹5,50,000 cap yielding 12.7% margin.',
-        wastageAssumptions: '4.0% wastage.',
-        volatilityConsiderations: 'Dye chemical price surge (+4.5%) increases chemical costs.',
-        deliveryFeasibility: 'Tight 06 Nov timeline due to yarn shortage.',
-        financialRisks: 'Margin 12.7% fails mandatory 15% threshold policy.',
-        confidenceScore: 89.2
-      },
-      negotiations: [],
-      history: [
-        { id: 'hist_1002_1', timestamp: '28 Oct 2026, 11:15 AM', actor: 'Quotation Agent v2.4', action: 'DRAFT_CREATED', version: 'v1.0', comments: 'Draft prepared with client requested cap.' },
-        { id: 'hist_1002_2', timestamp: '28 Oct 2026, 03:40 PM', actor: 'John Doe (Managing Director)', action: 'REVISION_REQUESTED', version: 'v1.0', comments: 'Profit margin 12.7% is below the mandatory 15.0% threshold.' }
-      ]
-    },
-    {
-      id: 'QT-1008',
-      clientId: 'CL-002',
-      clientName: 'Urban Textiles',
-      orderId: 'LP-902',
-      orderTitle: 'Urban Poplin Shirts (8,000 pcs)',
-      quotationType: 'revised',
-      typeLabel: 'Recalibrated Revision (15.5% Margin)',
-      linkedQuotationId: 'QT-1002',
-      version: 'v2.0',
-      status: 'pending_admin_approval',
-      createdDate: '29 Oct 2026, 10:15 AM',
-      expiryDate: '12 Nov 2026',
-      deadlineDate: '06 Nov 2026',
-      deliveryDays: 8,
-      specs: {
-        fabricType: '100% Cotton Poplin',
-        yarnCount: '30s Ring Spun',
-        gsm: 190,
-        weave: 'Poplin & Oxford',
-        finishing: 'Mercerized',
-        designCount: 2
-      },
-      totalQuantity: 8000,
-      quantityUnit: 'pieces',
-      products: [
-        { id: 'LP-902-A2', name: 'Urban Cotton Oxford Shirt', designCode: 'UCO-01', category: 'Shirts', quantity: 5000, unit: 'pieces', specs: { yarnCount: '30s Ring Spun', gsm: 190, weave: 'Oxford', finishing: 'Mercerized' }, unitPrice: 71.0, totalPrice: 355000 },
-        { id: 'LP-902-B2', name: 'Urban Poplin Shirt', designCode: 'UPS-02', category: 'Shirts', quantity: 3000, unit: 'pieces', specs: { yarnCount: '30s Ring Spun', gsm: 190, weave: 'Poplin', finishing: 'Pre-Shrunk' }, unitPrice: 71.0, totalPrice: 213000 }
-      ],
-      costBreakdown: {
-        fabricYarn: 310000,
-        fabricYarnBasis: '30s Ring Spun cotton @ ₹215/kg',
-        dyeingProcessing: 65000,
-        dyeingProcessingBasis: 'Continuous pad steam dyeing',
-        labour: 45000,
-        labourBasis: 'High-speed airjet weaving',
-        overhead: 30000,
-        overheadBasis: 'Plant power utility',
-        wastage: 15000,
-        wastageBasis: '4.0% material loss allowance',
-        priceRiskBuffer: 15000,
-        priceRiskBufferBasis: 'Supplier lead time variance',
-        otherCosts: 0,
-        otherCostsBasis: 'Standard packing',
-        totalCost: 480000
-      },
-      quotedAmount: 568000,
-      expectedProfit: 88000,
-      marginPercent: 15.5,
-      aiRecommendation: {
-        suggestedPrice: 568000,
-        suggestedMargin: 15.5,
-        costAssumptions: 'Price adjusted to ₹5,68,000 ensuring 15.5% gross margin.',
-        wastageAssumptions: '4.0% wastage retained.',
-        volatilityConsiderations: 'Protected against raw greige market spike.',
-        deliveryFeasibility: 'Weaving paced to complete by 06 Nov.',
-        financialRisks: 'Fully compliant with company policy (15.5% ≥ 15.0%).',
-        confidenceScore: 94.0
-      },
-      negotiations: [],
-      history: [
-        { id: 'hist_1008_1', timestamp: '29 Oct 2026, 10:15 AM', actor: 'Quotation Agent v2.4', action: 'REVISED_DRAFT_SUBMITTED', version: 'v2.0', comments: 'Recalibrated selling price to ₹5,68,000 to meet 15% threshold policy.' }
-      ]
-    },
-
-    // ---------------------------------------------------------------------
-    // CLIENT CL-003 (Style World) · ORDER LP-903
-    // ---------------------------------------------------------------------
-    {
-      id: 'QT-1003',
-      clientId: 'CL-003',
-      clientName: 'Style World',
-      orderId: 'LP-903',
-      orderTitle: 'Printed Bedsheet Sets (3,500 sets)',
-      quotationType: 'new',
-      typeLabel: 'Commercial Proposal: Satin Weave 210 GSM',
-      version: 'v1.0',
-      status: 'client_accepted',
-      createdDate: '27 Oct 2026, 02:40 PM',
-      expiryDate: '10 Nov 2026',
-      deadlineDate: '12 Nov 2026',
-      deliveryDays: 14,
-      specs: {
-        fabricType: '100% Combed Compact Cotton',
-        yarnCount: '60s Combed Compact',
-        gsm: 210,
-        weave: 'Satin Weave',
-        finishing: 'Peach Soft Brush Finish',
-        designCount: 2
-      },
-      totalQuantity: 3500,
-      quantityUnit: 'sets',
-      products: [
-        { id: 'LP-903-A', name: 'King Size Bedsheet Set', designCode: 'BS-K-01', category: 'Bedding', quantity: 2000, unit: 'sets', specs: { yarnCount: '60s Combed', gsm: 210, weave: 'Satin', finishing: 'Peach Soft' }, unitPrice: 90.0, totalPrice: 180000 },
-        { id: 'LP-903-B', name: 'Queen Size Bedsheet Set', designCode: 'BS-Q-02', category: 'Bedding', quantity: 1500, unit: 'sets', specs: { yarnCount: '60s Combed', gsm: 210, weave: 'Satin', finishing: 'Peach Soft' }, unitPrice: 86.67, totalPrice: 130000 }
-      ],
-      costBreakdown: {
-        fabricYarn: 155000,
-        fabricYarnBasis: '60s Combed compact cotton yarn, 750 kg',
-        dyeingProcessing: 38000,
-        dyeingProcessingBasis: 'Rotary screen pigment printing',
-        labour: 24000,
-        labourBasis: 'Wide-width rapier loom weaving',
-        overhead: 14000,
-        overheadBasis: 'Wide-width loom floor charges',
-        wastage: 7000,
-        wastageBasis: '3.6% scrap allowance',
-        priceRiskBuffer: 7000,
-        priceRiskBufferBasis: 'Volume purchase hedge on premium yarn',
-        otherCosts: 0,
-        otherCostsBasis: 'Standard packaging included',
-        totalCost: 245000
-      },
-      quotedAmount: 310000,
-      expectedProfit: 65000,
-      marginPercent: 21.0,
-      aiRecommendation: {
-        suggestedPrice: 310000,
-        suggestedMargin: 21.0,
-        costAssumptions: 'Rotary screen printing chemical costs factored with volume rebate.',
-        wastageAssumptions: '3.6% fabric waste based on wide width cutting.',
-        volatilityConsiderations: 'Compact yarn price stable; inventory reserved.',
-        deliveryFeasibility: 'Comfortable 12 Nov deadline.',
-        financialRisks: 'Minimal risk; client accepted terms.',
-        confidenceScore: 96.5
-      },
-      negotiations: [],
-      history: [
-        { id: 'hist_1003_1', timestamp: '27 Oct 2026, 02:40 PM', actor: 'Quotation Agent v2.4', action: 'DRAFT_CREATED', version: 'v1.0', comments: 'Initial proposal created.' },
-        { id: 'hist_1003_2', timestamp: '29 Oct 2026, 04:30 PM', actor: 'John Doe (Managing Director)', action: 'APPROVED_AND_SENT', version: 'v1.0', comments: 'Approved with 21.0% margin. Sent to client portal.' },
-        { id: 'hist_1003_3', timestamp: '30 Oct 2026, 10:15 AM', actor: 'Client: Style World', action: 'CLIENT_ACCEPTED', version: 'v1.0', comments: 'Client accepted commercial terms via portal.' }
-      ],
-      approvedBy: 'John Doe (Managing Director)',
-      approvedAt: '29 Oct 2026, 04:30 PM',
-      dispatchedAt: '29 Oct 2026, 04:35 PM'
-    },
-    {
-      id: 'QT-1009',
-      clientId: 'CL-003',
-      clientName: 'Style World',
-      orderId: 'LP-903',
-      orderTitle: 'Printed Bedsheet Sets (3,500 sets)',
-      quotationType: 'alternative',
-      typeLabel: 'Alternative: 300TC Crisp Percale Weave',
-      linkedQuotationId: 'QT-1003',
-      version: 'v1.0',
-      status: 'approved',
-      createdDate: '28 Oct 2026, 09:00 AM',
-      expiryDate: '12 Nov 2026',
-      deadlineDate: '14 Nov 2026',
-      deliveryDays: 16,
-      specs: {
-        fabricType: '100% Organic Percale Cotton',
-        yarnCount: '80s Organic Combed',
-        gsm: 230,
-        weave: '300TC Crisp Percale Weave',
-        finishing: 'Zero-Formaldehyde Crisp Finish',
-        designCount: 2
-      },
-      totalQuantity: 3500,
-      quantityUnit: 'sets',
-      products: [
-        { id: 'LP-903-ALT1', name: 'Percale King Size Set', designCode: 'PKS-01', category: 'Bedding', quantity: 2000, unit: 'sets', specs: { yarnCount: '80s Organic', gsm: 230, weave: 'Percale', finishing: 'Crisp' }, unitPrice: 98.0, totalPrice: 196000 },
-        { id: 'LP-903-ALT2', name: 'Percale Queen Size Set', designCode: 'PQS-02', category: 'Bedding', quantity: 1500, unit: 'sets', specs: { yarnCount: '80s Organic', gsm: 230, weave: 'Percale', finishing: 'Crisp' }, unitPrice: 96.0, totalPrice: 144000 }
-      ],
-      costBreakdown: {
-        fabricYarn: 168000,
-        fabricYarnBasis: '80s Organic Combed compact yarn',
-        dyeingProcessing: 42000,
-        dyeingProcessingBasis: 'Eco-certified reactive dyeing',
-        labour: 26000,
-        labourBasis: 'Precision hemming',
-        overhead: 15000,
-        overheadBasis: 'Organic certification line overhead',
-        wastage: 6000,
-        wastageBasis: '2.5% cut waste',
-        priceRiskBuffer: 6500,
-        priceRiskBufferBasis: 'Organic cotton stock buffer',
-        otherCosts: 0,
-        otherCostsBasis: 'None',
-        totalCost: 263500
-      },
-      quotedAmount: 340000,
-      expectedProfit: 76500,
-      marginPercent: 22.5,
-      aiRecommendation: {
-        suggestedPrice: 340000,
-        suggestedMargin: 22.5,
-        costAssumptions: 'High density 300TC percale package.',
-        wastageAssumptions: 'Low wastage.',
-        volatilityConsiderations: 'Organic yarn booked.',
-        deliveryFeasibility: '14 Nov achievable.',
-        financialRisks: 'Exceptional 22.5% margin.',
-        confidenceScore: 95.0
-      },
-      negotiations: [],
-      history: [
-        { id: 'hist_1009_1', timestamp: '28 Oct 2026, 09:00 AM', actor: 'John Doe (Managing Director)', action: 'APPROVED', version: 'v1.0', comments: 'Approved as alternative organic percale option.' }
-      ],
-      approvedBy: 'John Doe (Managing Director)',
-      approvedAt: '28 Oct 2026, 09:30 AM'
-    },
-
-    // ---------------------------------------------------------------------
-    // CLIENT CL-004 (Home Living) · ORDER LP-904
-    // ---------------------------------------------------------------------
-    {
-      id: 'QT-1004',
-      clientId: 'CL-004',
-      clientName: 'Home Living',
-      orderId: 'LP-904',
-      orderTitle: 'Living Room Curtains (1,200 pairs)',
-      quotationType: 'new',
-      typeLabel: 'Commercial Proposal: Jacquard & Sheer',
-      version: 'v1.0',
-      status: 'pending_admin_approval',
-      createdDate: '29 Oct 2026, 03:20 PM',
-      expiryDate: '12 Nov 2026',
-      deadlineDate: '20 Nov 2026',
-      deliveryDays: 21,
-      specs: {
-        fabricType: 'Poly-Cotton Jacquard & Voile',
-        yarnCount: '20s/30s Poly-Cotton',
-        gsm: 260,
-        weave: 'Jacquard Damask & Plain',
-        finishing: 'Flame Retardant Chemical Finish',
-        designCount: 2
-      },
-      totalQuantity: 1200,
-      quantityUnit: 'pairs',
-      products: [
-        { id: 'LP-904-A', name: 'Jacquard Drapes (Gold Damask)', designCode: 'JD-GD-01', category: 'Curtains', quantity: 600, unit: 'pairs', specs: { yarnCount: '20s Poly-Cotton', gsm: 260, weave: 'Jacquard', finishing: 'Flame Retardant' }, unitPrice: 120.83, totalPrice: 72500 },
-        { id: 'LP-904-B', name: 'Sheer Voile Panels', designCode: 'SVP-02', category: 'Curtains', quantity: 600, unit: 'pairs', specs: { yarnCount: '30s Poly-Cotton', gsm: 140, weave: 'Plain', finishing: 'Soft Finish' }, unitPrice: 120.83, totalPrice: 72500 }
-      ],
-      costBreakdown: {
-        fabricYarn: 72000,
-        fabricYarnBasis: '20s/30s Poly-Cotton blend, 580 kg',
-        dyeingProcessing: 18000,
-        dyeingProcessingBasis: 'Flame retardant formulation & dyeing',
-        labour: 12000,
-        labourBasis: 'Electronic Jacquard weaving & eyelet stitching',
-        overhead: 7000,
-        overheadBasis: 'Jacquard punch card programming & power',
-        wastage: 3000,
-        wastageBasis: '3.3% pattern matching scrap allowance',
-        priceRiskBuffer: 3000,
-        priceRiskBufferBasis: 'Polyester raw material index buffer',
-        otherCosts: 0,
-        otherCostsBasis: 'None',
-        totalCost: 115000
-      },
-      quotedAmount: 145000,
-      expectedProfit: 30000,
-      marginPercent: 20.7,
-      aiRecommendation: {
-        suggestedPrice: 145000,
-        suggestedMargin: 20.7,
-        costAssumptions: 'Jacquard card design setup amortized across run.',
-        wastageAssumptions: '3.3% cut waste due to pattern repeat.',
-        volatilityConsiderations: 'Flame retardant chemical in stock.',
-        deliveryFeasibility: 'Shed 3 has immediate open slot starting 01 Nov.',
-        financialRisks: 'Low risk; healthy 20.7% margin.',
-        confidenceScore: 92.1
-      },
-      negotiations: [],
-      history: [
-        { id: 'hist_1004_1', timestamp: '29 Oct 2026, 03:20 PM', actor: 'Quotation Agent v2.4', action: 'DRAFT_CREATED', version: 'v1.0', comments: 'Initial draft prepared with FR chemical certification fee included.' }
-      ]
-    },
-
-    // ---------------------------------------------------------------------
-    // CLIENT CL-005 (StyleMart) · ORDER TX-1025
-    // ---------------------------------------------------------------------
-    {
-      id: 'QT-1005',
-      clientId: 'CL-005',
-      clientName: 'StyleMart',
-      orderId: 'TX-1025',
-      orderTitle: 'Screen Printed Cotton Yardage (3,000 m)',
-      quotationType: 'new',
-      typeLabel: 'Initial Proposal (Discount Cap Enforced)',
-      version: 'v1.0',
-      status: 'rejected',
-      createdDate: '26 Oct 2026, 10:00 AM',
-      expiryDate: '09 Nov 2026',
-      deadlineDate: '18 Nov 2026',
-      deliveryDays: 20,
-      specs: {
-        fabricType: 'Screen Printed Cotton',
-        yarnCount: '30s Combed',
-        gsm: 160,
-        weave: 'Plain Weave',
-        finishing: 'Screen Printed Pigment',
-        designCount: 1
-      },
-      totalQuantity: 3000,
-      quantityUnit: 'metres',
-      products: [
-        { id: 'TX-1025-A', name: 'Screen Printed Cotton Yardage', designCode: 'SPC-01', category: 'Fabrics', quantity: 3000, unit: 'metres', specs: { yarnCount: '30s Combed', gsm: 160, weave: 'Plain', finishing: 'Screen Printed' }, unitPrice: 65.0, totalPrice: 195000 }
-      ],
-      costBreakdown: {
-        fabricYarn: 112000,
-        fabricYarnBasis: '30s Combed greige fabric procurement @ ₹120/m base',
-        dyeingProcessing: 28000,
-        dyeingProcessingBasis: 'Screen pigment printing with 3-colour separation',
-        labour: 18000,
-        labourBasis: 'Airjet weaving & print technician charges',
-        overhead: 10000,
-        overheadBasis: 'Stenter curing heat & fixed plant utilities',
-        wastage: 3500,
-        wastageBasis: '2.5% printing edge trimming loss',
-        priceRiskBuffer: 3500,
-        priceRiskBufferBasis: 'Pigment chemical surcharge buffer',
-        otherCosts: 0,
-        otherCostsBasis: 'Roll packing',
-        totalCost: 175000
-      },
-      quotedAmount: 195000,
-      expectedProfit: 20000,
-      marginPercent: 10.3,
-      aiRecommendation: {
-        suggestedPrice: 208000,
-        suggestedMargin: 15.8,
-        costAssumptions: 'Client demanded 5% discount below feasible cost.',
-        wastageAssumptions: '2.5% edge waste.',
-        volatilityConsiderations: 'Screen chemicals up +8.4%; leaves zero cushion.',
-        deliveryFeasibility: 'Shed capacity available but unviable at ₹1,95,000.',
-        financialRisks: '10.3% margin violates corporate 15% minimum policy.',
-        confidenceScore: 84.0
-      },
-      negotiations: [],
-      history: [
-        { id: 'hist_1005_1', timestamp: '26 Oct 2026, 10:00 AM', actor: 'Quotation Agent v2.4', action: 'DRAFT_CREATED', version: 'v1.0', comments: 'Draft created matching client cap.' },
-        { id: 'hist_1005_2', timestamp: '28 Oct 2026, 05:00 PM', actor: 'John Doe (Managing Director)', action: 'REJECTED', version: 'v1.0', comments: 'Rejected by MD. 10.3% margin fails company 15% threshold.' }
-      ],
-      rejectedBy: 'John Doe (Managing Director)',
-      rejectedAt: '28 Oct 2026, 05:00 PM',
-      rejectionReason: 'Client requested 5% discount which drops gross margin to 10.3%, below our 15% factory threshold.'
-    },
-    {
-      id: 'QT-1011',
-      clientId: 'CL-005',
-      clientName: 'StyleMart',
-      orderId: 'TX-1025',
-      orderTitle: 'Screen Printed Cotton Yardage (5,000 m Bulk)',
-      quotationType: 'revised',
-      typeLabel: 'Bulk Batch Revision (5,000 m @ ₹65/m)',
-      linkedQuotationId: 'QT-1005',
-      version: 'v2.0',
-      status: 'pending_admin_approval',
-      createdDate: '29 Oct 2026, 03:00 PM',
-      expiryDate: '12 Nov 2026',
-      deadlineDate: '22 Nov 2026',
-      deliveryDays: 24,
-      specs: {
-        fabricType: 'Screen Printed Cotton',
-        yarnCount: '30s Combed',
-        gsm: 160,
-        weave: 'Plain Weave',
-        finishing: 'Screen Printed Pigment',
-        designCount: 1
-      },
-      totalQuantity: 5000,
-      quantityUnit: 'metres',
-      products: [
-        { id: 'TX-1025-B', name: 'Screen Printed Cotton Yardage (Bulk)', designCode: 'SPC-01-BULK', category: 'Fabrics', quantity: 5000, unit: 'metres', specs: { yarnCount: '30s Combed', gsm: 160, weave: 'Plain', finishing: 'Screen Printed' }, unitPrice: 65.0, totalPrice: 325000 }
-      ],
-      costBreakdown: {
-        fabricYarn: 180000,
-        fabricYarnBasis: 'Bulk greige fabric discount secured at ₹112/m',
-        dyeingProcessing: 42000,
-        dyeingProcessingBasis: 'Long-run continuous pigment printing economy of scale',
-        labour: 26000,
-        labourBasis: 'Continuous loom run labour',
-        overhead: 14000,
-        overheadBasis: 'Fixed stenter setup amortized over 5,000 m',
-        wastage: 6500,
-        wastageBasis: '2.0% printing waste',
-        priceRiskBuffer: 6500,
-        priceRiskBufferBasis: 'Chemical index buffer',
-        otherCosts: 0,
-        otherCostsBasis: 'Roll packing',
-        totalCost: 275000
-      },
-      quotedAmount: 325000,
-      expectedProfit: 50000,
-      marginPercent: 15.4,
-      aiRecommendation: {
-        suggestedPrice: 325000,
-        suggestedMargin: 15.4,
-        costAssumptions: 'Scaled volume to 5,000 metres enables honoring client ₹65/m target while reaching 15.4% margin.',
-        wastageAssumptions: '2.0% waste.',
-        volatilityConsiderations: 'Backed by greige supplier volume contract.',
-        deliveryFeasibility: 'Extended timeline to 22 Nov allows continuous run.',
-        financialRisks: 'Margin meets policy requirement (15.4% ≥ 15.0%).',
-        confidenceScore: 93.8
-      },
-      negotiations: [],
-      history: [
-        { id: 'hist_1011_1', timestamp: '29 Oct 2026, 03:00 PM', actor: 'Quotation Agent v2.4', action: 'BULK_COUNTER_PROPOSAL_CREATED', version: 'v2.0', comments: 'Prepared bulk batch counter-proposal at 5,000 m to satisfy 15.4% margin.' }
-      ]
-    },
-
-    // ---------------------------------------------------------------------
-    // CLIENT CL-006 (HomeNest) · ORDER TX-1026
-    // ---------------------------------------------------------------------
-    {
-      id: 'QT-1006',
-      clientId: 'CL-006',
-      clientName: 'HomeNest',
-      orderId: 'TX-1026',
-      orderTitle: 'Tailored Linen Trousers (2,000 pcs)',
-      quotationType: 'new',
-      typeLabel: 'Final Commercial Agreement (Signed Contract)',
-      version: 'v1.0',
-      status: 'finalized',
-      createdDate: '25 Oct 2026, 04:00 PM',
-      expiryDate: '08 Nov 2026',
-      deadlineDate: '20 Nov 2026',
-      deliveryDays: 26,
-      specs: {
-        fabricType: 'Linen / Cotton Blend',
-        yarnCount: '25s Linen Blend',
-        gsm: 220,
-        weave: 'Twill Weave',
-        finishing: 'Pre-Shrunk Bio-Enzyme Wash',
-        designCount: 1
-      },
-      totalQuantity: 2000,
-      quantityUnit: 'pieces',
-      products: [
-        { id: 'TX-1026-A', name: 'Tailored Linen Trousers', designCode: 'TLT-01', category: 'Apparel', quantity: 2000, unit: 'pieces', specs: { yarnCount: '25s Linen Blend', gsm: 220, weave: 'Twill', finishing: 'Pre-Shrunk' }, unitPrice: 195.0, totalPrice: 390000 }
-      ],
-      costBreakdown: {
-        fabricYarn: 205000,
-        fabricYarnBasis: '25s Linen/Cotton blend yarn, 880 kg imported flax',
-        dyeingProcessing: 48000,
-        dyeingProcessingBasis: 'Bio-enzyme garment washing & tumble drying',
-        labour: 32000,
-        labourBasis: 'Precision trouser stitching, waistband & pocketing',
-        overhead: 18000,
-        overheadBasis: 'Stitching unit power and quality assurance line',
-        wastage: 6000,
-        wastageBasis: '2.4% pattern layout and cutting waste',
-        priceRiskBuffer: 6000,
-        priceRiskBufferBasis: 'Flax customs clearance rate buffer',
-        otherCosts: 0,
-        otherCostsBasis: 'Individual polybag garment packaging',
-        totalCost: 315000
-      },
-      quotedAmount: 390000,
-      expectedProfit: 75000,
-      marginPercent: 19.2,
-      aiRecommendation: {
-        suggestedPrice: 390000,
-        suggestedMargin: 19.2,
-        costAssumptions: 'Imported flax yarn batch verified at fixed currency rate.',
-        wastageAssumptions: '2.4% automated Gerber cutter waste.',
-        volatilityConsiderations: 'Raw inventory locked in port warehouse.',
-        deliveryFeasibility: 'Assembly lines ready.',
-        financialRisks: 'Contract finalized; client deposit confirmed.',
-        confidenceScore: 97.2
-      },
-      negotiations: [],
-      history: [
-        { id: 'hist_1006_1', timestamp: '25 Oct 2026, 04:00 PM', actor: 'Quotation Agent v2.4', action: 'DRAFT_CREATED', version: 'v1.0', comments: 'Initial automated draft prepared.' },
-        { id: 'hist_1006_2', timestamp: '28 Oct 2026, 02:15 PM', actor: 'John Doe (Managing Director)', action: 'APPROVED_AND_SENT', version: 'v1.0', comments: 'Approved with 19.2% profit margin. Dispatched to HomeNest portal.' },
-        { id: 'hist_1006_3', timestamp: '28 Oct 2026, 03:00 PM', actor: 'Client: HomeNest', action: 'CLIENT_ACCEPTED', version: 'v1.0', comments: 'Client signed and accepted proposal via digital agreement.' },
-        { id: 'hist_1006_4', timestamp: '28 Oct 2026, 03:15 PM', actor: 'John Doe (Managing Director)', action: 'FINALIZED', version: 'v1.0', comments: 'Commercial agreement finalized. Order TX-1026 entered active manufacturing.' }
-      ],
-      approvedBy: 'John Doe (Managing Director)',
-      approvedAt: '28 Oct 2026, 02:15 PM',
-      dispatchedAt: '28 Oct 2026, 02:30 PM',
-      finalizedAt: '28 Oct 2026, 03:15 PM'
+      }
+      return Array.from(map.values());
     }
-  ]);
+    return FALLBACK_CLIENTS;
+  }, [ordersResponse]);
+
+  // =========================================================================
+  // =========================================================================
+  // LIVE AUDITED QUOTATIONS MAPPING & DATASET
+  // =========================================================================
+  const mapBackendOrderToQuotationRecord = (order: any): QuotationRecord => {
+    const quote = order.quotation || {};
+    const orderId = String(order._id || order.id || "LP-901");
+    const orderNum = order.orderNumber || (orderId.length > 8 ? `LP-${orderId.slice(-4).toUpperCase()}` : orderId);
+    const clientName = typeof order.clientId === "object" && order.clientId?.name ? order.clientId.name : order.clientName || "Fashion House";
+    const clientId = typeof order.clientId === "object" && order.clientId?._id ? String(order.clientId._id) : String(order.clientId || "CL-001");
+
+    const totalPaise = quote.totalPricePaise || quote.totalPaise || (quote.totalPrice ? Math.round(quote.totalPrice * 100) : 0);
+    const quotedAmount = totalPaise > 0 ? Math.round(totalPaise / 100) : (order.quantity ? Math.round(order.quantity * 250) : 250000);
+
+    const fabricYarn = Math.round((quote.costBreakdown?.materialsPaise || quote.materialCostPaise || quotedAmount * 0.45 * 100) / 100);
+    const dyeingProcessing = Math.round((quote.costBreakdown?.laborPaise || quote.processingCostPaise || quotedAmount * 0.2 * 100) / 100);
+    const labour = Math.round(dyeingProcessing * 0.5);
+    const overhead = Math.round((quote.costBreakdown?.overheadPaise || quote.overheadCostPaise || quotedAmount * 0.1 * 100) / 100);
+    const wastage = Math.round((quote.costBreakdown?.wastagePaise || quotedAmount * 0.04 * 100) / 100);
+    const priceRiskBuffer = Math.round((quote.costBreakdown?.riskBufferPaise || quotedAmount * 0.03 * 100) / 100);
+    const totalCost = fabricYarn + dyeingProcessing + labour + overhead + wastage + priceRiskBuffer;
+    const marginPercent = quote.marginPct ?? quote.marginPercent ?? 18;
+    const expectedProfit = quotedAmount - totalCost;
+
+    let status: QuotationStatus = "pending_admin_approval";
+    const qStatus = quote.status || "";
+    const oStatus = order.status || "";
+    if (qStatus === "approved" || oStatus === "quotation_approved") {
+      status = "approved";
+    } else if (qStatus === "sent" || oStatus === "quotation_sent") {
+      status = "awaiting_client_response";
+    } else if (qStatus === "accepted" || oStatus === "accepted_by_client" || oStatus === "advance_pending" || oStatus === "in_production") {
+      status = "client_accepted";
+    } else if (qStatus === "declined" || oStatus === "declined_by_client") {
+      status = "client_declined";
+    } else if (qStatus === "rejected" || oStatus === "rejected_by_admin") {
+      status = "rejected";
+    } else if (qStatus === "draft" || oStatus === "quotation_drafting") {
+      status = "draft";
+    }
+
+    const quoteId = quote._id ? String(quote._id) : `QT-${orderNum.replace(/\D/g, "") || "1001"}`;
+
+    return {
+      id: quoteId,
+      clientId,
+      clientName,
+      orderId,
+      orderTitle: order.productName || order.title || `Order ${orderNum}`,
+      quotationType: quote.version > 1 ? "revised" : "new",
+      typeLabel: quote.version > 1 ? `Revision v${quote.version}` : "Original Proposal",
+      version: `v${quote.version || 1}.0`,
+      status,
+      createdDate: order.createdAt ? new Date(order.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "Today",
+      expiryDate: quote.validUntil ? new Date(quote.validUntil).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "In 14 Days",
+      deadlineDate: order.targetDeliveryDate ? new Date(order.targetDeliveryDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "30 Nov 2026",
+      deliveryDays: order.feasibility?.productionDays || 21,
+      specs: {
+        fabricType: order.spec?.fabric || order.spec?.fabricType || "Cotton Single Jersey",
+        yarnCount: order.spec?.yarnCount || "40s Ne Combed",
+        gsm: Number(order.spec?.gsm) || 180,
+        weave: order.spec?.weave || "Single Jersey",
+        finishing: order.spec?.finishing || "Bio-Washed Finish",
+        designCount: 1,
+      },
+      totalQuantity: order.quantity || 1000,
+      quantityUnit: order.quantityUnit || "Meters",
+      products: [
+        {
+          id: `prod_${orderId}`,
+          name: order.productName || "Custom Manufactured Textile",
+          designCode: order.designCode || "TX-STD",
+          category: order.category || "Apparel & Fashion",
+          quantity: order.quantity || 1000,
+          unit: order.quantityUnit || "Meters",
+          specs: {
+            yarnCount: order.spec?.yarnCount || "40s Ne Combed",
+            gsm: Number(order.spec?.gsm) || 180,
+            weave: order.spec?.weave || "Single Jersey",
+            finishing: order.spec?.finishing || "Bio-Washed Finish",
+          },
+          unitPrice: Math.round(quotedAmount / (order.quantity || 1000)),
+          totalPrice: quotedAmount,
+        },
+      ],
+      costBreakdown: {
+        fabricYarn,
+        fabricYarnBasis: "Raw yarn and weaving stock rate",
+        dyeingProcessing,
+        dyeingProcessingBasis: "Dyeing, finishing & washing rate",
+        labour,
+        labourBasis: "Direct mill worker & loom operator labour",
+        overhead,
+        overheadBasis: "Electricity, loom depreciation & floor space",
+        wastage,
+        wastageBasis: "4% tolerance for edge trim & shrinkage",
+        priceRiskBuffer,
+        priceRiskBufferBasis: "Market volatility buffer (cotton yarn surge index)",
+        otherCosts: 0,
+        otherCostsBasis: "N/A",
+        totalCost,
+      },
+      quotedAmount,
+      expectedProfit,
+      marginPercent: +Number(marginPercent).toFixed(1),
+      aiRecommendation: {
+        suggestedPrice: quote.aiSuggested?.totalPricePaise ? Math.round(quote.aiSuggested.totalPricePaise / 100) : quotedAmount,
+        suggestedMargin: quote.aiSuggested?.marginPct || 18,
+        costAssumptions: "Based on active spot prices for 40s Ne yarn in Tirupur/Surat clusters.",
+        wastageAssumptions: "Calculated with 4% yarn allowance across knitting/dyeing stages.",
+        volatilityConsiderations: "Cotton market price surge buffer included at 3%.",
+        deliveryFeasibility: order.feasibility?.bottleneckProcess ? `Bottleneck: ${order.feasibility.bottleneckProcess}` : "Loom capacity fully feasible for required timeline.",
+        financialRisks: "Low default risk based on milestone prepayment requirement.",
+        confidenceScore: quote.aiSuggested?.confidence ? Math.round(quote.aiSuggested.confidence * 100) : 92,
+      },
+      negotiations: [],
+      history: quote.history || [
+        {
+          id: `hist_init_${orderId}`,
+          timestamp: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+          actor: "LoomPilot AI Agent",
+          action: "DRAFT_GENERATED",
+          version: `v${quote.version || 1}.0`,
+          comments: quote.aiSuggested?.rationale || "Automated quotation draft synthesized from BOM costing model.",
+        },
+      ],
+      approvedBy: quote.approvedBy,
+      approvedAt: quote.approvedAt,
+      dispatchedAt: quote.sentAt,
+      finalizedAt: quote.acceptedAt,
+      rejectedBy: quote.rejectedBy,
+      rejectedAt: quote.rejectedAt,
+      rejectionReason: quote.rejectionReason,
+      clientPdfFileId: quote.clientPdfFileId,
+    };
+  };
+
+  const [quotations, setQuotations] = useState<QuotationRecord[]>([]);
 
   // Selected Client
   const selectedClient = clients.find((c) => c.id === selectedClientId) || clients[0];
@@ -1235,32 +538,9 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
   }, [activeQuotationId]);
 
   useEffect(() => {
-    if (ordersResponse && Array.isArray(ordersResponse.data)) {
-      setQuotations((prev) =>
-        prev.map((q) => {
-          const liveOrder = ordersResponse.data.find(
-            (o: any) => String(o._id || o.id) === q.orderId || o.orderNumber === q.orderId
-          );
-          if (liveOrder) {
-            const quoteStatus = liveOrder.quotation?.status;
-            const orderStatus = liveOrder.status;
-            if (quoteStatus === 'approved' || orderStatus === 'quotation_approved') {
-              if (q.status !== 'approved' && q.status !== 'client_accepted' && q.status !== 'finalized') {
-                return { ...q, status: 'approved' };
-              }
-            } else if (quoteStatus === 'rejected' || orderStatus === 'rejected_by_admin') {
-              if (q.status !== 'rejected') {
-                return { ...q, status: 'rejected' };
-              }
-            } else if (quoteStatus === 'sent' || orderStatus === 'quotation_sent') {
-              if (q.status !== 'awaiting_client_response' && q.status !== 'client_accepted' && q.status !== 'finalized') {
-                return { ...q, status: 'awaiting_client_response' };
-              }
-            }
-          }
-          return q;
-        })
-      );
+    if (ordersResponse?.data && Array.isArray(ordersResponse.data) && ordersResponse.data.length > 0) {
+      const mapped = ordersResponse.data.map(mapBackendOrderToQuotationRecord);
+      setQuotations(mapped);
     }
   }, [ordersResponse]);
 
@@ -1327,7 +607,12 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
   // =========================================================================
   // WORKFLOW ACTION HANDLERS
   // =========================================================================
-  const handleAdminApprove = async (quoteId: string) => {
+  const handleAdminApprove = async (
+    quoteId: string,
+    customMargin?: number,
+    customValidUntil?: string,
+    customMilestones?: Array<{ milestone: string; percent: number; trigger: 'advance' | 'stage' | 'delivery'; stage?: string }>
+  ) => {
     if (isApprovingQuotation) return;
     setApprovalError(null);
 
@@ -1335,6 +620,7 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
     if (!target) return;
 
     const fin = calculateQuotationFinancials(target);
+    const effectiveMargin = customMargin !== undefined ? customMargin : fin.marginPercent;
     const timestamp = new Date().toLocaleString('en-GB', {
       day: '2-digit',
       month: 'short',
@@ -1358,14 +644,20 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
 
     try {
       if (onApproveQuotation) {
-        await onApproveQuotation(target.orderId, fin.marginPercent);
+        await onApproveQuotation(target.orderId, effectiveMargin);
       } else if (isLiveBackendOrder) {
         await approveQuotationMutation({
           id: orderIdToApprove,
           body: {
             action: 'approve',
-            editedMarginPercent: fin.marginPercent,
-            notes: `Admin approved quotation with ${fin.marginPercent}% margin.`,
+            editedMarginPercent: effectiveMargin,
+            editedDeliveryDate: customValidUntil || target.expiryDate,
+            paymentSchedule: customMilestones || [
+              { milestone: 'Advance Prepayment', percent: 30, trigger: 'advance' },
+              { milestone: 'Weaving Stage Handover', percent: 40, trigger: 'stage', stage: 'loom_weaving' },
+              { milestone: 'Final Inspection & Delivery', percent: 30, trigger: 'delivery' },
+            ],
+            notes: `Admin approved quotation with ${effectiveMargin}% margin.`,
           },
         }).unwrap();
         refetchOrders();
@@ -1393,7 +685,7 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
                   actor: 'John Doe (Managing Director)',
                   action: 'APPROVED_BY_ADMIN',
                   version: q.version,
-                  comments: `Admin approved with ${fin.marginPercent}% margin.`
+                  comments: `Admin approved with ${effectiveMargin}% margin.`
                 }
               ]
             };
@@ -2671,6 +1963,52 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
                     <AlertCircle size={14} style={{ flexShrink: 0 }} />
                     <span>{approvalError}</span>
                   </div>
+                )}
+
+                {/* Client PDF Download Action */}
+                {activeQuotation.clientPdfFileId ? (
+                  <a
+                    href={`/api/v1/files/${activeQuotation.clientPdfFileId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download={`Quotation_${activeQuotation.id}.pdf`}
+                    style={{
+                      background: '#1D2628',
+                      color: '#ffffff',
+                      textDecoration: 'none',
+                      borderRadius: 9999,
+                      padding: '6px 14px',
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <Upload size={12} style={{ transform: 'rotate(180deg)' }} />
+                    Download Client PDF
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => showToast('PDF document will be generated once quotation is approved.')}
+                    style={{
+                      background: '#f8fafc',
+                      color: '#94a3b8',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 9999,
+                      padding: '6px 14px',
+                      fontSize: 10.5,
+                      fontWeight: 600,
+                      cursor: 'not-allowed',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
+                    <Upload size={12} style={{ transform: 'rotate(180deg)' }} />
+                    PDF Pending Approval
+                  </button>
                 )}
 
                 {activeQuotation.status !== 'approved' && activeQuotation.status !== 'client_accepted' && activeQuotation.status !== 'finalized' && (

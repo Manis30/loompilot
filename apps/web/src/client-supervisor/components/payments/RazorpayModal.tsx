@@ -57,7 +57,7 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({ invoiceNumber, onC
 
   // 30-second polling timeout controller
   useEffect(() => {
-    let timer: NodeJS.Timeout | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     if (paymentState === 'pending_confirmation' && !pollTimedOut) {
       timer = setTimeout(() => {
         setPollTimedOut(true);

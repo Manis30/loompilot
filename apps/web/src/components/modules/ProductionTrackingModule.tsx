@@ -242,7 +242,7 @@ export const mapOrderToProductionOrder = (ord: Order): ProductionOrderWithProduc
 
   const products: ProductProductionItem[] = (ord.items && ord.items.length > 0)
     ? ord.items.map((item, idx) => {
-        const itemQty = item.quantity || prodQty;
+        const itemQty = (item as any).quantity || (item as any).quantityPieces || prodQty;
         const itemComp = Math.round(itemQty * (progressPct / 100));
         return {
           id: `${ord.id}-${String.fromCharCode(65 + idx)}`,
@@ -1417,8 +1417,8 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
               setShiftForm((prev) => ({
                 ...prev,
                 orderId: currentOrder.id,
-                productId: currentProduct.id,
-                stageName: currentActiveStage.name
+                productId: currentProduct?.id || 'prod-1',
+                stageName: currentActiveStage?.name || 'Stage'
               }));
               setShowShiftUpdateModal(true);
             }}
@@ -1766,7 +1766,7 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
                     className="admin-btn-primary"
                     style={{ padding: '8px 16px', fontSize: 12, fontWeight: 600, color: '#18191B' }}
                   >
-                    <span>Inspect 6-Stage Timeline ({currentProduct.designCode})</span>
+                    <span>Inspect 6-Stage Timeline ({currentProduct?.designCode || ''})</span>
                     <ChevronRight size={14} />
                   </button>
                 </div>
@@ -1880,7 +1880,7 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
                     </h3>
                   </div>
                   <span style={{ fontSize: 11, color: '#64748b' }}>
-                    Stage: {currentActiveStage.name}
+                    Stage: {currentActiveStage?.name || ''}
                   </span>
                 </div>
 
@@ -1925,9 +1925,9 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
                     </strong>
                   </span>
                   <span>
-                    Rejected: <strong style={{ color: '#dc2626' }}>{currentActiveStage.rejectedQuantity} pcs</strong>
+                    Rejected: <strong style={{ color: '#dc2626' }}>{currentActiveStage?.rejectedQuantity ?? 0} pcs</strong>
                   </span>
-                  <span>Machine: {currentActiveStage.assignedMachine.split(' ')[0]}</span>
+                  <span>Machine: {currentActiveStage?.assignedMachine?.split(' ')[0] || 'Machine'}</span>
                 </div>
               </div>
 
@@ -2015,10 +2015,10 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
             <div className="modal-header">
               <div>
                 <h2 className="modal-title" style={{ fontSize: 16, fontWeight: 800, color: '#0a0d10', margin: 0 }}>
-                  6-Stage Production Lifecycle &bull; {currentProduct.name} ({currentProduct.designCode})
+                  6-Stage Production Lifecycle &bull; {currentProduct?.name || 'Textile Item'} ({currentProduct?.designCode || ''})
                 </h2>
                 <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
-                  Order: <strong>{currentOrder.id}</strong> ({currentOrder.clientName}) &bull; Target: <strong>{currentProduct.quantity.toLocaleString()} pieces</strong>
+                  Order: <strong>{currentOrder.id}</strong> ({currentOrder.clientName}) &bull; Target: <strong>{(currentProduct?.quantity ?? 0).toLocaleString()} pieces</strong>
                 </div>
               </div>
               <button className="modal-close-btn" onClick={() => setShowTimelineModal(false)}>
@@ -2038,7 +2038,7 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
               borderRadius: 16,
               padding: '12px 14px'
             }}>
-              {currentProduct.stages.map((stg) => {
+              {(currentProduct?.stages || []).map((stg) => {
                 const isComplete = stg.status === 'completed';
                 const isInProg = stg.status === 'in_progress' || stg.status === 'delayed';
 
@@ -2078,7 +2078,7 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
 
             {/* 6 Stage Operational Cards */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {currentProduct.stages.map((stg) => {
+              {(currentProduct?.stages || []).map((stg) => {
                 const isComplete = stg.status === 'completed';
                 const isInProg = stg.status === 'in_progress' || stg.status === 'delayed';
 
@@ -2124,24 +2124,24 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
 
                         {isInProg && (() => {
                           const canonical = isDemo
-                            ? normalizeProductionStage(currentProduct.currentStage || currentActiveStage?.name, undefined, currentOrder.status)
-                            : normalizeProductionStage(currentBackendOrder?.currentPhase, undefined, currentBackendOrder?.status);
+                            ? normalizeProductionStage(currentProduct?.currentStage || currentActiveStage?.name, undefined, currentOrder.status as any)
+                            : normalizeProductionStage(currentBackendOrder?.currentPhase, undefined, currentBackendOrder?.status as any);
                           const isAdvanceDisabled =
                             isAdvancingStage ||
                             !canonical.isKnown ||
                             canonical.step === 0 ||
                             canonical.step >= 8 ||
                             currentOrder.status === 'completed' ||
-                            currentOrder.status === 'delivered';
+                            (currentOrder.status as any) === 'delivered';
 
                           return (
                             <button
-                              onClick={() => handleAdvanceStage(currentOrder.id, currentProduct.id, stg.stageNumber)}
+                              onClick={() => handleAdvanceStage(currentOrder.id, currentProduct?.id || 'prod-1', stg.stageNumber)}
                               disabled={isAdvanceDisabled}
                               title={
                                 !canonical.isKnown || canonical.step === 0
                                   ? 'Stage unavailable or unrecognized'
-                                  : canonical.step >= 8 || currentOrder.status === 'completed' || currentOrder.status === 'delivered'
+                                  : canonical.step >= 8 || currentOrder.status === 'completed' || (currentOrder.status as any) === 'delivered'
                                   ? 'Order is already delivered'
                                   : isAdvancingStage
                                   ? 'Advancing stage...'

@@ -45,7 +45,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (isMeSuccess && meData) {
       const profile = (meData as any)?.profile;
-      if (profile && ((meData as any)?.realm === 'client' || !meData.realm)) {
+      if (profile && ((meData as any)?.realm === 'client' || !(meData as any)?.realm)) {
         const restored: ClientProfile = {
           id: profile.id || profile._id || 'CLT-RESTORED',
           clientCode: `CLT-${(profile.id || profile._id || '').slice(-6).toUpperCase()}`,
