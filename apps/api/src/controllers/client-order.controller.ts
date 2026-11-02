@@ -152,4 +152,42 @@ export class ClientOrderController {
       next(err);
     }
   };
+
+  listNotifications = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const actor = req.actor!;
+      const clientId =
+        actor.realm === "client"
+          ? actor.clientId || actor.subjectId
+          : (req.query.clientId as string | undefined);
+      const pagination = parsePaginationQuery(req.query as any);
+      const result = await this.orderService.listClientNotifications(
+        actor.tenantId,
+        clientId,
+        {
+          unreadOnly: req.query.unreadOnly === "true",
+          kind: req.query.kind as string,
+        },
+        pagination
+      );
+      res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  markNotificationAsRead = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const actor = req.actor!;
+      const clientId = actor.clientId || actor.subjectId;
+      const result = await this.orderService.markClientNotificationAsRead(
+        actor.tenantId,
+        req.params.id as string,
+        clientId
+      );
+      res.json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  };
 }

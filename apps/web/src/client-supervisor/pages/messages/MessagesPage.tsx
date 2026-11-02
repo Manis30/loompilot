@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
+import { formatCurrency } from '../../utils/formatters';
 import {
   Send,
   Paperclip,
@@ -17,6 +18,11 @@ import {
   RefreshCw,
   Loader2,
 } from 'lucide-react';
+import {
+  useGetClientOrdersQuery,
+  useGetClientOrderMessagesQuery,
+  useSendClientOrderMessageMutation,
+} from '../../../store/api/ordersApi';
 import { ChatThread } from '../../types';
 
 const isDemo = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
@@ -35,12 +41,52 @@ export const MessagesPage: React.FC = () => {
     clearChatError,
   } = useApp();
 
+  const {
+    data: ordersResponse,
+    isLoading: isOrdersLoading,
+    isError: isOrdersError,
+    refetch: refetchOrders,
+  } = useGetClientOrdersQuery(undefined);
+
   const chats = useMemo<Record<string, ChatThread>>(() => {
     if (isDemo) {
       return localChats;
     }
+    const rawOrders = ordersResponse?.data || [];
+    if (Array.isArray(rawOrders) && rawOrders.length > 0) {
+      const map: Record<string, ChatThread> = {};
+      rawOrders.forEach((o: any) => {
+        const id = o.orderNumber || String(o._id || o.id).slice(-8).toUpperCase();
+        const unitPrice = o.quotation?.unitPricePaise
+          ? formatCurrency(o.quotation.unitPricePaise / 100) + ' / m'
+          : (o.unitPrice ? formatCurrency(o.unitPrice) + ' / m' : 'Awaiting Quote');
+        const total = o.quotation?.totalPaise
+          ? formatCurrency(o.quotation.totalPaise / 100)
+          : (o.totalValue ? formatCurrency(o.totalValue) : 'TBD');
+        const qty = o.quantity ? `${Number(o.quantity).toLocaleString()} metres` : 'Custom volume';
+        const delivery = o.deliveryDeadline
+          ? new Date(o.deliveryDeadline).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+          : 'In 4 weeks';
+
+        map[id] = {
+          orderId: id,
+          productName: o.productDescription || o.styleName || o.spec?.fabric || 'Custom Apparel Textile',
+          orderQuantity: qty,
+          quotedPrice: unitPrice,
+          totalQuote: total,
+          validity: o.quotation?.validUntil
+            ? `Valid until ${new Date(o.quotation.validUntil).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`
+            : 'Quote in review',
+          deliveryDate: delivery,
+          status: o.status === 'in_production' ? 'In Production' : o.status === 'submitted' ? 'Awaiting Quotation' : (o.status || 'Active Contract'),
+          unread: false,
+          messages: [],
+        };
+      });
+      return map;
+    }
     return {};
-  }, [localChats]);
+  }, [ordersResponse, localChats]);
 
   const orderIds = Object.keys(chats);
   const [selectedOrderId, setSelectedOrderId] = useState<string>(queryOrderId || '');
@@ -60,24 +106,66 @@ export const MessagesPage: React.FC = () => {
 
   const activeChat = selectedOrderId ? chats[selectedOrderId] : (orderIds.length > 0 ? chats[orderIds[0]] : undefined);
 
+  const rawOrders = ordersResponse?.data || [];
+  const selectedRawOrder = Array.isArray(rawOrders)
+    ? rawOrders.find((o: any) => o.orderNumber === selectedOrderId || String(o._id || o.id) === selectedOrderId)
+    : undefined;
+  const backendOrderId = selectedRawOrder
+    ? String(selectedRawOrder._id || selectedRawOrder.id)
+    : (selectedOrderId && selectedOrderId.length === 24 ? selectedOrderId : undefined);
+
+  const {
+    data: liveConvData,
+    isLoading: isLiveConvLoading,
+    refetch: refetchLiveConv,
+  } = useGetClientOrderMessagesQuery(backendOrderId || '', {
+    skip: !backendOrderId,
+    pollingInterval: 3000,
+  });
+
+  const [sendClientMsgMutation, { isLoading: isSendingClientMsg }] = useSendClientOrderMessageMutation();
+
+  const activeMessages = useMemo(() => {
+    if (liveConvData?.data?.messages && Array.isArray(liveConvData.data.messages) && liveConvData.data.messages.length > 0) {
+      return liveConvData.data.messages.map((m: any) => ({
+        id: m._id || m.id || `msg-${Math.random()}`,
+        sender: m.senderRole === 'client' ? 'user' : (m.senderRole === 'admin' ? 'admin' : 'ai'),
+        senderName: m.senderName || (m.senderRole === 'client' ? 'You' : (m.senderRole === 'admin' ? 'Senior Mill Merchandiser' : 'LoomPilot AI Concierge')),
+        timestamp: m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
+        text: m.text,
+        actionOffer: m.actionOffer,
+      }));
+    }
+    return activeChat?.messages || [];
+  }, [liveConvData, activeChat]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activeChat?.messages]);
+  }, [activeMessages]);
 
-  const handleSend = async (e?: React.FormEvent) => {
+  const handleSend = async (e?: React.FormEvent, customText?: string) => {
     if (e) e.preventDefault();
-    const text = inputText.trim();
-    if (!text || !selectedOrderId || isChatSending) return;
+    const text = (customText || inputText).trim();
+    if (!text || (!backendOrderId && !selectedOrderId) || isChatSending || isSendingClientMsg) return;
 
-    const ok = await sendChatMessage(selectedOrderId, text);
-    if (ok) {
-      setInputText('');
+    if (backendOrderId) {
+      try {
+        await sendClientMsgMutation({ orderId: backendOrderId, message: text }).unwrap();
+        setInputText('');
+        refetchLiveConv();
+      } catch (err: any) {
+        addToast(err?.data?.message || 'Error communicating with AI Concierge', 'error');
+      }
+    } else {
+      const ok = await sendChatMessage(selectedOrderId, text);
+      if (ok) {
+        setInputText('');
+      }
     }
   };
 
   const handleQuickPrompt = async (promptText: string) => {
-    if (!selectedOrderId || isChatSending) return;
-    await sendChatMessage(selectedOrderId, promptText);
+    await handleSend(undefined, promptText);
   };
 
   return (
@@ -97,30 +185,44 @@ export const MessagesPage: React.FC = () => {
         {/* Left Panel: Conversation Threads (4 cols) */}
         <div className="lg:col-span-4 border-r border-muted-border bg-ivory/40 flex flex-col">
           <div className="p-4 border-b border-muted-border bg-white flex items-center justify-between">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-charcoal">Active Conversations</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-charcoal">Active Order Threads</h3>
             <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-ivory text-muted border border-muted-border">
-              {orderIds.length} {orderIds.length === 1 ? 'Thread' : 'Threads'}
+              {orderIds.length} Threads
             </span>
           </div>
 
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            {!isDemo ? (
-              <div className="py-12 px-4 text-center text-xs text-muted space-y-2">
-                <AlertCircle size={32} className="mx-auto text-amber-500 opacity-80" />
-                <div className="font-bold text-charcoal">Messaging Service Unavailable</div>
-                <p className="text-[11px] text-muted leading-relaxed max-w-[220px] mx-auto">
-                  Persisted conversation endpoints (<code className="bg-ivory px-1 py-0.5 rounded font-mono text-[10px]">/api/v1/client/conversations</code>) are not deployed in this environment.
-                </p>
+            {!isDemo && isOrdersLoading && (
+              <div className="py-12 text-center text-xs text-muted flex items-center justify-center gap-2">
+                <Loader2 className="animate-spin text-vermilion" size={16} />
+                <span>Loading active order threads...</span>
               </div>
-            ) : orderIds.length === 0 ? (
+            )}
+
+            {!isDemo && isOrdersError && (
+              <div className="p-4 text-center text-xs text-danger space-y-2">
+                <div>Failed to load order threads from server.</div>
+                <button
+                  type="button"
+                  onClick={() => refetchOrders()}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-danger text-white text-[11px] font-bold"
+                >
+                  <RefreshCw size={11} />
+                  <span>Retry</span>
+                </button>
+              </div>
+            )}
+
+            {!isOrdersLoading && !isOrdersError && orderIds.length === 0 && (
               <div className="py-12 text-center text-xs text-muted space-y-1">
-                <div className="font-bold text-charcoal">No Conversations Found</div>
+                <div className="font-bold text-charcoal">No Order Threads Found</div>
                 <p className="text-[11px] text-muted max-w-[200px] mx-auto">
-                  Submit a manufacturing order or inquiry to initiate price and delivery negotiations.
+                  Submit a manufacturing order to initiate price and delivery negotiations.
                 </p>
               </div>
-            ) : (
-              orderIds.map((id) => {
+            )}
+
+            {orderIds.map((id) => {
               const chat = chats[id];
               const isSelected = id === selectedOrderId;
 
@@ -208,13 +310,14 @@ export const MessagesPage: React.FC = () => {
 
               {/* Service Status & Error Banners */}
               <div className="px-4 pt-4 space-y-2">
-                {!isDemo && (
-                  <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-charcoal text-xs flex items-start gap-2.5">
-                    <Bot size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                {/* Live Commercial Escalation Status */}
+                {liveConvData?.data?.escalation?.status === 'open' && (
+                  <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-charcoal text-xs flex items-start gap-2.5 animate-in fade-in">
+                    <ShieldCheck size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
                     <div>
-                      <span className="font-bold text-amber-900 block">AI Concierge & Negotiation Service Unavailable</span>
+                      <span className="font-bold text-amber-900 block">Commercial Escalation Under Review</span>
                       <span className="text-amber-800 text-[11px] leading-relaxed">
-                        Real-time AI agent conversation endpoints (/api/v1/client/conversations) are not deployed on the mill server. Automated quote negotiations and assistant responses are currently offline.
+                        Your concession request ({liveConvData.data.escalation.concessionRequested ? `${liveConvData.data.escalation.concessionRequested}%` : 'discount'} requested) has been escalated to Senior Mill Merchandisers. Managing Director John Doe is reviewing capacity.
                       </span>
                     </div>
                   </div>
@@ -230,7 +333,7 @@ export const MessagesPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => handleSend()}
-                        disabled={isChatSending}
+                        disabled={isChatSending || isSendingClientMsg}
                         className="px-2.5 py-1 rounded-lg bg-danger text-white text-[11px] font-bold hover:bg-danger/90 transition-colors inline-flex items-center gap-1"
                       >
                         <RefreshCw size={11} />
@@ -250,18 +353,16 @@ export const MessagesPage: React.FC = () => {
 
               {/* Message Stream */}
               <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-4 bg-ivory/20">
-                {activeChat.messages.length === 0 ? (
+                {activeMessages.length === 0 ? (
                   <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-2 text-muted min-h-[260px]">
                     <Bot size={36} className="opacity-40" />
                     <div className="text-xs font-bold text-charcoal">No Conversation History</div>
                     <p className="text-[11px] text-muted max-w-sm">
-                      {isDemo
-                        ? 'Type a message below to start negotiation with the AI Concierge.'
-                        : 'Persisted conversation history is unavailable. Live AI agent conversation endpoints are not deployed in this environment.'}
+                      Ask questions about yarn costing, production lead times, or negotiate volume discounts with the LoomPilot AI Concierge.
                     </p>
                   </div>
                 ) : (
-                  activeChat.messages.map((msg) => {
+                  activeMessages.map((msg: any) => {
                     const isUser = msg.sender === 'user';
                     const isAdmin = msg.sender === 'admin';
 
@@ -354,7 +455,7 @@ export const MessagesPage: React.FC = () => {
                 <span className="text-[11px] font-bold text-muted flex-shrink-0">Shortcuts:</span>
                 <button
                   type="button"
-                  disabled={!isDemo || isChatSending}
+                  disabled={isChatSending}
                   onClick={() => handleQuickPrompt('Can you reduce the quotation price given our bulk commitment?')}
                   className="px-3 py-1 rounded-full text-[11px] font-semibold bg-ivory border border-muted-border hover:border-vermilion hover:text-vermilion whitespace-nowrap transition-colors disabled:opacity-50"
                 >
@@ -362,7 +463,7 @@ export const MessagesPage: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  disabled={!isDemo || isChatSending}
+                  disabled={isChatSending}
                   onClick={() => handleQuickPrompt('Can we expedite the delivery deadline by 1 week?')}
                   className="px-3 py-1 rounded-full text-[11px] font-semibold bg-ivory border border-muted-border hover:border-vermilion hover:text-vermilion whitespace-nowrap transition-colors disabled:opacity-50"
                 >
@@ -370,7 +471,7 @@ export const MessagesPage: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  disabled={!isDemo || isChatSending}
+                  disabled={isChatSending}
                   onClick={() => handleQuickPrompt('Can you provide lab dip shade swatches before loom beaming?')}
                   className="px-3 py-1 rounded-full text-[11px] font-semibold bg-ivory border border-muted-border hover:border-vermilion hover:text-vermilion whitespace-nowrap transition-colors disabled:opacity-50"
                 >
@@ -382,9 +483,8 @@ export const MessagesPage: React.FC = () => {
               <form onSubmit={handleSend} className="p-3.5 border-t border-muted-border bg-white flex items-center gap-2">
                 <button
                   type="button"
-                  disabled={!isDemo}
                   onClick={() => addToast('Reference spec sheet or PO attached.', 'info')}
-                  className="p-2 rounded-xl text-muted hover:text-charcoal hover:bg-ivory transition-colors disabled:opacity-50"
+                  className="p-2 rounded-xl text-muted hover:text-charcoal hover:bg-ivory transition-colors"
                   title="Attach Spec Sheet"
                 >
                   <Paperclip size={18} />
@@ -393,22 +493,18 @@ export const MessagesPage: React.FC = () => {
                 <input
                   type="text"
                   value={inputText}
-                  disabled={!isDemo || isChatSending}
+                  disabled={isChatSending || isSendingClientMsg}
                   onChange={(e) => setInputText(e.target.value)}
-                  placeholder={
-                    isDemo
-                      ? "Type your negotiation inquiry, volume counter-offer, or spec question..."
-                      : "Client messaging service is offline..."
-                  }
+                  placeholder="Ask 'Why is the price high?', request a volume discount, or ask for shade swatches..."
                   className="flex-1 px-4 py-2 text-xs rounded-full border border-muted-border bg-ivory focus:bg-white focus:border-vermilion focus:outline-none disabled:opacity-60"
                 />
 
                 <button
                   type="submit"
-                  disabled={!isDemo || !inputText.trim() || isChatSending}
+                  disabled={!inputText.trim() || isChatSending || isSendingClientMsg}
                   className="px-4 py-2 rounded-full bg-vermilion hover:bg-vermilion-hover text-white text-xs font-bold shadow-vermilion disabled:opacity-50 transition-all inline-flex items-center gap-1.5 flex-shrink-0"
                 >
-                  {isChatSending ? (
+                  {isChatSending || isSendingClientMsg ? (
                     <>
                       <Loader2 size={13} className="animate-spin" />
                       <span>Sending...</span>
@@ -423,15 +519,10 @@ export const MessagesPage: React.FC = () => {
               </form>
             </>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-xs text-muted space-y-2">
-              <Bot size={40} className="text-muted opacity-40 mb-2" />
-              <div className="font-bold text-charcoal text-sm">
-                {!isDemo ? 'AI Concierge & Messaging Service Unavailable' : 'No Active Conversation Selected'}
-              </div>
-              <p className="text-[11px] text-muted max-w-sm leading-relaxed">
-                {!isDemo
-                  ? 'Real-time client messaging and quotation negotiation endpoints are not deployed on the mill server. No persisted conversation records exist.'
-                  : 'Select an order thread from the left panel to open the negotiation workspace.'}
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-xs text-muted space-y-1">
+              <div className="font-bold text-charcoal">No Active Thread Selected</div>
+              <p className="text-[11px] text-muted max-w-sm">
+                Select an order thread from the left panel to open the negotiation workspace.
               </p>
             </div>
           )}

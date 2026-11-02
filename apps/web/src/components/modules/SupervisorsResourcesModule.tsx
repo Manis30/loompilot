@@ -413,7 +413,7 @@ const INITIAL_AUDIT_LOGS: ResourceAuditEntry[] = [
 interface SupervisorsResourcesModuleProps {
   users?: AppUser[];
   orders?: Order[];
-  onAssignSupervisor?: (orderId: string, supervisorId: string, supervisorName: string) => Promise<void> | void;
+  onAssignSupervisor?: (orderId: string, supervisorId: string, supervisorName: string, overrideReason?: string) => Promise<void> | void;
   onApproveOvertime?: (shedName: string) => void;
 }
 
@@ -619,9 +619,27 @@ export const SupervisorsResourcesModule: React.FC<SupervisorsResourcesModuleProp
       return;
     }
 
+    // Advance Payment Gate (Doc §3.7)
+    const targetOrder = orders.find((o) => o.id === selectedOrderToAssign);
+    const isAdvanceReceived = Boolean(
+      targetOrder?.financials?.advanceReceived ||
+      (targetOrder?.financials?.advanceReceivedPaise && targetOrder.financials.advanceReceivedPaise > 0)
+    );
+    let overrideReason: string | undefined = undefined;
+    if (!isAdvanceReceived) {
+      const reason = window.prompt(
+        `Advance Payment Gate (Doc §3.7):\nOrder ${selectedOrderToAssign} has not yet confirmed advance payment.\n\nTo bypass and authorize handover, please enter an Admin Override Reason (or Cancel):`
+      );
+      if (!reason || !reason.trim()) {
+        alert('Assignment cancelled: Advance milestone payment is required before assigning floor supervisors.');
+        return;
+      }
+      overrideReason = reason.trim();
+    }
+
     try {
       if (onAssignSupervisor) {
-        await onAssignSupervisor(selectedOrderToAssign, selectedSupervisor.id, selectedSupervisor.name);
+        await onAssignSupervisor(selectedOrderToAssign, selectedSupervisor.id, selectedSupervisor.name, overrideReason);
       }
 
       const timestamp = new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });

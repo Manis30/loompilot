@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, X } from 'lucide-react';
+import { ShoppingCart, X, AlertTriangle, ShieldCheck, Loader2 } from 'lucide-react';
 import type { Order } from '../../types';
 import { useGetSuppliersQuery } from '../../store/api/catalogApi';
 
@@ -8,7 +8,7 @@ const isDemoEnabled = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true
 interface BuyMaterialsModalProps {
   order: Order | null;
   onClose: () => void;
-  onConfirmPurchase: (orderId: string, supplier: string, quantityKg: number, totalCost: number) => void;
+  onConfirmPurchase: (orderId: string, supplier: string, quantityKg: number, totalCost: number) => Promise<void> | void;
 }
 
 export const BuyMaterialsModal: React.FC<BuyMaterialsModalProps> = ({
@@ -30,15 +30,32 @@ export const BuyMaterialsModal: React.FC<BuyMaterialsModalProps> = ({
       setSupplier(liveSuppliers[0].supplierName);
     }
   }, [liveSuppliers, supplier]);
+
   const [quantityKg, setQuantityKg] = useState<number>(6200);
   const [ratePerKg, setRatePerKg] = useState<number>(4.60);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const isAdvanceReceived = Boolean(
+    order.financials?.advanceReceived ||
+    (order.financials?.advanceReceivedPaise && order.financials.advanceReceivedPaise > 0)
+  );
 
   const totalCost = Math.round(quantityKg * ratePerKg);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onConfirmPurchase(order.id, supplier, quantityKg, totalCost);
-    onClose();
+    setErrorMessage(null);
+    setIsSubmitting(true);
+    try {
+      await onConfirmPurchase(order.id, supplier, quantityKg, totalCost);
+      onClose();
+    } catch (err: any) {
+      const msg = err?.data?.message || err?.error || err?.message || 'Failed to record purchase decision.';
+      setErrorMessage(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -107,6 +124,43 @@ export const BuyMaterialsModal: React.FC<BuyMaterialsModalProps> = ({
             </div>
           </div>
 
+          {/* Advance Payment Gate Status */}
+          <div style={{
+            background: isAdvanceReceived ? '#ecfdf5' : '#fffbeb',
+            border: isAdvanceReceived ? '1px solid #a7f3d0' : '1px solid #fde68a',
+            borderRadius: 14,
+            padding: '10px 14px',
+            fontSize: 11,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            color: isAdvanceReceived ? '#065f46' : '#92400e'
+          }}>
+            {isAdvanceReceived ? <ShieldCheck size={16} /> : <AlertTriangle size={16} />}
+            <div>
+              <strong>{isAdvanceReceived ? 'Advance Payment Confirmed' : 'Advance Payment Gate Pending'}</strong>
+              <div style={{ fontSize: 10.5, marginTop: 2, opacity: 0.9 }}>
+                {isAdvanceReceived
+                  ? 'Client advance payment received. Raw material procurement is authorized.'
+                  : 'Doc §3.7: Materials must not be purchased without confirmed advance payment (via Razorpay or Manual Receipt).'}
+              </div>
+            </div>
+          </div>
+
+          {errorMessage && (
+            <div style={{
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              borderRadius: 14,
+              padding: '10px 14px',
+              fontSize: 11,
+              color: '#b91c1c',
+              fontWeight: 600
+            }}>
+              {errorMessage}
+            </div>
+          )}
+
           <div style={{
             background: '#FAF4EA',
             padding: '12px 16px',
@@ -125,12 +179,18 @@ export const BuyMaterialsModal: React.FC<BuyMaterialsModalProps> = ({
           </div>
 
           <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-            <button type="submit" className="admin-btn-primary" style={{ flex: 1.2, justifyContent: 'center' }}>
-              <ShoppingCart size={14} />
-              <span>Confirm Purchase</span>
+            <button
+              type="submit"
+              className="admin-btn-primary"
+              style={{ flex: 1.2, justifyContent: 'center', opacity: isSubmitting ? 0.7 : 1 }}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? <Loader2 size={14} className="animate-spin" /> : <ShoppingCart size={14} />}
+              <span>{isSubmitting ? 'Recording Decision...' : 'Confirm Purchase'}</span>
             </button>
             <button
               type="button"
+              disabled={isSubmitting}
               style={{
                 flex: 1,
                 background: '#ffffff',

@@ -51,6 +51,11 @@ export interface InventoryMaterial {
   storageLocation: string;     // Mill warehouse bin/aisle
   marketPriceChangePercent?: number; // e.g. +14.2% from Market Price Agent
   preferredSupplierId?: string;
+  affectedOrderId?: string;
+  affectedProductName?: string;
+  requiredQuantity?: number;
+  shortageQuantity?: number;
+  expectedArrival?: string;
 }
 
 export interface OrderAllocationItem {
@@ -1067,20 +1072,22 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
   }, [liveSupplierOffers]);
 
   const allocations: OrderAllocationItem[] = useMemo(() => {
-    if (materials && materials.length > 0) {
-      return materials.map((m) => {
+    if (inventory && inventory.length > 0) {
+      return inventory.map((m: InventoryMaterial) => {
         const matchingOrder = orders?.find((o) => o.id === m.affectedOrderId);
+        const reqQty = m.requiredQuantity ?? m.reservedStock ?? 0;
+        const shortQty = m.shortageQuantity ?? Math.max(0, (m.reservedStock ?? 0) - (m.physicalStock ?? 0));
         return {
           id: `omr_${m.id}`,
           orderId: m.affectedOrderId || matchingOrder?.id || 'ORD-REQ',
           clientName: matchingOrder?.clientName || 'Committed Client',
           productName: m.affectedProductName || matchingOrder?.productName || 'Textile Order',
           materialId: m.id,
-          requiredQuantity: m.requiredQuantity,
-          allocatedQuantity: Math.max(0, m.requiredQuantity - m.shortageQuantity),
+          requiredQuantity: reqQty,
+          allocatedQuantity: Math.max(0, reqQty - shortQty),
           unit: (m.unit as MaterialUnit) || 'kg',
           requiredByDate: m.expectedArrival || 'TBD',
-          status: (m.shortageQuantity > 0 ? 'Shortage' : 'Allocated') as OrderAllocationItem['status'],
+          status: (shortQty > 0 ? 'Shortage' : 'Allocated') as OrderAllocationItem['status'],
         };
       });
     }
@@ -1088,7 +1095,7 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
       return INITIAL_ORDER_ALLOCATIONS;
     }
     return [];
-  }, [materials, orders]);
+  }, [inventory, orders]);
 
   const livePurchaseOrders: PurchaseOrderRecord[] = useMemo(() => {
     const rawList = Array.isArray(purchaseDecisionsResponse?.data)

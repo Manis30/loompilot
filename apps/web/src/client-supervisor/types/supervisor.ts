@@ -115,13 +115,13 @@ export interface IssueTicket {
   severity: 'Critical' | 'High' | 'Medium' | 'Low';
   description: string;
   impact: string;
-  status: 'Technician Assigned' | 'Under Investigation' | 'Resolved' | 'Open';
+  status: 'Technician Assigned' | 'Under Investigation' | 'Resolved' | 'Open' | 'Pending';
   adminResponse?: string;
-  rawStatus?: string;
   priority?: string;
-  reportedBy?: string;
   shed?: string;
   issueType?: string;
+  reportedBy?: string;
+  rawStatus?: string;
 }
 
 export interface SupervisorNotification {

@@ -50,6 +50,28 @@ export class ProcurementService {
       );
     }
 
+    // Advance Payment Gate (Doc §3.7): Raw materials must not be purchased without advance payment confirmed
+    const advanceMilestones = (order.financials?.milestones || []).filter(
+      (m: any) => m.trigger === "advance"
+    );
+    const requiredAdvancePaise = advanceMilestones.reduce(
+      (sum: number, m: any) => sum + (m.amountPaise || 0),
+      0
+    );
+    const advanceReceivedPaise = order.financials?.advanceReceivedPaise || 0;
+    const isAdvanceReceived = Boolean(
+      (order.financials as any)?.advanceReceived ||
+      (requiredAdvancePaise > 0 ? advanceReceivedPaise >= requiredAdvancePaise : advanceReceivedPaise > 0)
+    );
+
+    if (!isAdvanceReceived && !(data as any).overrideReason) {
+      throw new AppError(
+        ErrorCode.ADVANCE_NOT_RECEIVED,
+        `Raw materials cannot be purchased until advance payment is confirmed. Advance required: ₹${(requiredAdvancePaise / 100).toFixed(2)}, received: ₹${(advanceReceivedPaise / 100).toFixed(2)}.`,
+        400
+      );
+    }
+
     let material: any = null;
     if (Types.ObjectId.isValid(data.materialId)) {
       material = await this.materialRepo.findById(tenantId, data.materialId);
@@ -119,6 +141,9 @@ export class ProcurementService {
 
     const resolvedOrderId = String(order._id);
     const updatedOrder = await this.ordersRepo.addPurchaseDecision(tenantId, resolvedOrderId, decisionDoc);
+
+    // Lock purchased raw material so price surge re-quotation excludes it (Doc §3.2, §3.10)
+    await this.ordersRepo.lockMaterial(tenantId, resolvedOrderId, String(material._id));
 
     await this.auditService.log({
       tenantId,

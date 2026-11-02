@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   AlertTriangle,
   Lock,
   CheckCircle2,
   XCircle,
-  TrendingUp
+  TrendingUp,
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
 import type { Order, MarketCommodity } from '../../types';
 
@@ -14,6 +16,7 @@ interface PriceCentreModuleProps {
   onSelectOrder: (id: string) => void;
   onApprovePriceRevision: (orderId: string) => void;
   onRejectPriceRevision: (orderId: string) => void;
+  onTriggerSurgeReprice?: () => Promise<void> | void;
 }
 
 export const PriceCentreModule: React.FC<PriceCentreModuleProps> = ({
@@ -21,19 +24,45 @@ export const PriceCentreModule: React.FC<PriceCentreModuleProps> = ({
   orders,
   onSelectOrder,
   onApprovePriceRevision,
-  onRejectPriceRevision
+  onRejectPriceRevision,
+  onTriggerSurgeReprice
 }) => {
+  const [isEvaluating, setIsEvaluating] = useState(false);
   const revisedOrders = orders.filter((o) => o.priceRevision !== undefined);
+
+  const handleTrigger = async () => {
+    if (!onTriggerSurgeReprice) return;
+    setIsEvaluating(true);
+    try {
+      await onTriggerSurgeReprice();
+    } finally {
+      setIsEvaluating(false);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, height: '100%', overflowY: 'auto', paddingRight: 4, background: '#ffffff' }}>
       {/* 1. Header */}
-      <div className="module-header-flat">
+      <div className="module-header-flat" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--c-text-primary)' }}>
-            Market Prices
+            Market Prices & Surge Centre
           </h1>
+          <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+            Real-time commodity rates from Market Price Agent. Recalculates uncommitted quotations when material surges occur.
+          </p>
         </div>
+        {onTriggerSurgeReprice && (
+          <button
+            className="admin-btn-primary"
+            style={{ padding: '8px 16px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            disabled={isEvaluating}
+            onClick={handleTrigger}
+          >
+            {isEvaluating ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+            <span>{isEvaluating ? 'Evaluating Market Surge...' : 'Run Surge Re-Pricing Check'}</span>
+          </button>
+        )}
       </div>
 
       {/* Raw Material Watchlist */}

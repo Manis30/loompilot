@@ -6,7 +6,7 @@ import { useGetUsersQuery } from '../../store/api/catalogApi';
 interface HandoverSupervisorModuleProps {
   orders: Order[];
   onSelectOrder: (id: string) => void;
-  onConfirmHandover: (orderId: string, supervisorId: string, supervisorName: string) => Promise<void> | void;
+  onConfirmHandover: (orderId: string, supervisorId: string, supervisorName: string, overrideReason?: string) => Promise<void> | void;
 }
 
 export const HandoverSupervisorModule: React.FC<HandoverSupervisorModuleProps> = ({
@@ -46,6 +46,7 @@ export const HandoverSupervisorModule: React.FC<HandoverSupervisorModuleProps> =
 
   const [submittingOrderId, setSubmittingOrderId] = useState<string | null>(null);
   const [handoverErrors, setHandoverErrors] = useState<Record<string, string>>({});
+  const [overrideReasons, setOverrideReasons] = useState<Record<string, string>>({});
 
   const acceptedOrders = orders.filter((o) => ['client_accepted', 'assigned', 'in_production'].includes(o.status));
 
@@ -78,6 +79,10 @@ export const HandoverSupervisorModule: React.FC<HandoverSupervisorModuleProps> =
           const isAssigned = !!order.assignedSupervisorId;
           const isSubmitting = submittingOrderId === order.id;
           const currentError = handoverErrors[order.id];
+          const isAdvanceReceived = Boolean(
+            order.financials?.advanceReceived ||
+            (order.financials?.advanceReceivedPaise && order.financials.advanceReceivedPaise > 0)
+          );
 
           return (
             <div
@@ -128,6 +133,16 @@ export const HandoverSupervisorModule: React.FC<HandoverSupervisorModuleProps> =
                     <Calendar size={14} />
                     <span>Production Routing Confirmed (Warping &rarr; Weaving &rarr; Dyeing &rarr; QA)</span>
                   </div>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    color: isAdvanceReceived ? '#16a34a' : '#d97706',
+                    fontWeight: 600
+                  }}>
+                    {isAdvanceReceived ? <ShieldCheck size={14} /> : <AlertCircle size={14} />}
+                    <span>Advance Payment Gate: {isAdvanceReceived ? 'Confirmed (Gate Open)' : 'Pending (Gate Locked - Doc §3.7)'}</span>
+                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: isAssigned ? '#16a34a' : 'var(--c-terracotta)', fontWeight: 700 }}>
                     <UserCheck size={14} />
                     <span>Assigned Supervisor: {order.assignedSupervisorName || (isAssigned ? 'Assigned' : 'Unassigned')}</span>
@@ -156,6 +171,26 @@ export const HandoverSupervisorModule: React.FC<HandoverSupervisorModuleProps> =
                     ))}
                   </select>
 
+                  {!isAdvanceReceived && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: '#b45309' }}>
+                        Advance Gate Override Reason (Required when advance is pending):
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Director waiver approved for contract"
+                        className="admin-form-input"
+                        style={{ fontSize: 10.5, padding: '5px 8px', borderColor: '#fcd34d' }}
+                        value={overrideReasons[order.id] || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setOverrideReasons((prev) => ({ ...prev, [order.id]: val }));
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                  )}
+
                   {currentError && (
                     <div style={{
                       display: 'flex',
@@ -176,14 +211,18 @@ export const HandoverSupervisorModule: React.FC<HandoverSupervisorModuleProps> =
 
                   <button
                     className="admin-btn-primary"
-                    style={{ padding: '8px', fontSize: 11, opacity: isSubmitting ? 0.7 : 1 }}
-                    disabled={isSubmitting}
+                    style={{
+                      padding: '8px',
+                      fontSize: 11,
+                      opacity: (isSubmitting || (!isAdvanceReceived && !(overrideReasons[order.id] || '').trim())) ? 0.6 : 1
+                    }}
+                    disabled={isSubmitting || (!isAdvanceReceived && !(overrideReasons[order.id] || '').trim())}
                     onClick={async (e) => {
                       e.stopPropagation();
                       setHandoverErrors((prev) => ({ ...prev, [order.id]: '' }));
                       setSubmittingOrderId(order.id);
                       try {
-                        await onConfirmHandover(order.id, selectedSupervisor.id, selectedSupervisor.name);
+                        await onConfirmHandover(order.id, selectedSupervisor.id, selectedSupervisor.name, overrideReasons[order.id]);
                       } catch (err: any) {
                         const errMsg = err?.data?.message || err?.error || err?.message || 'Handover failed on server.';
                         setHandoverErrors((prev) => ({ ...prev, [order.id]: errMsg }));
@@ -193,7 +232,13 @@ export const HandoverSupervisorModule: React.FC<HandoverSupervisorModuleProps> =
                     }}
                   >
                     {isSubmitting ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-                    <span>{isSubmitting ? 'Confirming with Server...' : 'Execute Handover & Authorize Floor Start'}</span>
+                    <span>
+                      {isSubmitting
+                        ? 'Confirming with Server...'
+                        : !isAdvanceReceived && !(overrideReasons[order.id] || '').trim()
+                        ? 'Advance Required for Handover'
+                        : 'Execute Handover & Authorize Floor Start'}
+                    </span>
                   </button>
                 </div>
               ) : (

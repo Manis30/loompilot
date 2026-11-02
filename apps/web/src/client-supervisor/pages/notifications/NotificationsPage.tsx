@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { Bell, Check, ArrowRight, ShieldCheck, Info } from 'lucide-react';
+import { useGetClientNotificationsQuery, useMarkClientNotificationReadMutation } from '../../../store/api/ordersApi';
+import type { NotificationItem } from '../../types';
 
 const isDemo = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
 
@@ -9,11 +11,46 @@ export const NotificationsPage: React.FC = () => {
   const { notifications: localNotifs, markNotificationRead: localMarkRead, markAllNotificationsRead: localMarkAllRead } = useApp();
   const navigate = useNavigate();
 
-  // In normal mode, no client-scoped notification endpoint exists in the backend API.
-  // Respect requirement: do not fabricate notifications and do not expose supervisor/admin notifications.
+  const { data: serverNotifsResp, refetch: refetchNotifs } = useGetClientNotificationsQuery(undefined, { skip: isDemo });
+  const [markClientNotificationRead] = useMarkClientNotificationReadMutation();
+
   const notifications = useMemo(() => {
-    return isDemo ? localNotifs : [];
-  }, [localNotifs]);
+    if (isDemo) return localNotifs;
+    const raw = serverNotifsResp?.data || [];
+    if (!Array.isArray(raw)) return [];
+    return raw.map((n: any): NotificationItem => {
+      let category: 'quotation' | 'production' | 'payment' | 'order' = 'order';
+      const type = String(n.type || '').toLowerCase();
+      if (type.includes('quote') || type.includes('price')) category = 'quotation';
+      else if (type.includes('pay') || type.includes('invoice')) category = 'payment';
+      else if (type.includes('stage') || type.includes('production') || type.includes('loom')) category = 'production';
+
+      let targetRoute = '/portal/orders';
+      if (category === 'quotation') targetRoute = '/portal/quotations';
+      else if (category === 'payment') targetRoute = '/portal/invoices';
+      else if (n.orderId) targetRoute = `/portal/orders/${n.orderId}`;
+
+      const timeStr = n.createdAt
+        ? new Date(n.createdAt).toLocaleDateString('en-IN', {
+            day: 'numeric',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : 'Just now';
+
+      return {
+        id: String(n.id || n._id),
+        title: n.title || 'Mill Notification',
+        message: n.body || n.message || '',
+        time: timeStr,
+        category,
+        read: Boolean(n.readAt),
+        targetRoute,
+        orderId: n.orderId,
+      };
+    });
+  }, [isDemo, localNotifs, serverNotifsResp]);
 
   const [activeTab, setActiveTab] = useState<'all' | 'quotation' | 'production' | 'payment'>('all');
 
@@ -24,20 +61,40 @@ export const NotificationsPage: React.FC = () => {
     });
   }, [notifications, activeTab]);
 
-  const handleNotificationClick = (item: (typeof notifications)[0]) => {
+  const handleNotificationClick = async (item: NotificationItem) => {
     if (isDemo) {
       localMarkRead(item.id);
+    } else {
+      try {
+        await markClientNotificationRead(item.id).unwrap();
+        refetchNotifs();
+      } catch {
+        // ignore
+      }
     }
     if (item.targetRoute) {
       navigate(item.targetRoute);
     }
   };
 
-  const handleMarkAllRead = () => {
+  const handleMarkAllRead = async () => {
     if (isDemo) {
       localMarkAllRead();
+    } else {
+      for (const item of notifications) {
+        if (!item.read) {
+          try {
+            await markClientNotificationRead(item.id).unwrap();
+          } catch {
+            // ignore
+          }
+        }
+      }
+      refetchNotifs();
     }
   };
+
+  const hasUnread = notifications.some((n) => !n.read);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -52,7 +109,7 @@ export const NotificationsPage: React.FC = () => {
           </p>
         </div>
 
-        {isDemo && notifications.length > 0 && (
+        {hasUnread && (
           <button
             onClick={handleMarkAllRead}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-ivory text-charcoal border border-muted-border text-xs font-bold hover:bg-white transition-colors flex-shrink-0"
@@ -62,19 +119,6 @@ export const NotificationsPage: React.FC = () => {
           </button>
         )}
       </div>
-
-      {/* Normal Mode Notice: Feed status */}
-      {!isDemo && (
-        <div className="p-4 rounded-2xl bg-ivory border border-muted-border flex items-start gap-3 text-xs text-muted">
-          <Info size={16} className="text-muted flex-shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <strong className="text-charcoal block font-bold">Client Notification Feed Status</strong>
-            <p className="leading-relaxed">
-              Real-time push notifications are currently unavailable on the mill backend for client accounts. Operational stage milestones and commercial invoice statuses update directly in your Orders and Invoices tabs.
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* Filter Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
@@ -153,7 +197,7 @@ export const NotificationsPage: React.FC = () => {
             </h3>
             <p className="text-xs text-muted max-w-md mx-auto leading-relaxed">
               {!isDemo
-                ? 'There are no active notifications for your client account. Direct order progress and financial milestones are tracked in real-time across your active contracts.'
+                ? 'All caught up! You will receive live alerts when quotation revisions are prepared, raw material surges are analyzed, loom stages advance, or payment milestones become due.'
                 : 'All caught up! There are no alerts currently in this category.'}
             </p>
           </div>

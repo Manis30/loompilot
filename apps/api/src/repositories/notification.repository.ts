@@ -94,6 +94,76 @@ export class NotificationRepository extends BaseRepository<INotification> {
     };
   }
 
+  async findForClient(
+    tenantId: string,
+    clientId?: string,
+    filter: { unreadOnly?: boolean; kind?: string } = {},
+    pagination: Partial<PaginationQuery> = {}
+  ): Promise<PaginatedResult<INotification>> {
+    const queryFilter: Record<string, any> = {
+      tenantId,
+      "recipient.clientId": clientId ? new Types.ObjectId(clientId) : { $exists: true },
+    };
+
+    if (filter.unreadOnly) {
+      queryFilter.readAt = null;
+    }
+    if (filter.kind) {
+      queryFilter.kind = filter.kind;
+    }
+
+    const page = Math.max(1, pagination.page || 1);
+    const limit = Math.min(100, Math.max(1, pagination.limit || 20));
+    const skip = (page - 1) * limit;
+
+    const [items, totalItems] = await Promise.all([
+      this.model
+        .find(queryFilter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean<INotification[]>()
+        .exec(),
+      this.model.countDocuments(queryFilter).exec(),
+    ]);
+
+    const totalPages = Math.ceil(totalItems / limit) || 1;
+
+    return {
+      data: items,
+      meta: {
+        page,
+        limit,
+        total: totalItems,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
+    };
+  }
+
+  async markAsReadForClient(
+    tenantId: string,
+    notificationId: string,
+    clientId: string
+  ): Promise<INotification | null> {
+    return this.model
+      .findOneAndUpdate(
+        {
+          tenantId,
+          _id: notificationId,
+          "recipient.clientId": new Types.ObjectId(clientId),
+        },
+        {
+          $set: { readAt: new Date() },
+          $inc: { version: 1 },
+        },
+        { new: true }
+      )
+      .lean<INotification>()
+      .exec();
+  }
+
   async markAsRead(
     tenantId: string,
     notificationId: string,
@@ -114,5 +184,104 @@ export class NotificationRepository extends BaseRepository<INotification> {
       )
       .lean<INotification>()
       .exec();
+  }
+
+  async findForClient(
+    tenantId: string,
+    clientId: string,
+    filter: { unreadOnly?: boolean; kind?: string; category?: string } = {},
+    pagination: Partial<PaginationQuery> = {}
+  ): Promise<PaginatedResult<INotification>> {
+    const queryFilter: Record<string, any> = {
+      tenantId,
+      "recipient.clientId": new Types.ObjectId(clientId),
+    };
+
+    if (filter.unreadOnly) {
+      queryFilter.readAt = null;
+    }
+    if (filter.kind) {
+      queryFilter.kind = filter.kind;
+    }
+    if (filter.category) {
+      if (filter.category === "quotation") {
+        queryFilter.type = { $regex: /quot/i };
+      } else if (filter.category === "production") {
+        queryFilter.type = { $regex: /prod|stage|handover/i };
+      } else if (filter.category === "payment") {
+        queryFilter.type = { $regex: /pay|milestone|invoice/i };
+      }
+    }
+
+    const page = Math.max(1, pagination.page || 1);
+    const limit = Math.min(100, Math.max(1, pagination.limit || 20));
+    const skip = (page - 1) * limit;
+
+    const [items, totalItems] = await Promise.all([
+      this.model
+        .find(queryFilter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean<INotification[]>()
+        .exec(),
+      this.model.countDocuments(queryFilter).exec(),
+    ]);
+
+    const totalPages = Math.ceil(totalItems / limit) || 1;
+
+    return {
+      data: items,
+      meta: {
+        page,
+        limit,
+        total: totalItems,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
+    };
+  }
+
+  async markAsReadForClient(
+    tenantId: string,
+    notificationId: string,
+    clientId: string
+  ): Promise<INotification | null> {
+    return this.model
+      .findOneAndUpdate(
+        {
+          tenantId,
+          _id: notificationId,
+          "recipient.clientId": new Types.ObjectId(clientId),
+        },
+        {
+          $set: { readAt: new Date() },
+          $inc: { version: 1 },
+        },
+        { new: true }
+      )
+      .lean<INotification>()
+      .exec();
+  }
+
+  async markAllAsReadForClient(
+    tenantId: string,
+    clientId: string
+  ): Promise<number> {
+    const res = await this.model
+      .updateMany(
+        {
+          tenantId,
+          "recipient.clientId": new Types.ObjectId(clientId),
+          readAt: null,
+        },
+        {
+          $set: { readAt: new Date() },
+          $inc: { version: 1 },
+        }
+      )
+      .exec();
+    return res.modifiedCount;
   }
 }
