@@ -3,12 +3,16 @@ import path from "node:path";
 import fs from "node:fs";
 import { z } from "zod";
 
-// Load environment variables from .env (check cwd, then monorepo root)
+// Load environment variables from .env (check cwd, apps/api, monorepo root, or .env.example)
 const cwd = process.cwd();
 const possibleEnvPaths = [
   path.resolve(cwd, ".env"),
+  path.resolve(cwd, "apps/api/.env"),
   path.resolve(cwd, "../../.env"),
   path.resolve(cwd, "../.env"),
+  path.resolve(cwd, ".env.example"),
+  path.resolve(cwd, "apps/api/.env.example"),
+  path.resolve(cwd, "../../.env.example"),
 ];
 for (const envPath of possibleEnvPaths) {
   if (fs.existsSync(envPath)) {
@@ -83,23 +87,25 @@ function computeRedisUrl(raw: Record<string, string | undefined>): string {
 }
 
 export function validateEnv(raw: Record<string, string | undefined> = process.env): Env {
+  const isDevOrTest = (raw["NODE_ENV"] || "development") !== "production";
+
   const prepared: Record<string, unknown> = {
     NODE_ENV: raw["NODE_ENV"] ?? "development",
     PORT: raw["PORT"] ?? raw["API_PORT"] ?? 4000,
     LOG_LEVEL: raw["LOG_LEVEL"] ?? "info",
 
-    MONGODB_URI: raw["MONGODB_URI"],
+    MONGODB_URI: raw["MONGODB_URI"] ?? (isDevOrTest ? "mongodb://localhost:27017/loompilot?replicaSet=rs0" : undefined),
     MONGODB_DB_NAME: raw["MONGODB_DB_NAME"] ?? raw["MONGODB_DATABASE"] ?? "loompilot",
 
     REDIS_URL: computeRedisUrl(raw),
 
-    JWT_ACCESS_SECRET: raw["JWT_ACCESS_SECRET"] ?? raw["JWT_SECRET"],
-    JWT_REFRESH_SECRET: raw["JWT_REFRESH_SECRET"],
+    JWT_ACCESS_SECRET: raw["JWT_ACCESS_SECRET"] ?? raw["JWT_SECRET"] ?? (isDevOrTest ? "loompilot_dev_jwt_secret_change_me_in_production_min_32_chars" : undefined),
+    JWT_REFRESH_SECRET: raw["JWT_REFRESH_SECRET"] ?? (isDevOrTest ? "loompilot_dev_refresh_jwt_secret_change_me_min_32_chars" : undefined),
     ACCESS_TOKEN_TTL: raw["ACCESS_TOKEN_TTL"] ?? raw["JWT_EXPIRES_IN"] ?? "15m",
     REFRESH_TOKEN_TTL: raw["REFRESH_TOKEN_TTL"] ?? raw["JWT_REFRESH_EXPIRES_IN"] ?? "7d",
 
     AGENTS_BASE_URL: raw["AGENTS_BASE_URL"] ?? raw["AGENTS_SERVICE_URL"] ?? "http://localhost:8000",
-    AGENT_SERVICE_TOKEN: raw["AGENT_SERVICE_TOKEN"] ?? raw["INTERNAL_SERVICE_TOKEN"],
+    AGENT_SERVICE_TOKEN: raw["AGENT_SERVICE_TOKEN"] ?? raw["INTERNAL_SERVICE_TOKEN"] ?? (isDevOrTest ? "loompilot_internal_agent_gateway_token_change_in_prod" : undefined),
 
     CORS_ORIGINS: raw["CORS_ORIGINS"] ?? raw["CORS_ORIGIN"] ?? "http://localhost:5173",
 
