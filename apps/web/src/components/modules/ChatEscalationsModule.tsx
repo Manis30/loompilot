@@ -80,7 +80,8 @@ export const ChatEscalationsModule: React.FC<ChatEscalationsModuleProps> = ({
   // -------------------------------------------------------------------------
   // State: Active Contact & Message History
   // -------------------------------------------------------------------------
-  const [activeContactId, setActiveContactId] = useState<string>('design_chat');
+  const isDemo = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
+  const [activeContactId, setActiveContactId] = useState<string>(isDemo ? 'design_chat' : '');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [messageInput, setMessageInput] = useState<string>('');
   const [isAudioPlaying, setIsAudioPlaying] = useState<boolean>(false);
@@ -97,7 +98,7 @@ export const ChatEscalationsModule: React.FC<ChatEscalationsModuleProps> = ({
   // -------------------------------------------------------------------------
   // Contacts Directory (Matching Reference Image & Textile Clients)
   // -------------------------------------------------------------------------
-  const contacts: ChatContact[] = [
+  const DEMO_CONTACTS: ChatContact[] = [
     {
       id: 'design_chat',
       orderId: 'LP-901',
@@ -205,6 +206,8 @@ export const ChatEscalationsModule: React.FC<ChatEscalationsModuleProps> = ({
     }
   ];
 
+  const contacts: ChatContact[] = useMemo(() => (isDemo ? DEMO_CONTACTS : []), [isDemo]);
+
   // Filtered contacts based on search
   const filteredContacts = contacts.filter(
     (c) =>
@@ -213,13 +216,13 @@ export const ChatEscalationsModule: React.FC<ChatEscalationsModuleProps> = ({
   );
 
   const activeContact = contacts.find((c) => c.id === activeContactId) || contacts[0];
-  const activeOrder = orders.find((o) => o.id === activeContact.orderId) || orders[0];
-  const activeEscalation = activeOrder?.discountEscalation;
+  const activeOrder = orders.find((o) => o.id === activeContact?.orderId);
+  const activeEscalation = isDemo ? activeOrder?.discountEscalation : undefined;
 
   // -------------------------------------------------------------------------
   // Messages Feed (LoomPilot Forest Green & Crisp White Theme)
   // -------------------------------------------------------------------------
-  const [messagesByContact, setMessagesByContact] = useState<Record<string, RichChatMessage[]>>({
+  const DEMO_MESSAGES_BY_CONTACT: Record<string, RichChatMessage[]> = {
     design_chat: [
       {
         id: 'msg_dc_1',
@@ -293,11 +296,18 @@ export const ChatEscalationsModule: React.FC<ChatEscalationsModuleProps> = ({
         readStatus: 'read'
       }
     ]
+  };
+
+  const [messagesByContact, setMessagesByContact] = useState<Record<string, RichChatMessage[]>>(() => {
+    return isDemo ? DEMO_MESSAGES_BY_CONTACT : {};
   });
 
   // Current contact messages (merging external chatMessages prop if present)
-  const propMessages = (activeContact.orderId && chatMessages[activeContact.orderId]) || [];
+  const propMessages = (activeContact?.orderId && chatMessages[activeContact.orderId]) || [];
   const activeMessages = useMemo(() => {
+    if (!activeContact) {
+      return [];
+    }
     if (messagesByContact[activeContactId]) {
       return messagesByContact[activeContactId];
     }
@@ -317,20 +327,23 @@ export const ChatEscalationsModule: React.FC<ChatEscalationsModuleProps> = ({
         readStatus: 'read' as const
       }));
     }
-    return [
-      {
-        id: `msg_fallback_1`,
-        senderId: activeContact.id,
-        senderName: activeContact.name,
-        avatarUrl: activeContact.avatarUrl,
-        isCurrentUser: false,
-        timestamp: '10:15',
-        type: 'text' as const,
-        text: activeContact.lastMessageSnippet.replace(/^You:\s*/, ''),
-        readStatus: 'read' as const
-      }
-    ];
-  }, [messagesByContact, activeContactId, propMessages, activeContact]);
+    if (isDemo && activeContact.lastMessageSnippet) {
+      return [
+        {
+          id: `msg_fallback_1`,
+          senderId: activeContact.id,
+          senderName: activeContact.name,
+          avatarUrl: activeContact.avatarUrl,
+          isCurrentUser: false,
+          timestamp: '10:15',
+          type: 'text' as const,
+          text: activeContact.lastMessageSnippet.replace(/^You:\s*/, ''),
+          readStatus: 'read' as const
+        }
+      ];
+    }
+    return [];
+  }, [messagesByContact, activeContactId, propMessages, activeContact, isDemo]);
 
   // Auto-scroll to bottom of messages
   useEffect(() => {
@@ -372,7 +385,7 @@ export const ChatEscalationsModule: React.FC<ChatEscalationsModuleProps> = ({
   // -------------------------------------------------------------------------
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!messageInput.trim()) return;
+    if (!messageInput.trim() || !activeContact || !isDemo) return;
 
     const newMsg: RichChatMessage = {
       id: `msg_${Date.now()}`,
@@ -399,6 +412,7 @@ export const ChatEscalationsModule: React.FC<ChatEscalationsModuleProps> = ({
   };
 
   const handleSendVoiceNote = () => {
+    if (!activeContact || !isDemo) return;
     const voiceMsg: RichChatMessage = {
       id: `msg_voice_${Date.now()}`,
       senderId: 'admin_john',
@@ -418,6 +432,7 @@ export const ChatEscalationsModule: React.FC<ChatEscalationsModuleProps> = ({
   };
 
   const handleSendAttachment = () => {
+    if (!activeContact || !isDemo) return;
     const imgMsg: RichChatMessage = {
       id: `msg_img_${Date.now()}`,
       senderId: 'admin_john',
@@ -452,10 +467,10 @@ export const ChatEscalationsModule: React.FC<ChatEscalationsModuleProps> = ({
               reactions: existingReactions.map((r) =>
                 r.emoji === emoji
                   ? {
-                      ...r,
-                      count: r.userReacted ? r.count - 1 : r.count + 1,
-                      userReacted: !r.userReacted
-                    }
+                    ...r,
+                    count: r.userReacted ? r.count - 1 : r.count + 1,
+                    userReacted: !r.userReacted
+                  }
                   : r
               )
             };
@@ -548,137 +563,160 @@ export const ChatEscalationsModule: React.FC<ChatEscalationsModuleProps> = ({
             gap: 2
           }}
         >
-          {filteredContacts.map((contact) => {
-            const isSelected = contact.id === activeContactId;
+          {filteredContacts.length === 0 ? (
+            <div
+              style={{
+                padding: '32px 16px',
+                textAlign: 'center',
+                color: '#64748b',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 8
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>
+                No Active Conversations
+              </div>
+              <p style={{ margin: 0, fontSize: 11, color: '#64748b', lineHeight: 1.5 }}>
+                {isDemo
+                  ? 'No contacts match your search query.'
+                  : 'Live client chat & escalation endpoints (/api/v1/conversations) are not deployed on the mill server.'}
+              </p>
+            </div>
+          ) : (
+            filteredContacts.map((contact) => {
+              const isSelected = contact.id === activeContactId;
 
-            return (
-              <div
-                key={contact.id}
-                onClick={() => setActiveContactId(contact.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: '9px 10px',
-                  borderRadius: 14,
-                  cursor: 'pointer',
-                  background: isSelected ? '#F8F0DF' : 'transparent',
-                  border: isSelected ? '1px solid #edf2ee' : '1px solid transparent',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                {/* Squircle Avatar (Forest Green Monogram) */}
+              return (
                 <div
+                  key={contact.id}
+                  onClick={() => setActiveContactId(contact.id)}
                   style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 13,
-                    background: contact.avatarUrl ? 'transparent' : '#222C2E',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    overflow: 'hidden',
-                    flexShrink: 0,
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
+                    gap: 12,
+                    padding: '9px 10px',
+                    borderRadius: 14,
+                    cursor: 'pointer',
+                    background: isSelected ? '#F8F0DF' : 'transparent',
+                    border: isSelected ? '1px solid #edf2ee' : '1px solid transparent',
+                    transition: 'all 0.15s ease'
                   }}
                 >
-                  {contact.avatarUrl ? (
-                    <img
-                      src={contact.avatarUrl}
-                      alt={contact.name}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      onError={(e) => {
-                        (e.target as HTMLElement).style.display = 'none';
-                      }}
-                    />
-                  ) : (
-                    <span style={{ color: '#ffffff', fontWeight: 800, fontSize: 14, letterSpacing: '-0.3px' }}>
-                      {contact.initials}
-                    </span>
-                  )}
-                </div>
-
-                {/* Contact Info */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <span
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 700,
-                        color: isSelected ? '#18191B' : '#111827',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis'
-                      }}
-                    >
-                      {contact.name}
-                    </span>
-                    <span style={{ fontSize: 10, color: '#64748b', marginLeft: 4 }}>
-                      {contact.timeAgo}
-                    </span>
-                  </div>
-
+                  {/* Squircle Avatar (Forest Green Monogram) */}
                   <div
                     style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 13,
+                      background: contact.avatarUrl ? 'transparent' : '#222C2E',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'space-between',
-                      marginTop: 2
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                      flexShrink: 0,
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
                     }}
                   >
-                    <span
+                    {contact.avatarUrl ? (
+                      <img
+                        src={contact.avatarUrl}
+                        alt={contact.name}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <span style={{ color: '#ffffff', fontWeight: 800, fontSize: 14, letterSpacing: '-0.3px' }}>
+                        {contact.initials}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Contact Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                      <span
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: isSelected ? '#18191B' : '#111827',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}
+                      >
+                        {contact.name}
+                      </span>
+                      <span style={{ fontSize: 10, color: '#64748b', marginLeft: 4 }}>
+                        {contact.timeAgo}
+                      </span>
+                    </div>
+
+                    <div
                       style={{
-                        fontSize: 11,
-                        color: isSelected ? '#18191B' : '#64748b',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        maxWidth: 160
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginTop: 2
                       }}
                     >
-                      {contact.lastMessageSnippet}
-                    </span>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: isSelected ? '#18191B' : '#64748b',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          maxWidth: 160
+                        }}
+                      >
+                        {contact.lastMessageSnippet}
+                      </span>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                      {/* Unread Counter Badge (Terracotta / Coral) */}
-                      {contact.unreadCount && (
-                        <span
-                          style={{
-                            background: '#df5538',
-                            color: '#ffffff',
-                            fontSize: 9.5,
-                            fontWeight: 800,
-                            minWidth: 16,
-                            height: 16,
-                            borderRadius: '50%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            padding: '0 4px'
-                          }}
-                        >
-                          {contact.unreadCount}
-                        </span>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        {/* Unread Counter Badge (Terracotta / Coral) */}
+                        {contact.unreadCount && (
+                          <span
+                            style={{
+                              background: '#df5538',
+                              color: '#ffffff',
+                              fontSize: 9.5,
+                              fontWeight: 800,
+                              minWidth: 16,
+                              height: 16,
+                              borderRadius: '50%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: '0 4px'
+                            }}
+                          >
+                            {contact.unreadCount}
+                          </span>
+                        )}
 
-                      {/* Sparkle / Read Checkmark (Forest Green #C32B37) */}
-                      {contact.isStarred ? (
-                        <Sparkles size={12} color="#18191B" fill="#79B4B7" />
-                      ) : contact.hasDoubleCheck ? (
-                        <CheckCheck size={13} color="#18191B" strokeWidth={2.5} />
-                      ) : null}
+                        {/* Sparkle / Read Checkmark (Forest Green #C32B37) */}
+                        {contact.isStarred ? (
+                          <Sparkles size={12} color="#18191B" fill="#79B4B7" />
+                        ) : contact.hasDoubleCheck ? (
+                          <CheckCheck size={13} color="#18191B" strokeWidth={2.5} />
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </div>
 
       {/* ===================================================================
-          RIGHT PANEL: ACTIVE CHAT CONVERSATION WINDOW
-          =================================================================== */}
+        RIGHT PANEL: ACTIVE CHAT CONVERSATION WINDOW
+        =================================================================== */}
       <div
         style={{
           flex: 1,
@@ -689,648 +727,692 @@ export const ChatEscalationsModule: React.FC<ChatEscalationsModuleProps> = ({
           minWidth: 0
         }}
       >
-        {/* Chat Window Header */}
-        <div
-          style={{
-            padding: '12px 20px',
-            borderBottom: '1px solid #edf2ee',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: '#ffffff'
-          }}
-        >
-          {/* Title & Online Count */}
-          <div>
-            <h2
+        {activeContact ? (
+          <>
+            {/* Chat Window Header */}
+            <div
               style={{
-                margin: 0,
-                fontSize: 16,
-                fontWeight: 700,
-                color: '#111827',
-                letterSpacing: '-0.3px'
-              }}
-            >
-              {activeContact.name}
-            </h2>
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
-              {activeContact.isGroup
-                ? `${activeContact.memberCount} members, ${activeContact.onlineCount} online`
-                : `${activeContact.role} • Active now`}
-            </div>
-          </div>
-
-          {/* Action Icons */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            {/* Takeover Mode Indicator (Forest Green Mint Pill) */}
-            <button
-              onClick={() => setIsTakeoverActive(!isTakeoverActive)}
-              style={{
-                background: isTakeoverActive ? '#F8F0DF' : '#f1f5f9',
-                border: isTakeoverActive ? '1px solid #edf2ee' : '1px solid #e2e8f0',
-                borderRadius: 20,
-                padding: '4px 10px',
-                fontSize: 10.5,
-                fontWeight: 700,
-                color: isTakeoverActive ? '#18191B' : '#64748b',
+                padding: '12px 20px',
+                borderBottom: '1px solid #edf2ee',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 5,
-                cursor: 'pointer'
+                justifyContent: 'space-between',
+                background: '#ffffff'
               }}
             >
-              <UserCheck size={12} />
-              <span>{isTakeoverActive ? 'Admin Takeover' : 'AI Handling'}</span>
-            </button>
-
-            {/* In-chat search button */}
-            <button
-              onClick={() => setInChatSearchOpen(!inChatSearchOpen)}
-              title="Search conversation"
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#64748b',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                padding: 4
-              }}
-            >
-              <Search size={18} strokeWidth={2} />
-            </button>
-
-            {/* Audio Call button */}
-            <button
-              onClick={() => setIsCallModalOpen(true)}
-              title="Call client"
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#64748b',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                padding: 4
-              }}
-            >
-              <Phone size={18} strokeWidth={2} />
-            </button>
-
-            {/* More Options */}
-            <button
-              title="Options"
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#64748b',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                padding: 4
-              }}
-            >
-              <MoreVertical size={18} strokeWidth={2} />
-            </button>
-          </div>
-        </div>
-
-        {/* Optional In-Chat Search Bar */}
-        {inChatSearchOpen && (
-          <div
-            style={{
-              padding: '6px 20px',
-              background: '#f8faf9',
-              borderBottom: '1px solid #edf2ee',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8
-            }}
-          >
-            <Search size={14} color="#64748b" />
-            <input
-              type="text"
-              placeholder="Search messages in this thread..."
-              value={inChatSearchTerm}
-              onChange={(e) => setInChatSearchTerm(e.target.value)}
-              style={{
-                flex: 1,
-                border: 'none',
-                background: 'transparent',
-                outline: 'none',
-                fontSize: 11,
-                color: '#111827'
-              }}
-            />
-            <button
-              onClick={() => {
-                setInChatSearchTerm('');
-                setInChatSearchOpen(false);
-              }}
-              style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}
-            >
-              <X size={14} />
-            </button>
-          </div>
-        )}
-
-        {/* Discount Concession Escalation Banner (If active for this client) */}
-        {activeEscalation && activeEscalation.status === 'open' && (
-          <div
-            style={{
-              margin: '10px 20px 0',
-              background: '#fffbeb',
-              border: '1px solid #fde68a',
-              borderRadius: 14,
-              padding: '10px 14px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div
-                style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: 8,
-                  background: '#f59e0b',
-                  color: '#ffffff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0
-                }}
-              >
-                <ShieldAlert size={16} />
-              </div>
+              {/* Title & Online Count */}
               <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e' }}>
-                  Commercial Escalation &bull; {activeContact.name} ({activeContact.orderId})
-                </div>
-                <div style={{ fontSize: 10.5, color: '#b45309', marginTop: 1 }}>
-                  Client requested <strong>{activeEscalation.requestedDiscountPercent}% discount</strong> (${activeEscalation.requestedPrice}/m). Leaves healthy 15.2% margin.
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                onClick={() =>
-                  onResolveEscalation(
-                    activeContact.orderId || '',
-                    true,
-                    activeEscalation.requestedDiscountPercent
-                  )
-                }
-                style={{
-                  background: '#79B4B7',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: 8,
-                  padding: '5px 12px',
-                  fontSize: 10.5,
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  cursor: 'pointer'
-                }}
-              >
-                <CheckCircle2 size={13} />
-                Approve {activeEscalation.requestedDiscountPercent}%
-              </button>
-              <button
-                onClick={() => onResolveEscalation(activeContact.orderId || '', false)}
-                style={{
-                  background: '#ffffff',
-                  color: '#64748b',
-                  border: '1px solid #d1d5db',
-                  borderRadius: 8,
-                  padding: '5px 12px',
-                  fontSize: 10.5,
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  cursor: 'pointer'
-                }}
-              >
-                <XCircle size={13} />
-                Decline
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ===================================================================
-            MESSAGE FEED (Forest Green & Mint Crisp Theme)
-            =================================================================== */}
-        <div
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            padding: '16px 24px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 14
-          }}
-        >
-          {activeMessages
-            .filter((m: RichChatMessage) =>
-              inChatSearchTerm
-                ? (m.text || '').toLowerCase().includes(inChatSearchTerm.toLowerCase())
-                : true
-            )
-            .map((msg: RichChatMessage) => {
-              const isMe = msg.isCurrentUser;
-
-              return (
-                <div
-                  key={msg.id}
+                <h2
                   style={{
-                    display: 'flex',
-                    alignItems: 'flex-end',
-                    gap: 10,
-                    alignSelf: isMe ? 'flex-end' : 'flex-start',
-                    maxWidth: '75%'
+                    margin: 0,
+                    fontSize: 16,
+                    fontWeight: 700,
+                    color: '#111827',
+                    letterSpacing: '-0.3px'
                   }}
                 >
-                  {/* Left Avatar for Incoming Messages */}
-                  {!isMe && (
-                    <div
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: 12,
-                        background: msg.avatarUrl ? 'transparent' : '#222C2E',
-                        overflow: 'hidden',
-                        flexShrink: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
-                      }}
-                    >
-                      {msg.avatarUrl ? (
-                        <img
-                          src={msg.avatarUrl}
-                          alt={msg.senderName}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        />
-                      ) : (
-                        <span style={{ color: '#ffffff', fontSize: 12, fontWeight: 700 }}>
-                          {msg.senderName.slice(0, 2).toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                  )}
+                  {activeContact.name}
+                </h2>
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                  {activeContact.isGroup
+                    ? `${activeContact.memberCount} members, ${activeContact.onlineCount} online`
+                    : `${activeContact.role} • Active now`}
+                </div>
+              </div>
 
-                  {/* Message Bubble Container */}
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {/* Action Icons */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                {/* Takeover Mode Indicator (Forest Green Mint Pill) */}
+                <button
+                  onClick={() => setIsTakeoverActive(!isTakeoverActive)}
+                  style={{
+                    background: isTakeoverActive ? '#F8F0DF' : '#f1f5f9',
+                    border: isTakeoverActive ? '1px solid #edf2ee' : '1px solid #e2e8f0',
+                    borderRadius: 20,
+                    padding: '4px 10px',
+                    fontSize: 10.5,
+                    fontWeight: 700,
+                    color: isTakeoverActive ? '#18191B' : '#64748b',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <UserCheck size={12} />
+                  <span>{isTakeoverActive ? 'Admin Takeover' : 'AI Handling'}</span>
+                </button>
+
+                {/* In-chat search button */}
+                <button
+                  onClick={() => setInChatSearchOpen(!inChatSearchOpen)}
+                  title="Search conversation"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#64748b',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: 4
+                  }}
+                >
+                  <Search size={18} strokeWidth={2} />
+                </button>
+
+                {/* Audio Call button */}
+                <button
+                  onClick={() => setIsCallModalOpen(true)}
+                  title="Call client"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#64748b',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: 4
+                  }}
+                >
+                  <Phone size={18} strokeWidth={2} />
+                </button>
+
+                {/* More Options */}
+                <button
+                  title="Options"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#64748b',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: 4
+                  }}
+                >
+                  <MoreVertical size={18} strokeWidth={2} />
+                </button>
+              </div>
+            </div>
+
+            {/* Optional In-Chat Search Bar */}
+            {inChatSearchOpen && (
+              <div
+                style={{
+                  padding: '6px 20px',
+                  background: '#f8faf9',
+                  borderBottom: '1px solid #edf2ee',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}
+              >
+                <Search size={14} color="#64748b" />
+                <input
+                  type="text"
+                  placeholder="Search messages in this thread..."
+                  value={inChatSearchTerm}
+                  onChange={(e) => setInChatSearchTerm(e.target.value)}
+                  style={{
+                    flex: 1,
+                    border: 'none',
+                    background: 'transparent',
+                    outline: 'none',
+                    fontSize: 11,
+                    color: '#111827'
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    setInChatSearchTerm('');
+                    setInChatSearchOpen(false);
+                  }}
+                  style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
+            {/* Discount Concession Escalation Banner (If active for this client) */}
+            {activeEscalation && activeEscalation.status === 'open' && (
+              <div
+                style={{
+                  margin: '10px 20px 0',
+                  background: '#fffbeb',
+                  border: '1px solid #fde68a',
+                  borderRadius: 14,
+                  padding: '10px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div
+                    style={{
+                      width: 30,
+                      height: 30,
+                      borderRadius: 8,
+                      background: '#f59e0b',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}
+                  >
+                    <ShieldAlert size={16} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e' }}>
+                      Commercial Escalation &bull; {activeContact.name} ({activeContact.orderId})
+                    </div>
+                    <div style={{ fontSize: 10.5, color: '#b45309', marginTop: 1 }}>
+                      Client requested <strong>{activeEscalation.requestedDiscountPercent}% discount</strong> (${activeEscalation.requestedPrice}/m). Leaves healthy 15.2% margin.
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() =>
+                      onResolveEscalation(
+                        activeContact.orderId || '',
+                        true,
+                        activeEscalation.requestedDiscountPercent
+                      )
+                    }
+                    style={{
+                      background: '#79B4B7',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: 8,
+                      padding: '5px 12px',
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <CheckCircle2 size={13} />
+                    Approve {activeEscalation.requestedDiscountPercent}%
+                  </button>
+                  <button
+                    onClick={() => onResolveEscalation(activeContact.orderId || '', false)}
+                    style={{
+                      background: '#ffffff',
+                      color: '#64748b',
+                      border: '1px solid #d1d5db',
+                      borderRadius: 8,
+                      padding: '5px 12px',
+                      fontSize: 10.5,
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <XCircle size={13} />
+                    Decline
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ===================================================================
+            MESSAGE FEED (Forest Green & Mint Crisp Theme)
+            =================================================================== */}
+            <div
+              style={{
+                flex: 1,
+                overflowY: 'auto',
+                padding: '16px 24px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 14
+              }}
+            >
+              {activeMessages
+                .filter((m: RichChatMessage) =>
+                  inChatSearchTerm
+                    ? (m.text || '').toLowerCase().includes(inChatSearchTerm.toLowerCase())
+                    : true
+                )
+                .map((msg: RichChatMessage) => {
+                  const isMe = msg.isCurrentUser;
+
+                  return (
                     <div
+                      key={msg.id}
                       style={{
-                        background: isMe ? 'linear-gradient(135deg, #2D393B 0%, #1D2628 100%)' : '#FEFBF3',
-                        color: isMe ? '#ffffff' : '#111827',
-                        borderRadius: 16,
-                        borderBottomRightRadius: isMe ? 4 : 16,
-                        borderBottomLeftRadius: isMe ? 16 : 4,
-                        border: isMe ? 'none' : '1px solid #e2ede6',
-                        padding: msg.type === 'image' ? 4 : '10px 14px',
-                        boxShadow: isMe ? '0 2px 8px rgba(22, 78, 50, 0.2)' : '0 1px 2px rgba(0,0,0,0.02)',
-                        position: 'relative'
+                        display: 'flex',
+                        alignItems: 'flex-end',
+                        gap: 10,
+                        alignSelf: isMe ? 'flex-end' : 'flex-start',
+                        maxWidth: '75%'
                       }}
                     >
-                      {/* Sender Name on top of incoming bubble */}
+                      {/* Left Avatar for Incoming Messages */}
                       {!isMe && (
                         <div
                           style={{
-                            fontSize: 10.5,
-                            fontWeight: 700,
-                            color: '#18191B',
-                            marginBottom: 3
-                          }}
-                        >
-                          {msg.senderName}
-                        </div>
-                      )}
-
-                      {/* TEXT MESSAGE CONTENT */}
-                      {msg.type === 'text' && (
-                        <div
-                          style={{
-                            fontSize: 12.5,
-                            lineHeight: 1.45,
-                            wordBreak: 'break-word',
-                            fontWeight: 400
-                          }}
-                        >
-                          {msg.text}
-                        </div>
-                      )}
-
-                      {/* MEDIA / IMAGE MESSAGE */}
-                      {msg.type === 'image' && (
-                        <div
-                          onClick={() => setLightboxImage(msg.mediaUrl || null)}
-                          style={{
+                            width: 36,
+                            height: 36,
                             borderRadius: 12,
+                            background: msg.avatarUrl ? 'transparent' : '#222C2E',
                             overflow: 'hidden',
-                            position: 'relative',
-                            cursor: 'pointer'
+                            flexShrink: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
+                          }}
+                        >
+                          {msg.avatarUrl ? (
+                            <img
+                              src={msg.avatarUrl}
+                              alt={msg.senderName}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          ) : (
+                            <span style={{ color: '#ffffff', fontSize: 12, fontWeight: 700 }}>
+                              {msg.senderName.slice(0, 2).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Message Bubble Container */}
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <div
+                          style={{
+                            background: isMe ? 'linear-gradient(135deg, #2D393B 0%, #1D2628 100%)' : '#FEFBF3',
+                            color: isMe ? '#ffffff' : '#111827',
+                            borderRadius: 16,
+                            borderBottomRightRadius: isMe ? 4 : 16,
+                            borderBottomLeftRadius: isMe ? 16 : 4,
+                            border: isMe ? 'none' : '1px solid #e2ede6',
+                            padding: msg.type === 'image' ? 4 : '10px 14px',
+                            boxShadow: isMe ? '0 2px 8px rgba(22, 78, 50, 0.2)' : '0 1px 2px rgba(0,0,0,0.02)',
+                            position: 'relative'
+                          }}
+                        >
+                          {/* Sender Name on top of incoming bubble */}
+                          {!isMe && (
+                            <div
+                              style={{
+                                fontSize: 10.5,
+                                fontWeight: 700,
+                                color: '#18191B',
+                                marginBottom: 3
+                              }}
+                            >
+                              {msg.senderName}
+                            </div>
+                          )}
+
+                          {/* TEXT MESSAGE CONTENT */}
+                          {msg.type === 'text' && (
+                            <div
+                              style={{
+                                fontSize: 12.5,
+                                lineHeight: 1.45,
+                                wordBreak: 'break-word',
+                                fontWeight: 400
+                              }}
+                            >
+                              {msg.text}
+                            </div>
+                          )}
+
+                          {/* MEDIA / IMAGE MESSAGE */}
+                          {msg.type === 'image' && (
+                            <div
+                              onClick={() => setLightboxImage(msg.mediaUrl || null)}
+                              style={{
+                                borderRadius: 12,
+                                overflow: 'hidden',
+                                position: 'relative',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <img
+                                src={msg.mediaUrl}
+                                alt="Attached file"
+                                style={{
+                                  width: '100%',
+                                  maxHeight: 220,
+                                  objectFit: 'cover',
+                                  display: 'block',
+                                  borderRadius: 12
+                                }}
+                              />
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  bottom: 6,
+                                  right: 8,
+                                  background: 'rgba(0,0,0,0.45)',
+                                  color: '#ffffff',
+                                  padding: '2px 6px',
+                                  borderRadius: 4,
+                                  fontSize: 9.5,
+                                  fontWeight: 600
+                                }}
+                              >
+                                {msg.timestamp}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* VOICE AUDIO MESSAGE */}
+                          {msg.type === 'voice' && (
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 10,
+                                padding: '4px 2px'
+                              }}
+                            >
+                              {/* Play/Pause Button (Forest Green Circle) */}
+                              <button
+                                onClick={() => setIsAudioPlaying(!isAudioPlaying)}
+                                style={{
+                                  width: 32,
+                                  height: 32,
+                                  borderRadius: '50%',
+                                  background: isMe ? '#79B4B7' : '#1A1B1D',
+                                  color: isMe ? '#18191B' : '#ffffff',
+                                  border: 'none',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: 'pointer',
+                                  flexShrink: 0
+                                }}
+                              >
+                                {isAudioPlaying ? (
+                                  <Pause size={14} fill="currentColor" />
+                                ) : (
+                                  <Play size={14} fill="currentColor" style={{ marginLeft: 2 }} />
+                                )}
+                              </button>
+
+                              {/* Animated Waveform Visualization (Forest Green + Mint) */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 2, height: 24, flex: 1 }}>
+                                {[10, 16, 22, 14, 8, 18, 24, 16, 12, 20, 14, 8, 16, 22, 10, 18, 14, 8, 20, 12, 16, 22, 14].map(
+                                  (height, i) => {
+                                    const isPlayed = i * 4.3 <= audioPlaybackProgress;
+                                    return (
+                                      <div
+                                        key={i}
+                                        style={{
+                                          width: 2.5,
+                                          height: height,
+                                          borderRadius: 1,
+                                          background: isMe
+                                            ? '#ffffff'
+                                            : isPlayed
+                                              ? '#18191B'
+                                              : '#edf2ee',
+                                          opacity: isMe && !isPlayed ? 0.45 : 1,
+                                          transition: 'background 0.1s ease'
+                                        }}
+                                      />
+                                    );
+                                  }
+                                )}
+                              </div>
+
+                              {/* Duration Readout */}
+                              <span
+                                style={{
+                                  fontSize: 10.5,
+                                  fontWeight: 600,
+                                  color: isMe ? '#F8F0DF' : '#18191B',
+                                  minWidth: 26,
+                                  textAlign: 'right'
+                                }}
+                              >
+                                {msg.voiceDuration || '0:14'}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Timestamp & Double Checkmarks (Inside Bubble Bottom-Right) */}
+                          {msg.type !== 'image' && (
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'flex-end',
+                                gap: 4,
+                                marginTop: 4,
+                                fontSize: 9.5,
+                                color: isMe ? '#F8F0DF' : '#64748b'
+                              }}
+                            >
+                              <span>{msg.timestamp}</span>
+                              {isMe && <CheckCheck size={12} strokeWidth={2.5} color="#ffffff" />}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Reactions Pill (Mint Background #F8F0DF) */}
+                        {msg.reactions && msg.reactions.length > 0 && (
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              marginTop: 3,
+                              alignSelf: isMe ? 'flex-end' : 'flex-start'
+                            }}
+                          >
+                            {msg.reactions.map((reaction: MessageReaction) => (
+                              <button
+                                key={reaction.emoji}
+                                onClick={() => handleToggleReaction(msg.id, reaction.emoji)}
+                                style={{
+                                  background: reaction.userReacted ? '#F8F0DF' : '#f8faf9',
+                                  border: reaction.userReacted ? '1px solid #edf2ee' : '1px solid #edf2ee',
+                                  borderRadius: 12,
+                                  padding: '2px 6px',
+                                  fontSize: 10,
+                                  fontWeight: 600,
+                                  color: '#111827',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                  cursor: 'pointer',
+                                  boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+                                }}
+                              >
+                                <span>{reaction.emoji}</span>
+                                <span style={{ fontSize: 9.5, color: '#18191B', fontWeight: 700 }}>{reaction.count}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Right Avatar for Current User Outgoing Messages */}
+                      {isMe && (
+                        <div
+                          style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: 12,
+                            background: '#79B4B7',
+                            overflow: 'hidden',
+                            flexShrink: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
                           }}
                         >
                           <img
-                            src={msg.mediaUrl}
-                            alt="Attached file"
-                            style={{
-                              width: '100%',
-                              maxHeight: 220,
-                              objectFit: 'cover',
-                              display: 'block',
-                              borderRadius: 12
-                            }}
+                            src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"
+                            alt="John Doe"
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                           />
-                          <div
-                            style={{
-                              position: 'absolute',
-                              bottom: 6,
-                              right: 8,
-                              background: 'rgba(0,0,0,0.45)',
-                              color: '#ffffff',
-                              padding: '2px 6px',
-                              borderRadius: 4,
-                              fontSize: 9.5,
-                              fontWeight: 600
-                            }}
-                          >
-                            {msg.timestamp}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* VOICE AUDIO MESSAGE */}
-                      {msg.type === 'voice' && (
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 10,
-                            padding: '4px 2px'
-                          }}
-                        >
-                          {/* Play/Pause Button (Forest Green Circle) */}
-                          <button
-                            onClick={() => setIsAudioPlaying(!isAudioPlaying)}
-                            style={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: '50%',
-                              background: isMe ? '#79B4B7' : '#1A1B1D',
-                              color: isMe ? '#18191B' : '#ffffff',
-                              border: 'none',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              cursor: 'pointer',
-                              flexShrink: 0
-                            }}
-                          >
-                            {isAudioPlaying ? (
-                              <Pause size={14} fill="currentColor" />
-                            ) : (
-                              <Play size={14} fill="currentColor" style={{ marginLeft: 2 }} />
-                            )}
-                          </button>
-
-                          {/* Animated Waveform Visualization (Forest Green + Mint) */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 2, height: 24, flex: 1 }}>
-                            {[10, 16, 22, 14, 8, 18, 24, 16, 12, 20, 14, 8, 16, 22, 10, 18, 14, 8, 20, 12, 16, 22, 14].map(
-                              (height, i) => {
-                                const isPlayed = i * 4.3 <= audioPlaybackProgress;
-                                return (
-                                  <div
-                                    key={i}
-                                    style={{
-                                      width: 2.5,
-                                      height: height,
-                                      borderRadius: 1,
-                                      background: isMe
-                                        ? '#ffffff'
-                                        : isPlayed
-                                        ? '#18191B'
-                                        : '#edf2ee',
-                                      opacity: isMe && !isPlayed ? 0.45 : 1,
-                                      transition: 'background 0.1s ease'
-                                    }}
-                                  />
-                                );
-                              }
-                            )}
-                          </div>
-
-                          {/* Duration Readout */}
-                          <span
-                            style={{
-                              fontSize: 10.5,
-                              fontWeight: 600,
-                              color: isMe ? '#F8F0DF' : '#18191B',
-                              minWidth: 26,
-                              textAlign: 'right'
-                            }}
-                          >
-                            {msg.voiceDuration || '0:14'}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Timestamp & Double Checkmarks (Inside Bubble Bottom-Right) */}
-                      {msg.type !== 'image' && (
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'flex-end',
-                            gap: 4,
-                            marginTop: 4,
-                            fontSize: 9.5,
-                            color: isMe ? '#F8F0DF' : '#64748b'
-                          }}
-                        >
-                          <span>{msg.timestamp}</span>
-                          {isMe && <CheckCheck size={12} strokeWidth={2.5} color="#ffffff" />}
                         </div>
                       )}
                     </div>
+                  );
+                })}
+              <div ref={messagesEndRef} />
+            </div>
 
-                    {/* Reactions Pill (Mint Background #F8F0DF) */}
-                    {msg.reactions && msg.reactions.length > 0 && (
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          marginTop: 3,
-                          alignSelf: isMe ? 'flex-end' : 'flex-start'
-                        }}
-                      >
-                        {msg.reactions.map((reaction: MessageReaction) => (
-                          <button
-                            key={reaction.emoji}
-                            onClick={() => handleToggleReaction(msg.id, reaction.emoji)}
-                            style={{
-                              background: reaction.userReacted ? '#F8F0DF' : '#f8faf9',
-                              border: reaction.userReacted ? '1px solid #edf2ee' : '1px solid #edf2ee',
-                              borderRadius: 12,
-                              padding: '2px 6px',
-                              fontSize: 10,
-                              fontWeight: 600,
-                              color: '#111827',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 3,
-                              cursor: 'pointer',
-                              boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
-                            }}
-                          >
-                            <span>{reaction.emoji}</span>
-                            <span style={{ fontSize: 9.5, color: '#18191B', fontWeight: 700 }}>{reaction.count}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Right Avatar for Current User Outgoing Messages */}
-                  {isMe && (
-                    <div
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: 12,
-                        background: '#79B4B7',
-                        overflow: 'hidden',
-                        flexShrink: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
-                      }}
-                    >
-                      <img
-                        src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"
-                        alt="John Doe"
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* ===================================================================
+            {/* ===================================================================
             BOTTOM MESSAGE COMPOSER BAR (Forest Green Theme)
             =================================================================== */}
-        <div style={{ padding: '12px 24px 16px', background: '#ffffff' }}>
-          <form
-            onSubmit={handleSendMessage}
+            <div style={{ padding: '12px 24px 16px', background: '#ffffff' }}>
+              <form
+                onSubmit={handleSendMessage}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  background: '#F8F0DF',
+                  borderRadius: 16,
+                  padding: '6px 10px 6px 14px',
+                  border: '1px solid #edf2ee'
+                }}
+              >
+                {/* Attachment Paperclip Button */}
+                <button
+                  type="button"
+                  onClick={handleSendAttachment}
+                  title="Attach fabric swatch or photo"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#18191B',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 4
+                  }}
+                >
+                  <Paperclip size={18} strokeWidth={2.2} />
+                </button>
+
+                {/* Main Text Input */}
+                <input
+                  type="text"
+                  placeholder="Your message..."
+                  value={messageInput}
+                  onChange={(e) => setMessageInput(e.target.value)}
+                  style={{
+                    flex: 1,
+                    border: 'none',
+                    background: 'transparent',
+                    outline: 'none',
+                    fontSize: 13,
+                    color: '#111827'
+                  }}
+                />
+
+                {/* Voice Recording Button */}
+                <button
+                  type="button"
+                  onClick={handleSendVoiceNote}
+                  title="Send audio note"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#18191B',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 4
+                  }}
+                >
+                  <Mic size={18} strokeWidth={2.2} />
+                </button>
+
+                {/* Send Paper Plane Button (Forest Green Circle #C32B37) */}
+                <button
+                  type="submit"
+                  disabled={!messageInput.trim()}
+                  title="Send message"
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: '50%',
+                    background: messageInput.trim() ? '#79B4B7' : '#E6DFD5',
+                    color: '#18191B',
+                    border: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: messageInput.trim() ? 'pointer' : 'default',
+                    transition: 'background 0.15s ease',
+                    boxShadow: messageInput.trim() ? '0 2px 6px rgba(22, 78, 50, 0.25)' : 'none'
+                  }}
+                >
+                  <Send size={15} strokeWidth={2.2} style={{ marginLeft: 1 }} />
+                </button>
+              </form>
+            </div>
+          </>
+        ) : (
+          <div
             style={{
+              flex: 1,
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
-              gap: 10,
-              background: '#F8F0DF',
-              borderRadius: 16,
-              padding: '6px 10px 6px 14px',
-              border: '1px solid #edf2ee'
+              justifyContent: 'center',
+              background: '#ffffff',
+              position: 'relative',
+              minWidth: 0,
+              padding: 32,
+              textAlign: 'center',
+              boxSizing: 'border-box'
             }}
           >
-            {/* Attachment Paperclip Button */}
-            <button
-              type="button"
-              onClick={handleSendAttachment}
-              title="Attach fabric swatch or photo"
+            <div
               style={{
-                background: 'none',
-                border: 'none',
-                color: '#18191B',
-                cursor: 'pointer',
+                width: 56,
+                height: 56,
+                borderRadius: 16,
+                background: '#F8F0DF',
+                border: '1px solid #edf2ee',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                padding: 4
+                marginBottom: 16
               }}
             >
-              <Paperclip size={18} strokeWidth={2.2} />
-            </button>
-
-            {/* Main Text Input */}
-            <input
-              type="text"
-              placeholder="Your message..."
-              value={messageInput}
-              onChange={(e) => setMessageInput(e.target.value)}
-              style={{
-                flex: 1,
-                border: 'none',
-                background: 'transparent',
-                outline: 'none',
-                fontSize: 13,
-                color: '#111827'
-              }}
-            />
-
-            {/* Voice Recording Button */}
-            <button
-              type="button"
-              onClick={handleSendVoiceNote}
-              title="Send audio note"
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#18191B',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: 4
-              }}
-            >
-              <Mic size={18} strokeWidth={2.2} />
-            </button>
-
-            {/* Send Paper Plane Button (Forest Green Circle #C32B37) */}
-            <button
-              type="submit"
-              disabled={!messageInput.trim()}
-              title="Send message"
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: '50%',
-                background: messageInput.trim() ? '#79B4B7' : '#E6DFD5',
-                color: '#18191B',
-                border: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: messageInput.trim() ? 'pointer' : 'default',
-                transition: 'background 0.15s ease',
-                boxShadow: messageInput.trim() ? '0 2px 6px rgba(22, 78, 50, 0.25)' : 'none'
-              }}
-            >
-              <Send size={15} strokeWidth={2.2} style={{ marginLeft: 1 }} />
-            </button>
-          </form>
-        </div>
+              <ShieldAlert size={28} color="#D97706" />
+            </div>
+            <h3 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 700, color: '#111827' }}>
+              {isDemo ? 'No Active Conversation Selected' : 'Client Messaging & Escalations Unavailable'}
+            </h3>
+            <p style={{ margin: 0, fontSize: 12, color: '#64748b', maxWidth: 440, lineHeight: 1.6 }}>
+              {isDemo
+                ? 'Select a conversation or group from the left panel to review messages and resolve client price escalations.'
+                : 'Backend conversation, real-time messaging, and discount escalation endpoints (/api/v1/conversations) are not deployed on the mill server. Live customer communication and automated AI negotiations are currently offline.'}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* ===================================================================
           MODAL: EXECUTIVE AUDIO CALL SIMULATION
           =================================================================== */}
-      {isCallModalOpen && (
+      {isCallModalOpen && activeContact && (
         <div
           style={{
             position: 'fixed',

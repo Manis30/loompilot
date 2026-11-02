@@ -201,6 +201,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 
   const acceptQuotation = useCallback((orderId: string) => {
+    if (!isDemo) {
+      addToast('Accepting quotations via chat is unavailable in normal mode.', 'warning');
+      return;
+    }
     const order = storageService.getOrderById(orderId);
     if (!order) return;
 
