@@ -13,6 +13,7 @@ import { NotificationRepository } from "../repositories/notification.repository.
 import { OutboxRepository } from "../repositories/outbox.repository.js";
 import { UserRepository } from "../repositories/user.repository.js";
 import { MaterialRepository } from "../repositories/material.repository.js";
+import { MarketPriceRepository } from "../repositories/market-price.repository.js";
 import { StockMovementRepository } from "../repositories/stock-movement.repository.js";
 import { FileService } from "./file.service.js";
 import { QuotationPdfService } from "./quotation-pdf.service.js";
@@ -215,6 +216,7 @@ export class OrderService {
     private readonly auditService = new AuditService(),
     private readonly userRepo = new UserRepository(),
     private readonly materialRepo = new MaterialRepository(),
+    private readonly marketPriceRepo = new MarketPriceRepository(),
     private readonly stockMovementRepo = new StockMovementRepository(),
     private agentsClient?: IAgentsClient,
     private unitOfWork?: IUnitOfWork,
@@ -1749,6 +1751,275 @@ export class OrderService {
     return refreshed;
   }
 
+  async evaluateMarketSurgeAndReprice(
+    tenantId: string,
+    actor?: { id: string; email?: string; ip?: string; requestId?: string }
+  ): Promise<{ affectedOrders: string[]; message: string }> {
+    const latestPrices = await this.marketPriceRepo.getLatestPrices(tenantId);
+    let materials = await this.materialRepo.find(tenantId);
+    if (materials.length === 0) {
+      materials = await this.materialRepo.find("tenant_loompilot_tn_01");
+    }
+    const materialMap = new Map<string, any>(materials.map((m: any) => [String(m._id), m]));
+
+    const surgingMaterials: Array<{ materialId: string; name: string; surgePct: number }> = [];
+    for (const p of latestPrices) {
+      const mat = materialMap.get(String(p.materialId));
+      const change7d = p.change7dPct || 0;
+      const change1d = p.change1dPct || 0;
+      const isSurge = Math.abs(change7d) >= 5 || Math.abs(change1d) >= 3 || p.alert?.status === "open";
+      if (isSurge) {
+        surgingMaterials.push({
+          materialId: String(p.materialId),
+          name: mat ? mat.materialName : "Raw Material",
+          surgePct: change7d || change1d || 5,
+        });
+      }
+    }
+
+    if (surgingMaterials.length === 0) {
+      return { affectedOrders: [], message: "No material price surges detected." };
+    }
+
+    const candidateOrders = await this.ordersRepo.findOrdersForMarketSurge(tenantId);
+    const affectedOrderIds: string[] = [];
+
+    for (const order of candidateOrders) {
+      const lockedMaterialIds = new Set(
+        (order.quotation?.lockedMaterials || []).map((id: any) => String(id))
+      );
+
+      const unlockedSurge = surgingMaterials.find((sm) => !lockedMaterialIds.has(sm.materialId));
+      if (!unlockedSurge) continue;
+
+      const existingRevisions = order.quotation?.revisions || [];
+      const hasPendingSurgeRevision = existingRevisions.some(
+        (r: any) => r.reasonType === "price_surge" && r.status === "proposed"
+      );
+      if (hasPendingSurgeRevision) continue;
+
+      const oldPricePaise =
+        order.quotation?.totalPaise ||
+        (order.quotation?.unitPricePaise ? order.quotation.unitPricePaise * order.quantity : 100000);
+      const hikePct = Math.max(2, Math.round(unlockedSurge.surgePct * 0.7 * 10) / 10);
+      const newPricePaise = Math.round(oldPricePaise * (1 + hikePct / 100));
+      const nextRevisionNo = existingRevisions.length + 1;
+
+      const revisionDoc: any = {
+        revisionNo: nextRevisionNo,
+        reasonType: "price_surge",
+        oldPricePaise,
+        newPricePaise,
+        changePct: hikePct,
+        clientReason: `Market commodity surge on ${unlockedSurge.name} (+${unlockedSurge.surgePct}%). Unhedged raw material cost adjustment.`,
+        status: "proposed",
+        createdAt: new Date(),
+      };
+
+      await this.ordersRepo.addQuotationRevision(tenantId, String(order._id), revisionDoc);
+      affectedOrderIds.push(String(order._id));
+
+      if (actor) {
+        await this.auditService.log({
+          tenantId,
+          actor: { id: actor.id, type: "user", email: actor.email },
+          action: "PRICE_SURGE_REVISION_PROPOSED",
+          entity: { collection: "orders", id: String(order._id) },
+          after: {
+            revisionNo: nextRevisionNo,
+            oldPricePaise,
+            newPricePaise,
+            hikePct,
+            surgeMaterial: unlockedSurge.name,
+          },
+          ip: actor.ip,
+          requestId: actor.requestId,
+        });
+      }
+    }
+
+    return {
+      affectedOrders: affectedOrderIds,
+      message: `Evaluated ${surgingMaterials.length} surging commodities. Generated proposed revisions for ${affectedOrderIds.length} orders.`,
+    };
+  }
+
+  async approveQuotationRevision(params: {
+    tenantId: string;
+    orderId: string;
+    revisionNo: number;
+    actor: { id: string; email?: string; ip?: string; requestId?: string };
+  }): Promise<any> {
+    const { tenantId, orderId, revisionNo, actor } = params;
+    let order = await this.ordersRepo.findById(tenantId, orderId);
+    if (!order) {
+      order = await this.ordersRepo.findByOrderNumber(tenantId, orderId);
+    }
+    if (!order) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+    }
+
+    const revisions = order.quotation?.revisions || [];
+    const revIndex = revisions.findIndex((r: any) => r.revisionNo === Number(revisionNo));
+    if (revIndex === -1) {
+      throw new AppError(ErrorCode.NOT_FOUND, `Quotation revision #${revisionNo} not found`, 404);
+    }
+
+    const targetRev = revisions[revIndex]!;
+    const newTotalPaise = targetRev.newPricePaise;
+    const newUnitPricePaise = Math.round(newTotalPaise / (order.quantity || 1));
+
+    await this.ordersRepo.updateQuotationRevisionStatus(
+      tenantId,
+      String(order._id),
+      revIndex,
+      "approved",
+      actor.id,
+      newTotalPaise,
+      newUnitPricePaise
+    );
+
+    await this.notificationRepo.createNotification(tenantId, {
+      recipient: { clientId: String(order.clientId) },
+      kind: "notification",
+      type: "quotation_revised",
+      channel: "in_app",
+      title: `Price Revision Approved for Order ${order.orderNumber}`,
+      body: `Revised quotation of ₹${(newTotalPaise / 100).toLocaleString()} (+${targetRev.changePct}%) has been confirmed. ${targetRev.clientReason}`,
+      entity: { collection: "orders", id: String(order._id) },
+    });
+
+    await this.auditService.log({
+      tenantId,
+      actor: { id: actor.id, type: "user", email: actor.email },
+      action: "QUOTATION_REVISION_APPROVED",
+      entity: { collection: "orders", id: String(order._id) },
+      after: { revisionNo, newTotalPaise, approvedBy: actor.id },
+      ip: actor.ip,
+      requestId: actor.requestId,
+    });
+
+    const refreshed = await this.ordersRepo.findById(tenantId, String(order._id));
+    return toAdminOrderDto(refreshed);
+  }
+
+  async rejectQuotationRevision(params: {
+    tenantId: string;
+    orderId: string;
+    revisionNo: number;
+    actor: { id: string; email?: string; ip?: string; requestId?: string };
+  }): Promise<any> {
+    const { tenantId, orderId, revisionNo, actor } = params;
+    let order = await this.ordersRepo.findById(tenantId, orderId);
+    if (!order) {
+      order = await this.ordersRepo.findByOrderNumber(tenantId, orderId);
+    }
+    if (!order) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+    }
+
+    const revisions = order.quotation?.revisions || [];
+    const revIndex = revisions.findIndex((r: any) => r.revisionNo === Number(revisionNo));
+    if (revIndex === -1) {
+      throw new AppError(ErrorCode.NOT_FOUND, `Quotation revision #${revisionNo} not found`, 404);
+    }
+
+    await this.ordersRepo.updateQuotationRevisionStatus(
+      tenantId,
+      String(order._id),
+      revIndex,
+      "declined",
+      actor.id
+    );
+
+    await this.auditService.log({
+      tenantId,
+      actor: { id: actor.id, type: "user", email: actor.email },
+      action: "QUOTATION_REVISION_REJECTED",
+      entity: { collection: "orders", id: String(order._id) },
+      after: { revisionNo, note: "Mill absorbed price surge" },
+      ip: actor.ip,
+      requestId: actor.requestId,
+    });
+
+    const refreshed = await this.ordersRepo.findById(tenantId, String(order._id));
+    return toAdminOrderDto(refreshed);
+  }
+
+  async rerunFeasibility(params: {
+    tenantId: string;
+    orderId: string;
+    actor: { id: string; email?: string; ip?: string; requestId?: string };
+    data?: { deadline?: string; spec?: any };
+  }): Promise<any> {
+    const { tenantId, orderId, actor, data } = params;
+    let order = await this.ordersRepo.findById(tenantId, orderId);
+    if (!order) {
+      order = await this.ordersRepo.findByOrderNumber(tenantId, orderId);
+    }
+    if (!order) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+    }
+
+    const deadlineStr =
+      data?.deadline ||
+      (order.deliveryDeadline ? String(order.deliveryDeadline).split("T")[0] : undefined) ||
+      "2026-11-20";
+
+    const agentsClient = this.getAgentsClient();
+    const result = await agentsClient.requestFeasibility({
+      tenantId,
+      orderId: String(order._id),
+      productId: order.productId ? String(order.productId) : undefined,
+      productDescription: order.productDescription,
+      quantity: order.quantity,
+      deadline: deadlineStr,
+      spec: data?.spec || order.spec,
+    });
+
+    if (result.success && result.data) {
+      await this.ingestFeasibilityReport(result.data, {
+        id: actor.id,
+        type: "user",
+        requestId: actor.requestId,
+      });
+    }
+
+    await this.auditService.log({
+      tenantId,
+      actor: { id: actor.id, type: "user", email: actor.email },
+      action: "FEASIBILITY_RERUN",
+      entity: { collection: "orders", id: String(order._id) },
+      after: { deadline: deadlineStr },
+      ip: actor.ip,
+      requestId: actor.requestId,
+    });
+
+    const refreshed = await this.ordersRepo.findById(tenantId, String(order._id));
+    return toAdminOrderDto(refreshed);
+  }
+
+  async listClientNotifications(
+    tenantId: string,
+    clientId?: string,
+    filter: { unreadOnly?: boolean; kind?: string } = {},
+    pagination: Partial<PaginationQuery> = {}
+  ): Promise<PaginatedResult<any>> {
+    return this.notificationRepo.findForClient(tenantId, clientId, filter, pagination);
+  }
+
+  async markClientNotificationAsRead(
+    tenantId: string,
+    notificationId: string,
+    clientId: string
+  ): Promise<any> {
+    const updated = await this.notificationRepo.markAsReadForClient(tenantId, notificationId, clientId);
+    if (!updated) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Notification not found", 404);
+    }
+    return updated;
+  }
+
   async checkAndExpireQuotations(tenantId: string): Promise<number> {
     const todayStr = getTodayBusinessDate();
     const sentOrders = await this.ordersRepo.findPaginated(
@@ -1904,7 +2175,11 @@ export class OrderService {
     }
 
     const advanceReceivedPaise = order.financials?.advanceReceivedPaise || 0;
-    if (advanceReceivedPaise < requiredAdvancePaise) {
+    const isAdvanceReceived = Boolean(
+      (order.financials as any)?.advanceReceived ||
+      (requiredAdvancePaise > 0 ? advanceReceivedPaise >= requiredAdvancePaise : advanceReceivedPaise > 0)
+    );
+    if (!isAdvanceReceived) {
       if (!params.overrideReason || params.overrideReason.trim() === "") {
         throw new AppError(
           ErrorCode.ADVANCE_NOT_RECEIVED,

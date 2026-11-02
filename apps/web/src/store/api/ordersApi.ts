@@ -488,6 +488,72 @@ export const ordersApi = apiSlice.injectEndpoints({
         { type: 'Order', id: 'LIST' },
       ],
     }),
+
+    approvePriceRevision: builder.mutation<{ success: boolean; data: any }, { orderId: string; revisionNo?: number; body?: any }>({
+      query: ({ orderId, revisionNo = 1, body }) => ({
+        url: `/orders/${orderId}/revisions/${revisionNo}/approve`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: (_res, _err, { orderId }) => [
+        { type: 'Order', id: orderId },
+        { type: 'Order', id: 'LIST' },
+        { type: 'MarketPrice', id: 'LIST' },
+      ],
+    }),
+
+    rejectPriceRevision: builder.mutation<{ success: boolean; data: any }, { orderId: string; revisionNo?: number; body?: any }>({
+      query: ({ orderId, revisionNo = 1, body }) => ({
+        url: `/orders/${orderId}/revisions/${revisionNo}/reject`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: (_res, _err, { orderId }) => [
+        { type: 'Order', id: orderId },
+        { type: 'Order', id: 'LIST' },
+        { type: 'MarketPrice', id: 'LIST' },
+      ],
+    }),
+
+    createOrderPurchaseDecision: builder.mutation<{ success: boolean; data: any }, { orderId: string; body: any }>({
+      query: ({ orderId, body }) => ({
+        url: `/orders/${orderId}/purchase-decisions`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: (_res, _err, { orderId }) => [
+        { type: 'Order', id: orderId },
+        { type: 'Order', id: 'LIST' },
+      ],
+    }),
+
+    rerunFeasibility: builder.mutation<{ success: boolean; data: any }, { orderId: string; body?: any }>({
+      query: ({ orderId, body }) => ({
+        url: `/orders/${orderId}/feasibility/rerun`,
+        method: 'POST',
+        body: body || {},
+      }),
+      invalidatesTags: (_res, _err, { orderId }) => [
+        { type: 'Order', id: orderId },
+        { type: 'Order', id: 'LIST' },
+      ],
+    }),
+
+    getClientNotifications: builder.query<{ success: boolean; data: any[]; meta?: any }, { unreadOnly?: boolean } | void>({
+      query: (params) => ({
+        url: '/client/notifications',
+        params: params || {},
+      }),
+      providesTags: [{ type: 'Notification', id: 'CLIENT_LIST' }],
+    }),
+
+    markClientNotificationRead: builder.mutation<{ success: boolean; data: any }, string>({
+      query: (id) => ({
+        url: `/client/notifications/${id}/read`,
+        method: 'PATCH',
+      }),
+      invalidatesTags: [{ type: 'Notification', id: 'CLIENT_LIST' }],
+    }),
   }),
 });
 
@@ -523,5 +589,11 @@ export const {
   useSendClientOrderMessageMutation,
   useSendAdminOrderMessageMutation,
   useResolveEscalationMutation,
+  useApprovePriceRevisionMutation,
+  useRejectPriceRevisionMutation,
+  useCreateOrderPurchaseDecisionMutation,
+  useRerunFeasibilityMutation,
+  useGetClientNotificationsQuery,
+  useMarkClientNotificationReadMutation,
 } = ordersApi;
 

@@ -401,8 +401,37 @@ export function mapApiOrderToAdminOrder(
       };
     }),
     deliveredMeters: Number(apiOrder.production?.deliveredQty || 0),
-    financials: apiOrder.financials,
-        quotation: quotationObj,
+    financials: {
+      ...apiOrder.financials,
+      advanceReceived: Boolean(
+        apiOrder.financials?.advanceReceived ||
+        (apiOrder.financials?.advanceReceivedPaise && apiOrder.financials.advanceReceivedPaise > 0) ||
+        (apiOrder.financials?.milestones?.some((m: any) => m.trigger === 'advance' && (m.status === 'received' || (m.receivedPaise || 0) >= (m.amountPaise || 0))))
+      ),
+    },
+    quotation: quotationObj,
+    priceRevision: (() => {
+      const revisions = apiOrder.quotation?.revisions;
+      if (Array.isArray(revisions) && revisions.length > 0) {
+        const rev = revisions.slice().reverse().find((r: any) => r.status === 'proposed' || r.status === 'approved') || revisions[revisions.length - 1];
+        if (rev && (rev.status === 'proposed' || rev.status === 'approved')) {
+          return {
+            id: `rev-${rev.revisionNo}`,
+            orderId: id,
+            quotationId: String(apiOrder.quotation?._id || `qt-${id}`),
+            oldPrice: (rev.oldPricePaise || 0) / 100,
+            newPrice: (rev.newPricePaise || 0) / 100,
+            percentageChange: rev.changePct || 0,
+            costDrivers: ['Raw Material Market Surge'],
+            clientFriendlyReason: rev.clientReason || 'Market raw material price volatility adjustment',
+            adminApproved: rev.status === 'approved' || rev.status === 'sent' || rev.status === 'accepted',
+            status: rev.status,
+            createdAt: rev.createdAt ? String(rev.createdAt).split('T')[0] : 'Today',
+          };
+        }
+      }
+      return undefined;
+    })(),
     assignedSupervisorId,
     assignedSupervisorName,
     handoverDate,

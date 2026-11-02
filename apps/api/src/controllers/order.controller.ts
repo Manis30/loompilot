@@ -537,4 +537,64 @@ export class OrderController {
       next(err);
     }
   };
+
+  approveQuotationRevision = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const actor = req.actor!;
+      const result = await this.orderService.approveQuotationRevision({
+        tenantId: actor.tenantId,
+        orderId: req.params.id as string,
+        revisionNo: Number(req.params.revisionNo || 1),
+        actor: {
+          id: actor.subjectId,
+          email: actor.email,
+          ip: req.ip,
+          requestId: actor.requestId,
+        },
+      });
+      res.json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  rejectQuotationRevision = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const actor = req.actor!;
+      const result = await this.orderService.rejectQuotationRevision({
+        tenantId: actor.tenantId,
+        orderId: req.params.id as string,
+        revisionNo: Number(req.params.revisionNo || 1),
+        actor: {
+          id: actor.subjectId,
+          email: actor.email,
+          ip: req.ip,
+          requestId: actor.requestId,
+        },
+      });
+      res.json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  rerunFeasibility = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const actor = req.actor!;
+      const result = await this.orderService.rerunFeasibility({
+        tenantId: actor.tenantId,
+        orderId: req.params.id as string,
+        actor: {
+          id: actor.subjectId,
+          email: actor.email,
+          ip: req.ip,
+          requestId: actor.requestId,
+        },
+        data: req.body,
+      });
+      res.json({ data: result });
+    } catch (err) {
+      next(err);
+    }
+  };
 }

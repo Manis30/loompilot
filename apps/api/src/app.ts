@@ -37,6 +37,8 @@ import { supervisorAdminRouter } from "./routes/supervisor-admin.routes.js";
 import { maintenanceTicketRouter } from "./routes/maintenance-ticket.routes.js";
 import { productionRouter } from "./routes/production.routes.js";
 import { procurementRouter } from "./routes/procurement.routes.js";
+import { marketPriceRouter } from "./routes/market-price.routes.js";
+import { clientNotificationRouter } from "./routes/client-notification.routes.js";
 import { AppContainer, getContainer, setContainer } from "./container.js";
 
 export function createApp(container: AppContainer = getContainer()): Express {
@@ -81,7 +83,12 @@ export function createApp(container: AppContainer = getContainer()): Express {
     })
   );
 
-  // 4. Redis-backed Rate Limiter
+  // 4. Health & readiness endpoints
+  const healthRoutes = createHealthRoutes(container.healthController);
+  app.use(healthRoutes);
+  app.use("/api/v1", healthRoutes);
+
+  // 5. Redis-backed Rate Limiter
   app.use(createRateLimiter(container.redisClient, env));
 
   // 5. Request parsing with configurable body size limit & cookies
@@ -121,12 +128,7 @@ export function createApp(container: AppContainer = getContainer()): Express {
     });
   }
 
-  // 8. Health & readiness endpoints
-  const healthRoutes = createHealthRoutes(container.healthController);
-  app.use(healthRoutes);
-  app.use("/api/v1", healthRoutes);
-
-  // 9. Stage 3 Core Domain Routes
+  // 6. Stage 3 Core Domain Routes
   app.use("/api/v1", authRouter);
   app.use("/api/v1/me", meRouter);
   app.use("/api/v1/users", userRouter);
@@ -138,8 +140,10 @@ export function createApp(container: AppContainer = getContainer()): Express {
   app.use("/api/v1/settings", settingsRouter);
   app.use("/api/v1/suppliers", supplierRouter);
   app.use("/api/v1/materials", materialRouter);
+  app.use("/api/v1/market-prices", marketPriceRouter);
   app.use("/api/v1/machines", machineRouter);
   app.use("/api/v1/products", productRouter);
+  app.use("/api/v1/client/notifications", clientNotificationRouter);
   app.use("/api/v1/client", clientCatalogueRouter);
   app.use("/api/v1/files", fileRouter);
   app.use("/api/v1/stock", stockRouter);

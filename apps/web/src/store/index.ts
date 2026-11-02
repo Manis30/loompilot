@@ -9,4 +9,5 @@ export * from './api/productionApi';
 export * from './api/stockApi';
 export * from './api/catalogApi';
 export * from './api/dashboardApi';
+export { useGetOrdersSummaryQuery } from './api/dashboardApi';
 

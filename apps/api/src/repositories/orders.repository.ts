@@ -479,6 +479,68 @@ export class OrdersRepository {
     return updated!;
   }
 
+  async findOrdersForMarketSurge(tenantId: string): Promise<IOrder[]> {
+    return this.model
+      .find({
+        tenantId,
+        status: {
+          $in: [
+            OrderStatus.QUOTATION_PENDING_APPROVAL,
+            OrderStatus.QUOTATION_SENT,
+            OrderStatus.AWAITING_ADMIN_DECISION,
+            OrderStatus.CLIENT_ACCEPTED,
+            OrderStatus.ASSIGNED,
+          ],
+        },
+        "production.phase": {
+          $nin: [
+            "knitting",
+            "dyeing_processing",
+            "cutting",
+            "stitching",
+            "checking",
+            "ironing_finishing",
+            "packing",
+          ],
+        },
+      })
+      .lean<IOrder[]>()
+      .exec();
+  }
+
+  async lockMaterial(tenantId: string, orderId: string, materialId: string): Promise<void> {
+    await this.model.updateOne(
+      { tenantId, _id: orderId },
+      { $addToSet: { "quotation.lockedMaterials": new Types.ObjectId(materialId) } }
+    );
+  }
+
+  async updateQuotationRevisionStatus(
+    tenantId: string,
+    orderId: string,
+    revIndex: number,
+    status: "approved" | "declined",
+    approvedBy: string,
+    newTotalPaise?: number,
+    newUnitPricePaise?: number
+  ): Promise<void> {
+    const setOps: Record<string, any> = {
+      [`quotation.revisions.${revIndex}.status`]: status,
+      [`quotation.revisions.${revIndex}.approvedBy`]: new Types.ObjectId(approvedBy),
+      [`quotation.revisions.${revIndex}.approvedAt`]: new Date(),
+    };
+    if (status === "approved") {
+      setOps[`quotation.revisions.${revIndex}.sentAt`] = new Date();
+      if (newTotalPaise !== undefined) {
+        setOps["quotation.totalPaise"] = newTotalPaise;
+      }
+      if (newUnitPricePaise !== undefined) {
+        setOps["quotation.unitPricePaise"] = newUnitPricePaise;
+      }
+    }
+    await this.model.updateOne({ tenantId, _id: orderId }, { $set: setOps, $inc: { version: 1 } });
+  }
+
   async updateProductionProgress(
     tenantId: string,
     orderId: string | Types.ObjectId,

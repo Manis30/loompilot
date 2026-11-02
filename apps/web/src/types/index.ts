@@ -84,6 +84,7 @@ export interface PriceRevision {
   id: string;
   orderId: string;
   quotationId: string;
+  revisionNo?: number;
   oldPrice: number;
   newPrice: number;
   percentageChange: number;
@@ -155,6 +156,7 @@ export interface DeliveryRecord {
   deliveryType: 'partial' | 'full';
   status: 'dispatched' | 'delivered';
   invoiceAmount?: number;
+  notes?: string;
 }
 
 export interface PaymentRecord {
@@ -226,6 +228,7 @@ export interface Order {
   productionPlanConfirmed?: boolean;
   deliveredMeters?: number;
   financials?: {
+    advanceReceived?: boolean;
     totalAmountPaise?: number;
     totalPaidPaise?: number;
     amountDuePaise?: number;

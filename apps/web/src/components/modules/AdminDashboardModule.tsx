@@ -35,7 +35,7 @@ import {
 } from '../../store/api/productionApi';
 import { useGetStockSummaryQuery } from '../../store/api/stockApi';
 import { useGetMachinesQuery } from '../../store/api/machinesApi';
-import { useGetAuditLogsQuery } from '../../store/api/dashboardApi';
+import { useGetAuditLogsQuery, useGetOrdersSummaryQuery } from '../../store/api/dashboardApi';
 import './AdminDashboardModule.css';
 
 export interface AdminDashboardModuleProps {
@@ -43,6 +43,7 @@ export interface AdminDashboardModuleProps {
   users: AppUser[];
   commodities: MarketCommodity[];
   auditLogs?: AuditEntry[];
+  isAuditLogsLoading?: boolean;
   ordersSummary?: any;
   isOrdersSummaryLoading?: boolean;
   isOrdersSummaryError?: boolean;

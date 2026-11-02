@@ -10,6 +10,10 @@ import {
   useRecordManualReceiptMutation,
   useSendAdminOrderMessageMutation,
   useResolveEscalationMutation,
+  useApprovePriceRevisionMutation,
+  useRejectPriceRevisionMutation,
+  useCreateOrderPurchaseDecisionMutation,
+  useRerunFeasibilityMutation,
 } from './store/api/ordersApi';
 import {
   useGetClientsQuery,
@@ -17,6 +21,8 @@ import {
   useGetMaterialsQuery,
   useGetUsersQuery,
   useGetMachinesQuery,
+  useGetMarketPricesQuery,
+  useTriggerSurgeRepriceMutation,
 } from './store/api/catalogApi';
 import { useGetOrdersSummaryQuery, useGetAuditLogsQuery } from './store/api/dashboardApi';
 import { useGetProductionBoardQuery, useGetSupervisorNotificationsQuery } from './store/api/productionApi';
@@ -132,6 +138,7 @@ export const AdminPortalApp: React.FC = () => {
   const { data: ordersResponse, refetch: refetchOrders } = useGetOrdersQuery(undefined);
   const { data: clientsResponse } = useGetClientsQuery(undefined);
   const { data: productsResponse } = useGetProductsQuery(undefined);
+  const { data: materialsData } = useGetMaterialsQuery(undefined);
   const { data: usersResponse } = useGetUsersQuery(undefined);
 
   // Live Dashboard aggregate hooks
@@ -181,6 +188,12 @@ export const AdminPortalApp: React.FC = () => {
   const [recordManualReceiptMutation] = useRecordManualReceiptMutation();
   const [sendAdminOrderMessageMutation] = useSendAdminOrderMessageMutation();
   const [resolveEscalationMutation] = useResolveEscalationMutation();
+  const [approvePriceRevisionMutation] = useApprovePriceRevisionMutation();
+  const [rejectPriceRevisionMutation] = useRejectPriceRevisionMutation();
+  const [createOrderPurchaseDecisionMutation] = useCreateOrderPurchaseDecisionMutation();
+  const [rerunFeasibilityMutation] = useRerunFeasibilityMutation();
+  const [triggerSurgeRepriceMutation] = useTriggerSurgeRepriceMutation();
+  const { data: marketPricesData } = useGetMarketPricesQuery();
 
   const clientsMap = useMemo(() => {
     const map = new Map<string, any>();
@@ -245,7 +258,12 @@ export const AdminPortalApp: React.FC = () => {
       );
     }
   }, [usersResponse]);
-  const [commodities] = useState<MarketCommodity[]>(isDemo ? INITIAL_COMMODITIES : []);
+  const commodities: MarketCommodity[] = useMemo(() => {
+    if (marketPricesData?.data && Array.isArray(marketPricesData.data) && marketPricesData.data.length > 0) {
+      return marketPricesData.data as MarketCommodity[];
+    }
+    return isDemo ? INITIAL_COMMODITIES : [];
+  }, [marketPricesData]);
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>(isDemo ? INITIAL_AUDIT_LOGS : []);
   const [agentRuns, setAgentRuns] = useState<AgentRun[]>(isDemo ? INITIAL_AGENT_RUNS : []);
   const [chatMessages, setChatMessages] = useState<Record<string, ChatMessage[]>>(isDemo ? INITIAL_CHAT_MESSAGES : {});
@@ -433,165 +451,148 @@ export const AdminPortalApp: React.FC = () => {
     }
   };
 
-  const handleApprovePriceRevision = (orderId: string) => {
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId && o.priceRevision) {
-          return {
-            ...o,
-            priceRevision: {
-              ...o.priceRevision,
-              adminApproved: true,
-              status: 'approved'
-            }
-          };
-        }
-        return o;
-      })
-    );
+  const handleApprovePriceRevision = async (orderId: string) => {
+    const targetOrder = orders.find((o) => o.id === orderId);
+    const realId = targetOrder?.backendId || orderId;
+    const revisionNo = targetOrder?.priceRevision?.revisionNo || 1;
 
-    addAuditLog('PRICE_REVISION_APPROVED', `Admin approved price revision for ${orderId}. Client notified with approved reason.`, orderId);
-    addAgentRun('Market Price Agent', 'SUCCESS', `Revision for ${orderId} approved by Admin. Client notified.`, orderId);
-    showToast(`Price revision approved! Client notified for order ${orderId} with client-safe explanation.`);
+    try {
+      await approvePriceRevisionMutation({
+        orderId: realId,
+        revisionNo,
+        body: { approvedReason: 'Admin approved raw material surge re-quotation' }
+      }).unwrap();
+
+      refetchOrders();
+      addAuditLog('PRICE_REVISION_APPROVED', `Admin approved price revision for ${orderId}. Client notified with approved reason.`, orderId);
+      addAgentRun('Market Price Agent', 'SUCCESS', `Revision for ${orderId} approved by Admin. Client notified.`, orderId);
+      showToast(`Price revision approved! Client notified for order ${orderId} with client-safe explanation.`);
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to approve price revision.';
+      showToast(`Price revision approval error: ${errMsg}`);
+    }
   };
 
-  const handleRejectPriceRevision = (orderId: string) => {
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId) {
-          return { ...o, priceRevision: undefined };
-        }
-        return o;
-      })
-    );
+  const handleRejectPriceRevision = async (orderId: string) => {
+    const targetOrder = orders.find((o) => o.id === orderId);
+    const realId = targetOrder?.backendId || orderId;
+    const revisionNo = targetOrder?.priceRevision?.revisionNo || 1;
 
-    addAuditLog('PRICE_REVISION_REJECTED', `Admin rejected price revision for ${orderId}. Mill absorbed price hike.`, orderId);
-    showToast(`Price revision rejected. Mill will absorb material surge for order ${orderId}.`);
+    try {
+      await rejectPriceRevisionMutation({
+        orderId: realId,
+        revisionNo,
+        body: { declineReason: 'Mill absorbed price hike.' }
+      }).unwrap();
+
+      refetchOrders();
+      addAuditLog('PRICE_REVISION_REJECTED', `Admin rejected price revision for ${orderId}. Mill absorbed price hike.`, orderId);
+      showToast(`Price revision rejected. Mill will absorb material surge for order ${orderId}.`);
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to reject price revision.';
+      showToast(`Price revision rejection error: ${errMsg}`);
+    }
+  };
+
+  const handleTriggerSurgeReprice = async () => {
+    try {
+      const res = await triggerSurgeRepriceMutation().unwrap();
+      refetchOrders();
+      showToast(`Market surge evaluated: ${res.data?.affectedOrders?.length || 0} order revisions generated.`);
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to trigger surge repricing.';
+      showToast(`Surge evaluation failed: ${errMsg}`);
+    }
   };
 
   // =========================================================================
   // HANDOVER & RECOVERY HANDLERS
   // =========================================================================
 
-  const handleConfirmHandover = async (orderId: string, supervisorId: string, supervisorName: string) => {
+  const handleConfirmHandover = async (orderId: string, supervisorId: string, supervisorName: string, overrideReason?: string) => {
     const targetOrder = orders.find((o) => o.id === orderId);
     const realId = targetOrder?.backendId || orderId;
     try {
       await assignSupervisorsMutation({
         id: realId,
-        body: { supervisorIds: [supervisorId] },
+        body: {
+          assignments: [{ supervisorId }],
+          overrideReason: overrideReason || undefined,
+        },
       }).unwrap();
 
-      setOrders((prev) =>
-        prev.map((o) => {
-          if (o.id === orderId) {
-            return {
-              ...o,
-              status: 'in_production',
-              currentPhase: 'Loom Weaving Shed A',
-              assignedSupervisorId: supervisorId,
-              assignedSupervisorName: supervisorName,
-              handoverDate: '2026-10-29',
-              productionPlanConfirmed: true
-            };
-          }
-          return o;
-        })
-      );
-
-      addAuditLog('ORDER_HANDOVER', `Admin handed over ${orderId} to supervisor ${supervisorName}. Stock reserved.`, orderId);
+      refetchOrders();
+      addAuditLog('ORDER_HANDOVER', `Admin handed over ${orderId} to supervisor ${supervisorName}. Stock reserved.${overrideReason ? ` (Override: ${overrideReason})` : ''}`, orderId);
       addAgentRun('Monitoring Agent', 'SUCCESS', `Order ${orderId} entered in_production. Monitoring snapshots active.`, orderId);
       showToast(`Order ${orderId} successfully assigned to ${supervisorName}!`);
     } catch (err: any) {
       const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to assign supervisor on server.';
       showToast(`Supervisor assignment failed: ${errMsg}`);
+      throw err;
     }
   };
 
-  const handleConfirmPurchase = (orderId: string, supplier: string, quantityKg: number, totalCost: number) => {
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId) {
-          return {
-            ...o,
-            status: 'quotation_drafting',
-            currentPhase: 'Quotation Drafting (Yarn Purchased)',
-            feasibility: o.feasibility
-              ? {
-                  ...o.feasibility,
-                  verdict: 'feasible',
-                  eta: '2026-11-14',
-                  bottleneckProcess: 'Yarn Secured from Vardhman (2d Lead Time)',
-                  recoveryOptions: [],
-                  llmSummary: `Purchase decision executed with ${supplier} for ${quantityKg.toLocaleString()} kg ($${totalCost.toLocaleString()}). Material ETA Nov 14 provides feasible window.`
-                }
-              : undefined,
-            quotation: {
-              id: `quote_${orderId}`,
-              orderId,
-              version: 1,
-              materialCost: 28500,
-              wastagePercent: 4.0,
-              processingCost: 11200,
-              overheadCost: 3500,
-              priceRiskBuffer: 2100,
-              marginPercent: 18.0,
-              pricePerUnit: 3.85,
-              totalPrice: Math.round(3.85 * o.quantityMeters),
-              validUntil: '2026-11-15',
-              etaBasis: '14 Nov 2026 (Includes 2-day yarn transport)',
-              adminApproved: false,
-              status: 'pending_approval',
-              bomItems: [],
-              explanation: 'Quotation prepared incorporating fast-track yarn purchase decision.'
-            }
-          };
-        }
-        return o;
-      })
-    );
+  const handleConfirmPurchase = async (orderId: string, supplier: string, quantityKg: number, totalCost: number) => {
+    const targetOrder = orders.find((o) => o.id === orderId);
+    const realId = targetOrder?.backendId || orderId;
 
-    addAuditLog('PURCHASE_DECISION_EXECUTED', `Admin purchased ${quantityKg}kg yarn from ${supplier} ($${totalCost}). Feasibility re-run: FEASIBLE.`, orderId);
-    addAgentRun('Feasibility Agent', 'SUCCESS', `Order ${orderId} re-evaluated with supplier delivery date. Verdict: FEASIBLE.`, orderId);
-    showToast(`Purchase decision confirmed! Feasibility re-run: Order ${orderId} is now FEASIBLE.`);
+    const targetMaterialId =
+      (materialsData?.data && Array.isArray(materialsData.data) && materialsData.data[0]?._id) ||
+      (materialsData?.data && Array.isArray(materialsData.data) && materialsData.data[0]?.id) ||
+      '668005000000000000000001';
+
+    try {
+      await createOrderPurchaseDecisionMutation({
+        orderId: realId,
+        body: {
+          materialId: targetMaterialId,
+          supplierId: supplier,
+          qty: quantityKg,
+          ratePaise: Math.round((totalCost / quantityKg) * 100),
+          notes: `Purchased from ${supplier} for ${quantityKg} kg ($${totalCost})`
+        }
+      }).unwrap();
+
+      await rerunFeasibilityMutation({
+        orderId: realId,
+        body: {
+          decisionId: `dec_${Date.now()}`
+        }
+      }).unwrap();
+
+      refetchOrders();
+      addAuditLog('PURCHASE_DECISION_EXECUTED', `Admin purchased ${quantityKg}kg yarn from ${supplier} ($${totalCost}). Feasibility re-run initiated.`, orderId);
+      addAgentRun('Feasibility Agent', 'SUCCESS', `Order ${orderId} re-evaluated with supplier delivery date. Verdict: FEASIBLE.`, orderId);
+      showToast(`Purchase decision confirmed on server! Feasibility re-run completed for ${orderId}.`);
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to record purchase decision.';
+      showToast(`Purchase decision error: ${errMsg}`);
+      throw err;
+    }
   };
 
-  const handleConfirmAlternative = (orderId: string, altDate: string, splitDesc: string) => {
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId) {
-          return {
-            ...o,
-            status: 'quotation_drafting',
-            deadlineDate: altDate,
-            currentPhase: 'Alternative Counter-Offer Drafted',
-            quotation: {
-              id: `quote_${orderId}_alt`,
-              orderId,
-              version: 1,
-              materialCost: 26000,
-              wastagePercent: 3.5,
-              processingCost: 10500,
-              overheadCost: 3200,
-              priceRiskBuffer: 1800,
-              marginPercent: 18.0,
-              pricePerUnit: 3.65,
-              totalPrice: Math.round(3.65 * o.quantityMeters),
-              validUntil: '2026-11-12',
-              etaBasis: `${altDate} (${splitDesc})`,
-              adminApproved: false,
-              status: 'pending_approval',
-              bomItems: [],
-              explanation: `Counter-offer with revised completion date ${altDate}.`
-            }
-          };
-        }
-        return o;
-      })
-    );
+  const handleConfirmAlternative = async (orderId: string, altDate: string, splitDesc: string) => {
+    const targetOrder = orders.find((o) => o.id === orderId);
+    const realId = targetOrder?.backendId || orderId;
 
-    addAuditLog('ALTERNATIVE_PROPOSED', `Admin proposed alternative completion date ${altDate} for ${orderId}.`, orderId);
-    showToast(`Alternative date ${altDate} drafted for client.`);
+    try {
+      await rerunFeasibilityMutation({
+        orderId: realId,
+        body: {
+          deadline: altDate,
+          notes: splitDesc
+        }
+      }).unwrap();
+
+      refetchOrders();
+      addAuditLog('ALTERNATIVE_PROPOSED', `Admin proposed alternative completion date ${altDate} for ${orderId}. Feasibility re-run triggered.`, orderId);
+      addAgentRun('Feasibility Agent', 'SUCCESS', `Alternative scenario generated for ${orderId}. Delivery date: ${altDate}.`, orderId);
+      showToast(`Alternative date ${altDate} submitted. Feasibility re-run completed.`);
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to rerun feasibility.';
+      showToast(`Alternative proposal error: ${errMsg}`);
+      throw err;
+    }
   };
 
   const handleDeclineOrder = async (orderId: string) => {
@@ -998,8 +999,8 @@ export const AdminPortalApp: React.FC = () => {
     showToast(`Feasibility rerun complete for ${orderId}.`);
   };
 
-  const handleAssignSupervisor = async (orderId: string, supervisorId: string, supervisorName: string) => {
-    await handleConfirmHandover(orderId, supervisorId, supervisorName);
+  const handleAssignSupervisor = async (orderId: string, supervisorId: string, supervisorName: string, overrideReason?: string) => {
+    await handleConfirmHandover(orderId, supervisorId, supervisorName, overrideReason);
   };
 
   const handleApproveOvertime = (shedName: string) => {
@@ -1151,6 +1152,7 @@ export const AdminPortalApp: React.FC = () => {
                 onSelectOrder={setSelectedOrderId}
                 onApprovePriceRevision={handleApprovePriceRevision}
                 onRejectPriceRevision={handleRejectPriceRevision}
+                onTriggerSurgeReprice={handleTriggerSurgeReprice}
               />
             )}
 

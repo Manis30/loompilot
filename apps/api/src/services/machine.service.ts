@@ -264,7 +264,7 @@ export class MachineService {
         if (unresolved.length > 0 && unresolved[0]) {
           throw new AppError(
             ErrorCode.VALIDATION_FAILED,
-            `Cannot mark machine available: active breakdown ticket '${unresolved[0]._id}' is still unresolved`,
+            `Cannot mark machine available: active breakdown ticket '${(unresolved[0] as any)?._id || unresolved[0]._id}' is still unresolved`,
             400
           );
         }

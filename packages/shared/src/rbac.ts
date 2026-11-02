@@ -347,6 +347,24 @@ export const ROUTE_PERMISSION_MATRIX: Record<string, RoutePermission> = {
   },
 
   // Materials CRUD & Market Rates
+  "GET /api/v1/market-prices": {
+    routeKey: "GET /api/v1/market-prices",
+    method: "GET",
+    path: "/api/v1/market-prices",
+    description: "Get real-time market prices, commodity benchmarks and volatility surges",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin", "supervisor"],
+    idempotent: false,
+  },
+  "POST /api/v1/market-prices/trigger-surge-reprice": {
+    routeKey: "POST /api/v1/market-prices/trigger-surge-reprice",
+    method: "POST",
+    path: "/api/v1/market-prices/trigger-surge-reprice",
+    description: "Trigger market surge re-quotation for unprotected orders",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin"],
+    idempotent: false,
+  },
   "GET /api/v1/materials": {
     routeKey: "GET /api/v1/materials",
     method: "GET",
@@ -711,6 +729,24 @@ export const ROUTE_PERMISSION_MATRIX: Record<string, RoutePermission> = {
     allowedRealms: ["client"],
     idempotent: true,
   },
+  "GET /api/v1/client/notifications": {
+    routeKey: "GET /api/v1/client/notifications",
+    method: "GET",
+    path: "/api/v1/client/notifications",
+    description: "Get real-time order notifications for authenticated client",
+    allowedRealms: ["client", "user"],
+    allowedRoles: ["admin"],
+    idempotent: false,
+  },
+  "PATCH /api/v1/client/notifications/:id/read": {
+    routeKey: "PATCH /api/v1/client/notifications/:id/read",
+    method: "PATCH",
+    path: "/api/v1/client/notifications/:id/read",
+    description: "Mark a client notification as read",
+    allowedRealms: ["client", "user"],
+    allowedRoles: ["admin"],
+    idempotent: false,
+  },
 
   // Admin Orders Management (Phase C)
   "GET /api/v1/orders": {
@@ -784,6 +820,33 @@ export const ROUTE_PERMISSION_MATRIX: Record<string, RoutePermission> = {
     allowedRealms: ["user"],
     allowedRoles: ["admin"],
     idempotent: true,
+  },
+  "POST /api/v1/orders/:id/revisions/:revisionNo/approve": {
+    routeKey: "POST /api/v1/orders/:id/revisions/:revisionNo/approve",
+    method: "POST",
+    path: "/api/v1/orders/:id/revisions/:revisionNo/approve",
+    description: "Admin approves raw material surge price revision and notifies client",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin"],
+    idempotent: false,
+  },
+  "POST /api/v1/orders/:id/revisions/:revisionNo/reject": {
+    routeKey: "POST /api/v1/orders/:id/revisions/:revisionNo/reject",
+    method: "POST",
+    path: "/api/v1/orders/:id/revisions/:revisionNo/reject",
+    description: "Admin rejects price revision (mill absorbs surge)",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin"],
+    idempotent: false,
+  },
+  "POST /api/v1/orders/:id/feasibility/rerun": {
+    routeKey: "POST /api/v1/orders/:id/feasibility/rerun",
+    method: "POST",
+    path: "/api/v1/orders/:id/feasibility/rerun",
+    description: "Trigger rerun of feasibility analysis after purchase or schedule alternative",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin"],
+    idempotent: false,
   },
 
   // Gateway Routes for AI Agents (Phase C)

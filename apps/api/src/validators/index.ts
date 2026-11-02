@@ -762,6 +762,7 @@ export const PurchaseDecisionCreateSchema = z.object({
   ratePaise: z.number().int().positive("ratePaise must be positive integer"),
   expectedArrivalDate: z.string().optional(),
   supplierOrderNo: z.string().optional(),
+  overrideReason: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -775,6 +776,7 @@ export const PurchaseRequestDirectCreateSchema = z.object({
   optionId: z.string().optional(),
   expectedArrivalDate: z.string().optional(),
   supplierOrderNo: z.string().optional(),
+  overrideReason: z.string().optional(),
   notes: z.string().optional(),
 });
 

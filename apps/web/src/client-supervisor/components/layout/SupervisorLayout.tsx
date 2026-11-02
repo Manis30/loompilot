@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink, Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, Link, Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Package,
@@ -162,6 +162,8 @@ export const SupervisorLayout: React.FC = () => {
     closeDailyUpdateModal();
     setReportStep(1);
   };
+
+  if (!profile) return <Navigate to="/login" replace />;
 
   return (
     <div className="min-h-screen bg-[#FBF6F0] flex flex-col font-sans text-[#252622]">

@@ -246,3 +246,21 @@ orderRouter.post(
   convController.resolveEscalation
 );
 
+orderRouter.post(
+  "/:id/revisions/:revisionNo/approve",
+  authorize("POST /api/v1/orders/:id/revisions/:revisionNo/approve"),
+  controller.approveQuotationRevision
+);
+
+orderRouter.post(
+  "/:id/revisions/:revisionNo/reject",
+  authorize("POST /api/v1/orders/:id/revisions/:revisionNo/reject"),
+  controller.rejectQuotationRevision
+);
+
+orderRouter.post(
+  "/:id/feasibility/rerun",
+  authorize("POST /api/v1/orders/:id/feasibility/rerun"),
+  validateParams(IdParamSchema),
+  controller.rerunFeasibility
+);

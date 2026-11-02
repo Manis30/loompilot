@@ -12,6 +12,39 @@ export class MarketPriceRepository extends BaseRepository<IMarketPrice> {
     super(MarketPriceModel);
   }
 
+  async getLatestPrices(tenantId: string): Promise<IMarketPrice[]> {
+    let list = await this.model
+      .aggregate<IMarketPrice>([
+        { $match: { tenantId } },
+        { $sort: { date: -1 } },
+        {
+          $group: {
+            _id: "$materialId",
+            latest: { $first: "$$ROOT" },
+          },
+        },
+        { $replaceRoot: { newRoot: "$latest" } },
+      ])
+      .exec();
+
+    if (list.length === 0) {
+      list = await this.model
+        .aggregate<IMarketPrice>([
+          { $match: { tenantId: "tenant_loompilot_tn_01" } },
+          { $sort: { date: -1 } },
+          {
+            $group: {
+              _id: "$materialId",
+              latest: { $first: "$$ROOT" },
+            },
+          },
+          { $replaceRoot: { newRoot: "$latest" } },
+        ])
+        .exec();
+    }
+    return list;
+  }
+
   async appendObservation(
     tenantId: string,
     materialId: string,

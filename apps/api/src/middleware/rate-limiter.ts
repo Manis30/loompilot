@@ -52,6 +52,12 @@ export class RedisRateLimitStore implements Store {
   }
 
   async increment(key: string): Promise<IncrementResponse> {
+    if (process.env.USE_REDIS_MOCK === "true") {
+      return {
+        totalHits: 1,
+        resetTime: new Date(Date.now() + this.windowMs),
+      };
+    }
     const fullKey = `${this.prefix}${key}`;
     try {
       // Execute atomic Lua script

@@ -115,7 +115,7 @@ export interface IssueTicket {
   severity: 'Critical' | 'High' | 'Medium' | 'Low';
   description: string;
   impact: string;
-  status: 'Technician Assigned' | 'Under Investigation' | 'Resolved' | 'Open';
+  status: 'Technician Assigned' | 'Under Investigation' | 'Resolved' | 'Open' | 'Pending';
   adminResponse?: string;
   priority?: string;
   shed?: string;

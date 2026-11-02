@@ -1064,18 +1064,54 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
   }, [enrichedOrders, selectedOrderId]);
 
   // Active Selected Product
-  const currentProduct = useMemo(() => {
-    if (!currentOrder || !currentOrder.products || currentOrder.products.length === 0) return undefined;
+  const defaultProduct: ProductProductionItem = useMemo(() => ({
+    id: `${currentOrder?.id || 'LP'}-A`,
+    name: currentOrder?.productCategory || 'Textile Roll',
+    designCode: 'DES-01',
+    category: currentOrder?.productCategory || 'Textiles',
+    quantity: currentOrder?.totalQuantity || 1000,
+    completedQuantity: 0,
+    rejectedQuantity: 0,
+    remainingQuantity: currentOrder?.totalQuantity || 1000,
+    currentStage: 'Warping & Sizing',
+    progressPercent: 0,
+    riskStatus: 'on_track',
+    stages: [],
+  }), [currentOrder]);
+
+  const currentProduct: ProductProductionItem = useMemo(() => {
+    if (!currentOrder || !currentOrder.products || currentOrder.products.length === 0) return defaultProduct;
     const found = currentOrder.products.find((p) => p.id === selectedProductId);
-    return found || currentOrder.products[0];
-  }, [currentOrder, selectedProductId]);
+    return found || currentOrder.products[0] || defaultProduct;
+  }, [currentOrder, selectedProductId, defaultProduct]);
 
   // Active Production Stage of the current product
-  const currentActiveStage = useMemo(() => {
-    if (!currentProduct || !currentProduct.stages || currentProduct.stages.length === 0) return undefined;
+  const defaultStage: ProductionStageDetail = useMemo(() => ({
+    id: `${currentProduct.id}_stg_1`,
+    stageNumber: 1,
+    name: 'Warping & Sizing',
+    department: 'Spinning Shed A',
+    status: 'in_progress',
+    plannedStartDate: 'Today',
+    actualStartDate: 'Today',
+    plannedCompletionDate: 'Upcoming',
+    actualCompletionDate: 'Pending',
+    targetQuantity: currentProduct.quantity,
+    producedQuantity: currentProduct.completedQuantity,
+    rejectedQuantity: 0,
+    remainingQuantity: currentProduct.remainingQuantity,
+    assignedSupervisor: 'Floor Supervisor',
+    assignedMachine: 'Loom-01',
+    workersCount: 10,
+    dailyTarget: 500,
+    dailyActual: 500,
+  }), [currentProduct]);
+
+  const currentActiveStage: ProductionStageDetail = useMemo(() => {
+    if (!currentProduct.stages || currentProduct.stages.length === 0) return defaultStage;
     const inProg = currentProduct.stages.find((s) => s.status === 'in_progress' || s.status === 'delayed');
-    return inProg || currentProduct.stages[currentProduct.stages.length - 1];
-  }, [currentProduct]);
+    return inProg || currentProduct.stages[currentProduct.stages.length - 1] || defaultStage;
+  }, [currentProduct, defaultStage]);
 
   // Synchronize shiftForm with active selected order and product
   useEffect(() => {
