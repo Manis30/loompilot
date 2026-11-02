@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { setAuthCookies, clearAuthCookies, getAuthCookie } from '../../utils/cookieUtils';
 
 export interface AuthUser {
   id: string;
@@ -19,7 +20,11 @@ export interface AuthState {
 
 const getInitialToken = (): string | null => {
   try {
-    return localStorage.getItem('loompilot_token');
+    return (
+      localStorage.getItem('loompilot_token') ||
+      getAuthCookie('loompilot_token') ||
+      getAuthCookie('access_token')
+    );
   } catch {
     return null;
   }
@@ -28,7 +33,20 @@ const getInitialToken = (): string | null => {
 const getInitialUser = (): AuthUser | null => {
   try {
     const raw = localStorage.getItem('loompilot_user');
-    return raw ? JSON.parse(raw) : null;
+    if (raw) return JSON.parse(raw);
+
+    const token = getAuthCookie('loompilot_token') || getAuthCookie('access_token');
+    const roleCookie = getAuthCookie('loompilot_role');
+    if (token && roleCookie) {
+      return {
+        id: 'auth_restored',
+        email: '',
+        name: roleCookie.toUpperCase(),
+        role: roleCookie,
+        tenantId: 'tenant_loompilot_tn_01',
+      };
+    }
+    return null;
   } catch {
     return null;
   }
@@ -37,7 +55,10 @@ const getInitialUser = (): AuthUser | null => {
 const getInitialRealm = (): 'user' | 'client' => {
   try {
     const realm = localStorage.getItem('loompilot_realm');
-    return realm === 'client' ? 'client' : 'user';
+    if (realm === 'client') return 'client';
+    const roleCookie = getAuthCookie('loompilot_role');
+    if (roleCookie === 'client') return 'client';
+    return 'user';
   } catch {
     return 'user';
   }
@@ -63,7 +84,7 @@ export const authSlice = createSlice({
     ) => {
       state.user = action.payload.user;
       state.token = action.payload.token;
-      state.realm = action.payload.realm || 'user';
+      state.realm = action.payload.realm || (action.payload.user.role === 'client' ? 'client' : 'user');
       state.isAuthenticated = true;
 
       try {
@@ -73,6 +94,9 @@ export const authSlice = createSlice({
       } catch (err) {
         console.warn('Failed to persist auth credentials:', err);
       }
+
+      // Persist to document.cookie as well
+      setAuthCookies(action.payload.token, action.payload.user.role);
     },
     updateUser: (state, action: PayloadAction<Partial<AuthUser>>) => {
       if (state.user) {
@@ -81,6 +105,9 @@ export const authSlice = createSlice({
           localStorage.setItem('loompilot_user', JSON.stringify(state.user));
         } catch (err) {
           console.warn('Failed to persist updated user:', err);
+        }
+        if (action.payload.role) {
+          setAuthCookies(state.token || '', action.payload.role);
         }
       }
     },
@@ -96,10 +123,12 @@ export const authSlice = createSlice({
       } catch (err) {
         console.warn('Failed to clear auth from localStorage:', err);
       }
+
+      // Remove tokens and role from cookies
+      clearAuthCookies();
     },
   },
 });
 
 export const { setCredentials, updateUser, logout } = authSlice.actions;
 export default authSlice.reducer;
-

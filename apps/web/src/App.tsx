@@ -3,6 +3,9 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './client-supervisor/context/AuthContext';
 import { AppProvider } from './client-supervisor/context/AppContext';
 import { SupervisorProvider } from './client-supervisor/context/SupervisorContext';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { useAppSelector } from './store/hooks';
+import { getAuthCookie } from './utils/cookieUtils';
 
 // Global Role & Portal Switcher
 import { GlobalPortalSwitcher } from './components/common/GlobalPortalSwitcher';
@@ -96,31 +99,92 @@ const PageFallback: React.FC = () => (
   </div>
 );
 
+const RootRedirect: React.FC = () => {
+  const auth = useAppSelector((state) => state.auth);
+  const token =
+    auth.token ||
+    (typeof window !== 'undefined' ? localStorage.getItem('loompilot_token') : null) ||
+    getAuthCookie('loompilot_token') ||
+    getAuthCookie('access_token');
+
+  let role: string | null = auth.user?.role?.toLowerCase() || null;
+  if (!role && typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('loompilot_user');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.role) role = parsed.role.toLowerCase();
+      }
+    } catch {}
+  }
+  if (!role) {
+    const cookieRole = getAuthCookie('loompilot_role');
+    if (cookieRole) role = cookieRole.toLowerCase();
+  }
+  if (!role && typeof window !== 'undefined') {
+    const realm = localStorage.getItem('loompilot_realm');
+    if (realm === 'client') role = 'client';
+  }
+
+  if (!token || !role) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (role === 'admin') return <Navigate to="/admin" replace />;
+  if (role === 'supervisor') return <Navigate to="/supervisor/dashboard" replace />;
+  if (role === 'client') return <Navigate to="/client/dashboard" replace />;
+
+  return <Navigate to="/login" replace />;
+};
+
 export const App: React.FC = () => {
   return (
     <AuthProvider>
       <AppProvider>
         <SupervisorProvider>
           <BrowserRouter>
-            {/* Global Portal Switcher (Switch between Admin, Client, Supervisor, and Hub anywhere) */}
+            {/* Global Portal Switcher (Reflects current role and prevents unauthorized portal jumping) */}
             <GlobalPortalSwitcher />
 
             <Suspense fallback={<PageFallback />}>
               <Routes>
-                {/* 1. Factory Admin Portal Routes (Default on root) */}
-                <Route path="/" element={<AdminPortalApp />} />
-                <Route path="/admin" element={<AdminPortalApp />} />
-                <Route path="/admin/:tab" element={<AdminPortalApp />} />
+                {/* 1. Dynamic Root Redirect based on verified role and authentication */}
+                <Route path="/" element={<RootRedirect />} />
 
-                {/* 2. Platform Hub & Unified Gateway */}
+                {/* 2. Factory Admin Portal Routes (Admin only access) */}
+                <Route
+                  path="/admin"
+                  element={
+                    <ProtectedRoute allowedRoles={['admin']}>
+                      <AdminPortalApp />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/:tab"
+                  element={
+                    <ProtectedRoute allowedRoles={['admin']}>
+                      <AdminPortalApp />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* 3. Platform Hub & Unified Gateway */}
                 <Route path="/hub" element={<UnifiedGatewayPage />} />
                 <Route path="/gateway" element={<UnifiedGatewayPage />} />
                 <Route path="/login" element={<UnifiedLoginPage />} />
-                <Route path="/client/login" element={<UnifiedLoginPage />} />
-                <Route path="/client/register" element={<Navigate to="/client/dashboard" replace />} />
+                <Route path="/client/login" element={<Navigate to="/login" replace />} />
+                <Route path="/client/register" element={<Navigate to="/login" replace />} />
 
-                {/* 3. Protected Client Portal Routes */}
-                <Route path="/client" element={<ClientLayout />}>
+                {/* 4. Protected Client Portal Routes (Client only access) */}
+                <Route
+                  path="/client"
+                  element={
+                    <ProtectedRoute allowedRoles={['client']}>
+                      <ClientLayout />
+                    </ProtectedRoute>
+                  }
+                >
                   <Route index element={<Navigate to="/client/dashboard" replace />} />
                   <Route path="dashboard" element={<OverviewPage />} />
                   <Route path="products" element={<ProductCataloguePage />} />
@@ -136,8 +200,15 @@ export const App: React.FC = () => {
                   <Route path="settings" element={<SettingsPage />} />
                 </Route>
 
-                {/* 4. Mill Supervisor Portal Routes */}
-                <Route path="/supervisor" element={<SupervisorLayout />}>
+                {/* 5. Mill Supervisor Portal Routes (Supervisor only access) */}
+                <Route
+                  path="/supervisor"
+                  element={
+                    <ProtectedRoute allowedRoles={['supervisor']}>
+                      <SupervisorLayout />
+                    </ProtectedRoute>
+                  }
+                >
                   <Route index element={<Navigate to="/supervisor/dashboard" replace />} />
                   <Route path="dashboard" element={<SupervisorDashboardPage />} />
                   <Route path="orders" element={<SupervisorOrdersPage />} />

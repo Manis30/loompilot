@@ -4,6 +4,7 @@ import type { AdminUser } from '../../types';
 import { useLoginStaffMutation } from '../../store/api/authApi';
 import { useAppDispatch } from '../../store/hooks';
 import { setCredentials } from '../../store/slices/authSlice';
+import { setAuthCookies } from '../../utils/cookieUtils';
 
 interface AdminLoginProps {
   onLogin: (user: AdminUser) => void;
@@ -60,6 +61,7 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin }) => {
           realm: 'user',
         })
       );
+      setAuthCookies(res.accessToken, 'admin');
 
       // Session established with verified backend admin identity
       onLogin({

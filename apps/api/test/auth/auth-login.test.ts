@@ -28,11 +28,14 @@ describe("Stage 3: Authentication & Login Flow", () => {
     expect(res.body.user.role).toBe(user.role);
     expect(res.body.user.passwordHash).toBeUndefined();
 
-    // Verify Set-Cookie header contains refresh_token
+    // Verify Set-Cookie header contains refreshToken, access_token, loompilot_token, and loompilot_role
     const cookies = res.headers["set-cookie"];
     expect(cookies).toBeDefined();
     const cookieString = Array.isArray(cookies) ? cookies.join(";") : String(cookies);
     expect(cookieString).toContain("refreshToken=");
+    expect(cookieString).toContain("access_token=");
+    expect(cookieString).toContain("loompilot_token=");
+    expect(cookieString).toContain("loompilot_role=");
     expect(cookieString).toContain("HttpOnly");
   });
 
@@ -52,6 +55,50 @@ describe("Stage 3: Authentication & Login Flow", () => {
     expect(res.body.clientAccount.email).toBe(account.email);
     expect(res.body.clientAccount.clientId).toBe(String(account.clientId));
     expect(res.body.clientAccount.passwordHash).toBeUndefined();
+
+    const cookies = res.headers["set-cookie"];
+    expect(cookies).toBeDefined();
+    const cookieString = Array.isArray(cookies) ? cookies.join(";") : String(cookies);
+    expect(cookieString).toContain("access_token=");
+    expect(cookieString).toContain("loompilot_token=");
+    expect(cookieString).toContain("loompilot_role=client");
+  });
+
+  it("Authenticates successfully using access_token cookie without Bearer header", async () => {
+    const { user, plainPassword } = await createTestUser({ email: "cookie.auth@loompilot.local" });
+
+    const loginRes = await request(app)
+      .post("/api/v1/auth/login")
+      .send({
+        tenantId: user.tenantId,
+        email: user.email,
+        password: plainPassword,
+      });
+
+    expect(loginRes.status).toBe(200);
+    const token = loginRes.body.accessToken;
+
+    // Call /api/v1/me passing ONLY cookie, without Authorization header
+    const meRes = await request(app)
+      .get("/api/v1/me")
+      .set("Cookie", [`access_token=${token}`]);
+
+    expect(meRes.status).toBe(200);
+    expect(meRes.body.profile.email).toBe(user.email);
+  });
+
+  it("Clears all auth cookies on logout", async () => {
+    const logoutRes = await request(app)
+      .post("/api/v1/auth/logout")
+      .send();
+
+    expect(logoutRes.status).toBe(200);
+    const cookies = logoutRes.headers["set-cookie"];
+    expect(cookies).toBeDefined();
+    const cookieString = Array.isArray(cookies) ? cookies.join(";") : String(cookies);
+    expect(cookieString).toContain("access_token=;");
+    expect(cookieString).toContain("loompilot_token=;");
+    expect(cookieString).toContain("loompilot_role=;");
   });
 
   it("Returns identical generic error message for invalid email vs wrong password (no enumeration)", async () => {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useApp } from '../../context/AppContext';
@@ -9,14 +9,16 @@ import {
   ShieldCheck,
   Building,
   Factory,
+  Shield,
   Zap,
   ArrowUpRight,
   User,
   AlertCircle,
 } from 'lucide-react';
 import { useLoginStaffMutation, useLoginClientMutation } from '../../../store/api/authApi';
-import { useAppDispatch } from '../../../store/hooks';
+import { useAppDispatch, useAppSelector } from '../../../store/hooks';
 import { setCredentials } from '../../../store/slices/authSlice';
+import { setAuthCookies, getAuthCookie } from '../../../utils/cookieUtils';
 
 const isDemoEnabled = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
 
@@ -25,24 +27,72 @@ export const UnifiedLoginPage: React.FC = () => {
   const { addToast } = useApp();
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
+  const authState = useAppSelector((state) => state.auth);
 
   const [loginStaff, { isLoading: isStaffLoading }] = useLoginStaffMutation();
   const [loginClient, { isLoading: isClientLoading }] = useLoginClientMutation();
 
-  // Active Tab: 'client' or 'supervisor'
-  const [activeRole, setActiveRole] = useState<'client' | 'supervisor'>('client');
+  // Active Tab: 'admin' | 'supervisor' | 'client'
+  const [activeRole, setActiveRole] = useState<'admin' | 'supervisor' | 'client'>('admin');
 
-  // Form Fields - Unfilled in standard operational mode
-  const [clientEmail, setClientEmail] = useState('');
-  const [clientPassword, setClientPassword] = useState('');
+  // Form Fields
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
 
   const [supervisorId, setSupervisorId] = useState('');
   const [supervisorPassword, setSupervisorPassword] = useState('');
 
+  const [clientEmail, setClientEmail] = useState('');
+  const [clientPassword, setClientPassword] = useState('');
+
   const [isLoading, setIsLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // 1-Click Direct Login (Available only in explicit demo configuration)
+  // If user is already authenticated with a valid role, route directly to their portal
+  useEffect(() => {
+    const token =
+      authState.token ||
+      (typeof window !== 'undefined' ? localStorage.getItem('loompilot_token') : null) ||
+      getAuthCookie('loompilot_token') ||
+      getAuthCookie('access_token');
+
+    let role: string | null = authState.user?.role?.toLowerCase() || null;
+    if (!role && typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('loompilot_user');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed.role) role = parsed.role.toLowerCase();
+        }
+      } catch {}
+    }
+    if (!role) {
+      const cookieRole = getAuthCookie('loompilot_role');
+      if (cookieRole) role = cookieRole.toLowerCase();
+    }
+
+    if (token && role) {
+      if (role === 'admin') {
+        navigate('/admin', { replace: true });
+      } else if (role === 'supervisor') {
+        navigate('/supervisor/dashboard', { replace: true });
+      } else if (role === 'client') {
+        navigate('/client/dashboard', { replace: true });
+      }
+    }
+  }, [authState.token, authState.user, navigate]);
+
+  // 1-Click Direct Demo Logins (Available ONLY when demo mode is enabled)
+  const handleDirectAdminLogin = () => {
+    if (!isDemoEnabled) {
+      setFormError('Direct demo login is disabled in standard operation.');
+      return;
+    }
+    setAdminEmail('admin@mill.loompilot.local');
+    setAdminPassword('AdminSecret123!');
+    setActiveRole('admin');
+  };
+
   const handleDirectClientLogin = () => {
     if (!isDemoEnabled) {
       setFormError('Direct demo login is disabled in standard operation.');
@@ -70,22 +120,115 @@ export const UnifiedLoginPage: React.FC = () => {
     setIsLoading(false);
   };
 
-  // Form Submit Handler (Connected strictly to Backend Authentication)
+  // Form Submit Handler (Connected strictly to Backend Authentication & Cookies)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setFormError(null);
 
-    if (activeRole === 'client') {
+    const configuredTenantId =
+      (import.meta as any).env?.VITE_DEFAULT_TENANT_ID ||
+      (import.meta as any).env?.VITE_TENANT_ID ||
+      undefined;
+
+    if (activeRole === 'admin') {
+      try {
+        if (!adminEmail.trim() || !adminPassword) {
+          throw new Error('Please enter both administrator email and password.');
+        }
+
+        const res = await loginStaff({
+          email: adminEmail.trim(),
+          password: adminPassword,
+          ...(configuredTenantId ? { tenantId: configuredTenantId } : {}),
+        }).unwrap();
+
+        if (!res?.accessToken || !res?.user) {
+          throw new Error('Authentication response did not contain valid access token.');
+        }
+
+        const authUser = res.user;
+
+        if (authUser.role !== 'admin') {
+          throw new Error('Access denied: account does not have administrator privileges.');
+        }
+
+        // Store in Redux, LocalStorage, and Cookies
+        dispatch(
+          setCredentials({
+            user: authUser,
+            token: res.accessToken,
+            realm: 'user',
+          })
+        );
+        setAuthCookies(res.accessToken, 'admin');
+
+        addToast(`Welcome Administrator ${authUser.name}!`, 'success');
+        navigate('/admin');
+      } catch (err: any) {
+        const message =
+          err?.data?.error?.message ||
+          err?.data?.message ||
+          err?.error ||
+          err?.message ||
+          'Invalid administrator credentials. Please check your email and password.';
+        setFormError(message);
+        addToast(message, 'error');
+      } finally {
+        setIsLoading(false);
+      }
+    } else if (activeRole === 'supervisor') {
+      try {
+        if (!supervisorId.trim() || !supervisorPassword) {
+          throw new Error('Please enter both supervisor ID/email and password.');
+        }
+
+        const res = await loginStaff({
+          email: supervisorId.trim(),
+          password: supervisorPassword,
+          ...(configuredTenantId ? { tenantId: configuredTenantId } : {}),
+        }).unwrap();
+
+        if (!res?.accessToken || !res?.user) {
+          throw new Error('Authentication response did not contain valid access token.');
+        }
+
+        const authUser = res.user;
+
+        if (authUser.role !== 'supervisor') {
+          throw new Error('Access denied: account does not have supervisor privileges.');
+        }
+
+        // Store in Redux, LocalStorage, and Cookies
+        dispatch(
+          setCredentials({
+            user: authUser,
+            token: res.accessToken,
+            realm: 'user',
+          })
+        );
+        setAuthCookies(res.accessToken, 'supervisor');
+
+        addToast(`Welcome ${authUser.name}! Connected to Production Floor.`, 'success');
+        navigate('/supervisor/dashboard');
+      } catch (err: any) {
+        const message =
+          err?.data?.error?.message ||
+          err?.data?.message ||
+          err?.error ||
+          err?.message ||
+          'Invalid supervisor credentials. Please check your ID and password.';
+        setFormError(message);
+        addToast(message, 'error');
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      // activeRole === 'client'
       try {
         if (!clientEmail.trim() || !clientPassword) {
           throw new Error('Please enter both client work email and password.');
         }
-
-        const configuredTenantId =
-          (import.meta as any).env?.VITE_DEFAULT_TENANT_ID ||
-          (import.meta as any).env?.VITE_TENANT_ID ||
-          undefined;
 
         const res = await loginClient({
           email: clientEmail.trim(),
@@ -103,6 +246,7 @@ export const UnifiedLoginPage: React.FC = () => {
           throw new Error('Access denied: account does not have client privileges.');
         }
 
+        // Store in Redux, LocalStorage, and Cookies
         dispatch(
           setCredentials({
             user: authUser,
@@ -110,6 +254,7 @@ export const UnifiedLoginPage: React.FC = () => {
             realm: 'client',
           })
         );
+        setAuthCookies(res.accessToken, 'client');
 
         // Update AuthContext profile with confirmed server identity
         login(clientEmail, clientPassword, {
@@ -144,56 +289,6 @@ export const UnifiedLoginPage: React.FC = () => {
       } finally {
         setIsLoading(false);
       }
-    } else {
-      try {
-        if (!supervisorId.trim() || !supervisorPassword) {
-          throw new Error('Please enter both staff ID and password.');
-        }
-
-        const configuredTenantId =
-          (import.meta as any).env?.VITE_DEFAULT_TENANT_ID ||
-          (import.meta as any).env?.VITE_TENANT_ID ||
-          undefined;
-
-        const res = await loginStaff({
-          email: supervisorId.trim(),
-          password: supervisorPassword,
-          ...(configuredTenantId ? { tenantId: configuredTenantId } : {}),
-        }).unwrap();
-
-        if (!res?.accessToken || !res?.user) {
-          throw new Error('Authentication response did not contain valid access token.');
-        }
-
-        const authUser = res.user;
-
-        // Only navigate after the backend accepts credentials and the returned role matches the requested portal
-        if (authUser.role !== 'supervisor') {
-          throw new Error('Access denied: account does not have supervisor portal privileges.');
-        }
-
-        dispatch(
-          setCredentials({
-            user: authUser,
-            token: res.accessToken,
-            realm: 'user',
-          })
-        );
-
-        addToast(`Welcome ${authUser.name}! Connected to Production Floor.`, 'success');
-        navigate('/supervisor/dashboard');
-      } catch (err: any) {
-        const message =
-          err?.data?.error?.message ||
-          err?.data?.message ||
-          err?.error ||
-          err?.message ||
-          'Invalid supervisor credentials. Please check your ID and password.';
-        setFormError(message);
-        addToast(message, 'error');
-      } finally {
-        setIsLoading(false);
-      }
     }
   };
 
@@ -212,49 +307,43 @@ export const UnifiedLoginPage: React.FC = () => {
           LoomPilot Platform Portal
         </h1>
         <p className="mt-1.5 text-xs text-gray-500 font-medium">
-          Secure industrial gateway for textile mills, brands, and loom sheds
+          Secure industrial gateway for factory administrators, supervisors, and enterprise clients
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-lg">
-        <div className="bg-white py-8 px-6 shadow-xl shadow-black/5 rounded-3xl border border-[#EAE2D9] sm:px-10 space-y-6">
-
-          {/* Optional Demo Access Cards (Enabled only when VITE_ENABLE_DEMO_LOGIN === 'true') */}
+        <div className="bg-white py-8 px-6 shadow-xl shadow-black/5 rounded-2xl border border-[#EAE2D9] space-y-6">
+          {/* Explicit Demo Direct Logins (Rendered ONLY when VITE_ENABLE_DEMO_LOGIN === 'true') */}
           {isDemoEnabled && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <Zap size={16} className="text-[#E65338] fill-[#E65338]" />
-                <h2 className="text-xs font-extrabold uppercase tracking-wider text-[#252622]">
-                  1-Click Demo Profiles (Demo Environment)
-                </h2>
+            <div className="space-y-3 pb-5 border-b border-[#EAE2D9]">
+              <div className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wider text-[#252622]">
+                <Zap size={14} className="text-[#E65338]" />
+                <h2>Quick Demo Access</h2>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <button
                   type="button"
-                  onClick={handleDirectClientLogin}
+                  onClick={handleDirectAdminLogin}
                   disabled={isSubmitting}
-                  className="group relative p-4 rounded-xl border-2 border-[#EAE2D9] hover:border-[#252622] bg-[#FBF6F0] hover:bg-[#252622] transition-all duration-200 text-left flex flex-col justify-between shadow-sm hover:shadow-md disabled:opacity-60"
+                  className="group relative p-3 rounded-xl border border-[#EAE2D9] hover:border-[#1E3A8A] bg-[#FBF6F0] hover:bg-[#1E3A8A] transition-all duration-200 text-left flex flex-col justify-between shadow-sm disabled:opacity-60"
                 >
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="p-2 rounded-lg bg-white group-hover:bg-white/10 text-[#252622] group-hover:text-white transition-colors">
-                        <Building size={18} />
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="p-1.5 rounded-lg bg-white group-hover:bg-white/10 text-[#1E3A8A] group-hover:text-white transition-colors">
+                        <Shield size={16} />
                       </span>
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#E65338]/10 text-[#E65338] group-hover:bg-[#E65338] group-hover:text-white transition-colors">
-                        Client
+                      <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[#1E3A8A]/10 text-[#1E3A8A] group-hover:bg-white/20 group-hover:text-white transition-colors">
+                        Admin
                       </span>
                     </div>
-                    <div className="font-extrabold text-sm text-[#252622] group-hover:text-white transition-colors">
-                      Demo Client Portal
-                    </div>
-                    <div className="text-[11px] text-gray-500 group-hover:text-gray-300 mt-0.5 leading-snug">
-                      Preloaded brand sourcing workspace
+                    <div className="font-extrabold text-xs text-[#252622] group-hover:text-white transition-colors">
+                      Factory Admin
                     </div>
                   </div>
-                  <div className="mt-3.5 pt-2.5 border-t border-[#EAE2D9]/70 group-hover:border-white/10 flex items-center justify-between text-xs font-bold text-[#E65338] group-hover:text-white transition-colors">
-                    <span>Enter as Demo Client</span>
-                    <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                  <div className="mt-2 pt-2 border-t border-[#EAE2D9]/70 group-hover:border-white/10 flex items-center justify-between text-[11px] font-bold text-[#1E3A8A] group-hover:text-white transition-colors">
+                    <span>Fill Admin</span>
+                    <ArrowRight size={12} />
                   </div>
                 </button>
 
@@ -262,63 +351,85 @@ export const UnifiedLoginPage: React.FC = () => {
                   type="button"
                   onClick={handleDirectSupervisorLogin}
                   disabled={isSubmitting}
-                  className="group relative p-4 rounded-xl border-2 border-[#EAE2D9] hover:border-[#E65338] bg-[#FBF6F0] hover:bg-[#E65338] transition-all duration-200 text-left flex flex-col justify-between shadow-sm hover:shadow-md disabled:opacity-60"
+                  className="group relative p-3 rounded-xl border border-[#EAE2D9] hover:border-[#E65338] bg-[#FBF6F0] hover:bg-[#E65338] transition-all duration-200 text-left flex flex-col justify-between shadow-sm disabled:opacity-60"
                 >
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="p-2 rounded-lg bg-white group-hover:bg-white/10 text-[#E65338] group-hover:text-white transition-colors">
-                        <Factory size={18} />
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="p-1.5 rounded-lg bg-white group-hover:bg-white/10 text-[#E65338] group-hover:text-white transition-colors">
+                        <Factory size={16} />
                       </span>
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#20845A]/10 text-[#20845A] group-hover:bg-white group-hover:text-[#E65338] transition-colors">
-                        Supervisor
+                      <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[#E65338]/10 text-[#E65338] group-hover:bg-white/20 group-hover:text-white transition-colors">
+                        Shift
                       </span>
                     </div>
-                    <div className="font-extrabold text-sm text-[#252622] group-hover:text-white transition-colors">
-                      Demo Floor Supervisor
-                    </div>
-                    <div className="text-[11px] text-gray-500 group-hover:text-white/80 mt-0.5 leading-snug">
-                      Preloaded shift loom management
+                    <div className="font-extrabold text-xs text-[#252622] group-hover:text-white transition-colors">
+                      Supervisor
                     </div>
                   </div>
-                  <div className="mt-3.5 pt-2.5 border-t border-[#EAE2D9]/70 group-hover:border-white/10 flex items-center justify-between text-xs font-bold text-[#E65338] group-hover:text-white transition-colors">
-                    <span>Enter as Demo Supervisor</span>
-                    <ArrowUpRight size={14} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                  <div className="mt-2 pt-2 border-t border-[#EAE2D9]/70 group-hover:border-white/10 flex items-center justify-between text-[11px] font-bold text-[#E65338] group-hover:text-white transition-colors">
+                    <span>Supervisor</span>
+                    <ArrowUpRight size={12} />
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDirectClientLogin}
+                  disabled={isSubmitting}
+                  className="group relative p-3 rounded-xl border border-[#EAE2D9] hover:border-[#252622] bg-[#FBF6F0] hover:bg-[#252622] transition-all duration-200 text-left flex flex-col justify-between shadow-sm disabled:opacity-60"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="p-1.5 rounded-lg bg-white group-hover:bg-white/10 text-[#252622] group-hover:text-white transition-colors">
+                        <Building size={16} />
+                      </span>
+                      <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[#252622]/10 text-[#252622] group-hover:bg-white/20 group-hover:text-white transition-colors">
+                        Client
+                      </span>
+                    </div>
+                    <div className="font-extrabold text-xs text-[#252622] group-hover:text-white transition-colors">
+                      Brand Client
+                    </div>
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-[#EAE2D9]/70 group-hover:border-white/10 flex items-center justify-between text-[11px] font-bold text-[#252622] group-hover:text-white transition-colors">
+                    <span>Client</span>
+                    <ArrowRight size={12} />
                   </div>
                 </button>
               </div>
 
-              <div className="relative my-4 text-center">
+              <div className="relative my-3 text-center">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-[#EAE2D9]"></div>
                 </div>
-                <span className="relative px-3 bg-white text-[11px] font-bold uppercase tracking-wider text-gray-400">
-                  Or Authenticate With Credentials
+                <span className="relative px-3 bg-white text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                  Or Authenticate With Account
                 </span>
               </div>
             </div>
           )}
 
-          {/* Role Selector Tabs */}
+          {/* Role Selector Tabs (Admin, Supervisor, Client) */}
           <div>
             <div className="text-xs font-extrabold uppercase tracking-wider text-[#252622] mb-2.5">
-              Select Platform Role
+              Select Portal Role
             </div>
 
-            <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-[#FBF6F0] border border-[#EAE2D9]">
+            <div className="grid grid-cols-3 gap-1.5 p-1.5 rounded-2xl bg-[#FBF6F0] border border-[#EAE2D9]">
               <button
                 type="button"
                 onClick={() => {
-                  setActiveRole('client');
+                  setActiveRole('admin');
                   setFormError(null);
                 }}
-                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                  activeRole === 'client'
-                    ? 'bg-[#252622] text-white shadow-sm'
-                    : 'text-gray-500 hover:text-[#252622]'
+                className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  activeRole === 'admin'
+                    ? 'bg-[#1E3A8A] text-white shadow-sm'
+                    : 'text-gray-500 hover:text-[#1E3A8A]'
                 }`}
               >
-                <Building size={14} />
-                <span>Textile Brand / Client</span>
+                <Shield size={14} />
+                <span>Admin</span>
               </button>
 
               <button
@@ -327,14 +438,30 @@ export const UnifiedLoginPage: React.FC = () => {
                   setActiveRole('supervisor');
                   setFormError(null);
                 }}
-                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                   activeRole === 'supervisor'
                     ? 'bg-[#E65338] text-white shadow-sm'
-                    : 'text-gray-500 hover:text-[#252622]'
+                    : 'text-gray-500 hover:text-[#E65338]'
                 }`}
               >
                 <Factory size={14} />
-                <span>Mill Supervisor / Staff</span>
+                <span>Supervisor</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveRole('client');
+                  setFormError(null);
+                }}
+                className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  activeRole === 'client'
+                    ? 'bg-[#252622] text-white shadow-sm'
+                    : 'text-gray-500 hover:text-[#252622]'
+                }`}
+              >
+                <Building size={14} />
+                <span>Client</span>
               </button>
             </div>
           </div>
@@ -349,8 +476,101 @@ export const UnifiedLoginPage: React.FC = () => {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            {activeRole === 'client' ? (
-              /* Client Form Fields */
+            {activeRole === 'admin' && (
+              <>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#252622] mb-1.5">
+                    Administrator Email
+                  </label>
+                  <div className="relative">
+                    <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="email"
+                      value={adminEmail}
+                      onChange={(e) => setAdminEmail(e.target.value)}
+                      placeholder="admin@mill.loompilot.local"
+                      required
+                      className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] focus:bg-white focus:border-[#1E3A8A] focus:ring-2 focus:ring-[#1E3A8A]/10 focus:outline-none transition-all font-medium text-[#252622]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#252622] mb-1.5">
+                    Administrator Password
+                  </label>
+                  <div className="relative">
+                    <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="password"
+                      value={adminPassword}
+                      onChange={(e) => setAdminPassword(e.target.value)}
+                      placeholder="••••••••••••"
+                      required
+                      className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] focus:bg-white focus:border-[#1E3A8A] focus:ring-2 focus:ring-[#1E3A8A]/10 focus:outline-none transition-all font-medium text-[#252622]"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full py-3 px-4 rounded-xl text-sm font-bold text-white bg-[#1E3A8A] hover:bg-[#152B6B] shadow-md transition-all flex items-center justify-center gap-2 group mt-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <span>{isSubmitting ? 'Verifying Admin Session...' : 'Sign In to Admin Portal'}</span>
+                  <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                </button>
+              </>
+            )}
+
+            {activeRole === 'supervisor' && (
+              <>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#252622] mb-1.5">
+                    Supervisor / Staff ID or Email
+                  </label>
+                  <div className="relative">
+                    <User size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      value={supervisorId}
+                      onChange={(e) => setSupervisorId(e.target.value)}
+                      placeholder="supervisor@mill.loompilot.local"
+                      required
+                      className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] focus:bg-white focus:border-[#E65338] focus:ring-2 focus:ring-[#E65338]/10 focus:outline-none transition-all font-medium text-[#252622]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#252622] mb-1.5">
+                    Shift Access PIN / Password
+                  </label>
+                  <div className="relative">
+                    <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="password"
+                      value={supervisorPassword}
+                      onChange={(e) => setSupervisorPassword(e.target.value)}
+                      placeholder="••••••••••••"
+                      required
+                      className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] focus:bg-white focus:border-[#E65338] focus:ring-2 focus:ring-[#E65338]/10 focus:outline-none transition-all font-medium text-[#252622]"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full py-3 px-4 rounded-xl text-sm font-bold text-white bg-[#E65338] hover:bg-[#D24227] shadow-md shadow-[#E65338]/30 transition-all flex items-center justify-center gap-2 group mt-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <span>{isSubmitting ? 'Verifying Shift Access...' : 'Sign In to Supervisor Portal'}</span>
+                  <ArrowUpRight size={16} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                </button>
+              </>
+            )}
+
+            {activeRole === 'client' && (
               <>
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-[#252622] mb-1.5">
@@ -393,52 +613,6 @@ export const UnifiedLoginPage: React.FC = () => {
                 >
                   <span>{isSubmitting ? 'Authenticating...' : 'Sign In to Client Portal'}</span>
                   <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
-                </button>
-              </>
-            ) : (
-              /* Supervisor Form Fields */
-              <>
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-[#252622] mb-1.5">
-                    Supervisor / Staff ID or Email
-                  </label>
-                  <div className="relative">
-                    <User size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="text"
-                      value={supervisorId}
-                      onChange={(e) => setSupervisorId(e.target.value)}
-                      placeholder="supervisor@mill.loompilot.local"
-                      required
-                      className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] focus:bg-white focus:border-[#E65338] focus:ring-2 focus:ring-[#E65338]/10 focus:outline-none transition-all font-medium text-[#252622]"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-[#252622] mb-1.5">
-                    Shift Access PIN / Password
-                  </label>
-                  <div className="relative">
-                    <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="password"
-                      value={supervisorPassword}
-                      onChange={(e) => setSupervisorPassword(e.target.value)}
-                      placeholder="••••••••••••"
-                      required
-                      className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] focus:bg-white focus:border-[#E65338] focus:ring-2 focus:ring-[#E65338]/10 focus:outline-none transition-all font-medium text-[#252622]"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full py-3 px-4 rounded-xl text-sm font-bold text-white bg-[#E65338] hover:bg-[#D24227] shadow-md shadow-[#E65338]/30 transition-all flex items-center justify-center gap-2 group mt-2 disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  <span>{isSubmitting ? 'Authenticating...' : 'Sign In to Supervisor Portal'}</span>
-                  <ArrowUpRight size={16} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                 </button>
               </>
             )}
