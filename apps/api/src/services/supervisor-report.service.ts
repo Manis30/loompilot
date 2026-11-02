@@ -1,11 +1,15 @@
+import { Types } from "mongoose";
 import { SupervisorDailyReportRepository } from "../repositories/supervisor-daily-report.repository.js";
 import { OrdersRepository } from "../repositories/orders.repository.js";
 import { MachineRepository } from "../repositories/machine.repository.js";
 import { MaintenanceTicketRepository } from "../repositories/maintenance-ticket.repository.js";
+import { MaintenanceTicketService } from "./maintenance-ticket.service.js";
 import { AuditService } from "./audit.service.js";
 import { AppError } from "../errors/app-error.js";
 import { ErrorCode, OrderStatus } from "@loompilot/shared";
 import { PaginationQuery, PaginatedResult } from "../utils/pagination.js";
+import { IUnitOfWork } from "../interfaces/unit-of-work.interface.js";
+import { MongoUnitOfWork } from "../repositories/unit-of-work.js";
 
 export class SupervisorReportService {
   constructor(
@@ -13,7 +17,13 @@ export class SupervisorReportService {
     private readonly ordersRepo = new OrdersRepository(),
     private readonly machineRepo = new MachineRepository(),
     private readonly ticketRepo = new MaintenanceTicketRepository(),
-    private readonly auditService = new AuditService()
+    private readonly auditService = new AuditService(),
+    private readonly ticketService = new MaintenanceTicketService(
+      ticketRepo,
+      machineRepo,
+      auditService
+    ),
+    private readonly unitOfWork: IUnitOfWork = new MongoUnitOfWork()
   ) {}
 
   async submitReport(
@@ -161,17 +171,50 @@ export class SupervisorReportService {
     if (data.machines && data.machines.length > 0) {
       for (const m of data.machines) {
         try {
-          await this.machineRepo.updateMachineStatus(tenantId, m.machineId, m.status);
-
           if (m.status === "breakdown") {
-            await this.ticketRepo.create(tenantId, {
-              machineId: m.machineId as any,
-              sourceReportId: report._id as any,
-              issue: m.remarks || "Breakdown reported in daily supervisor report",
-              status: "open",
-              openedBy: actor.id as any,
-              version: 1,
-            } as any);
+            await this.ticketService.createTicket(
+              tenantId,
+              actor,
+              {
+                machineId: m.machineId,
+                issue: m.remarks || "Breakdown reported in daily supervisor report",
+                sourceReportId: String(report._id),
+              }
+            );
+          } else {
+            let machine = null;
+            if (Types.ObjectId.isValid(m.machineId)) {
+              machine = await this.machineRepo.findById(tenantId, m.machineId);
+            }
+            if (!machine) {
+              machine = await this.machineRepo.findOne(tenantId, { machineCode: m.machineId.toUpperCase() });
+            }
+            if (!machine) continue;
+            const resolvedMachineId = String(machine._id);
+
+            await this.unitOfWork.withTransaction(async (tx) => {
+              const lockedMachine = await this.machineRepo.lockMachine(tenantId, resolvedMachineId, tx);
+              if (!lockedMachine || lockedMachine.currentStatus === "inactive") {
+                return;
+              }
+
+              // Guard: Cannot mark machine available if unresolved breakdown tickets exist
+              if (m.status === "available") {
+                const unresolved = await this.ticketRepo.findUnresolvedTicketsForMachine(
+                  tenantId,
+                  lockedMachine._id,
+                  undefined,
+                  tx
+                );
+                if (unresolved.length > 0) {
+                  return;
+                }
+              }
+
+              if (lockedMachine.currentStatus !== m.status) {
+                await this.machineRepo.updateMachineStatus(tenantId, resolvedMachineId, m.status, tx);
+              }
+            });
           }
         } catch (err) {
           // Continue processing
@@ -188,15 +231,15 @@ export class SupervisorReportService {
           );
           if (!alreadyCreated) {
             try {
-              await this.machineRepo.updateMachineStatus(tenantId, issue.machineId, "breakdown");
-              await this.ticketRepo.create(tenantId, {
-                machineId: issue.machineId as any,
-                sourceReportId: report._id as any,
-                issue: issue.notes,
-                status: "open",
-                openedBy: actor.id as any,
-                version: 1,
-              } as any);
+              await this.ticketService.createTicket(
+                tenantId,
+                actor,
+                {
+                  machineId: issue.machineId,
+                  issue: issue.notes,
+                  sourceReportId: String(report._id),
+                }
+              );
             } catch (err) {
               // Continue processing
             }

@@ -124,6 +124,8 @@ export function toClientOrderDto(order: any): any {
       qty: d.qty,
       invoiceNo: d.invoiceNo,
       invoiceAmountPaise: d.invoiceAmountPaise,
+      carrier: d.carrier,
+      notes: d.notes,
       onTime: d.onTime,
     })),
     createdAt: order.createdAt,
@@ -184,6 +186,17 @@ export function toAdminOrderDto(order: any): any {
   return {
     ...safeOrder,
     id: String(order._id || order.id),
+    deliveries: (order.deliveries || []).map((d: any) => ({
+      deliveryDate: d.deliveryDate,
+      qty: d.qty,
+      invoiceNo: d.invoiceNo,
+      invoiceAmountPaise: d.invoiceAmountPaise,
+      carrier: d.carrier,
+      notes: d.notes,
+      onTime: d.onTime,
+      delayDays: d.delayDays,
+      recordedBy: d.recordedBy ? String(d.recordedBy) : undefined,
+    })),
   };
 }
 
@@ -2789,9 +2802,34 @@ export class OrderService {
     qty: number;
     invoiceNo: string;
     invoiceAmountPaise: number;
+    carrier?: string;
     notes?: string;
     actor: { id: string; email?: string; ip?: string; requestId?: string; type: "user" };
   }): Promise<any> {
+    if (
+      typeof params.invoiceAmountPaise !== "number" ||
+      !Number.isSafeInteger(params.invoiceAmountPaise) ||
+      params.invoiceAmountPaise <= 0
+    ) {
+      throw new AppError(
+        ErrorCode.VALIDATION_FAILED,
+        "Delivery invoice amount in paise must be a positive integer",
+        400
+      );
+    }
+
+    if (
+      typeof params.qty !== "number" ||
+      !Number.isSafeInteger(params.qty) ||
+      params.qty <= 0
+    ) {
+      throw new AppError(
+        ErrorCode.VALIDATION_FAILED,
+        "Delivery quantity must be a positive integer",
+        400
+      );
+    }
+
     const order = await this.ordersRepo.findById(params.tenantId, params.orderId);
     if (!order) throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
 
@@ -2805,6 +2843,36 @@ export class OrderService {
         ErrorCode.INVALID_TRANSITION,
         `Cannot record delivery on order with status '${order.status}'; must be in_production, ready_for_delivery or partially_delivered`,
         400
+      );
+    }
+
+    const normalizedInvoiceNo = params.invoiceNo.trim();
+
+    // 1. Pre-validation duplicate check on target order
+    const duplicateInOrder = (order.deliveries || []).some(
+      (d: any) => d.invoiceNo && d.invoiceNo.trim().toLowerCase() === normalizedInvoiceNo.toLowerCase()
+    );
+    if (duplicateInOrder) {
+      throw new AppError(
+        ErrorCode.DUPLICATE,
+        `Delivery with invoice number '${params.invoiceNo}' has already been recorded for this order`,
+        409
+      );
+    }
+
+    // 2. Pre-validation duplicate check across the tenant
+    const existingWithInvoice = await this.ordersRepo.findByDeliveryInvoice(
+      params.tenantId,
+      normalizedInvoiceNo
+    );
+    if (existingWithInvoice) {
+      const isSameOrder = String(existingWithInvoice._id) === String(params.orderId);
+      throw new AppError(
+        ErrorCode.DUPLICATE,
+        isSameOrder
+          ? `Delivery with invoice number '${params.invoiceNo}' has already been recorded for this order`
+          : `Delivery invoice number '${params.invoiceNo}' has already been recorded for order ${existingWithInvoice.orderNumber}`,
+        409
       );
     }
 
@@ -2846,14 +2914,37 @@ export class OrderService {
     const isFullyDelivered = newDeliveredQty >= order.quantity;
 
     return this.getUnitOfWork().withTransaction(async (tx) => {
+      // Concurrency-safe tenant-wide invoice uniqueness claim backed by CounterModel unique index
+      const invoiceClaimKey = `delivery_invoice:${normalizedInvoiceNo.toLowerCase()}`;
+      const claimed = await this.counterRepo.claimUniqueKey(params.tenantId, invoiceClaimKey, tx);
+      if (!claimed) {
+        const existingOrder = await this.ordersRepo.findByDeliveryInvoice(
+          params.tenantId,
+          normalizedInvoiceNo,
+          tx
+        );
+        const isSameOrder = existingOrder && String(existingOrder._id) === String(params.orderId);
+        throw new AppError(
+          ErrorCode.DUPLICATE,
+          existingOrder
+            ? isSameOrder
+              ? `Delivery with invoice number '${params.invoiceNo}' has already been recorded for this order`
+              : `Delivery invoice number '${params.invoiceNo}' has already been recorded for order ${existingOrder.orderNumber}`
+            : `Delivery invoice number '${params.invoiceNo}' has already been recorded for this tenant`,
+          409
+        );
+      }
+
       await this.ordersRepo.addDelivery(
         params.tenantId,
         params.orderId,
         {
           deliveryDate: params.deliveryDate,
           qty: params.qty,
-          invoiceNo: params.invoiceNo,
+          invoiceNo: normalizedInvoiceNo,
           invoiceAmountPaise: params.invoiceAmountPaise,
+          carrier: params.carrier?.trim(),
+          notes: params.notes?.trim(),
           onTime,
           delayDays,
           recordedBy: params.actor.id as any,
@@ -2903,7 +2994,7 @@ export class OrderService {
         nextStatus,
         {
           role: "admin",
-          reason: `Delivery recorded: ${params.qty} units dispatched on invoice ${params.invoiceNo}`,
+          reason: `Delivery recorded: ${params.qty} units dispatched on invoice ${normalizedInvoiceNo}`,
           by: params.actor.id as any,
         },
         tx
@@ -2916,8 +3007,10 @@ export class OrderService {
         entity: { collection: "orders", id: params.orderId },
         after: {
           qty: params.qty,
-          invoiceNo: params.invoiceNo,
+          invoiceNo: normalizedInvoiceNo,
           invoiceAmountPaise: params.invoiceAmountPaise,
+          carrier: params.carrier?.trim(),
+          notes: params.notes?.trim(),
           onTime,
           delayDays,
           nextStatus,
@@ -2933,9 +3026,9 @@ export class OrderService {
           type: "shipment_dispatched",
           channel: "in_app",
           title: `Shipment Dispatched: Order ${order.orderNumber}`,
-          body: `${params.qty} units have been dispatched on invoice ${params.invoiceNo}.`,
+          body: `${params.qty} units have been dispatched on invoice ${normalizedInvoiceNo}.`,
           entity: { collection: "orders", id: params.orderId },
-          dedupeKey: `delivery_${params.orderId}_${params.invoiceNo}`,
+          dedupeKey: `delivery_${params.orderId}_${normalizedInvoiceNo}`,
         },
         tx
       );
@@ -2949,7 +3042,7 @@ export class OrderService {
             subject: `Shipment Dispatched: Order ${order.orderNumber}`,
             orderNumber: order.orderNumber,
             qty: params.qty,
-            invoiceNo: params.invoiceNo,
+            invoiceNo: normalizedInvoiceNo,
           },
         },
         tx

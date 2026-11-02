@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   CheckCircle2,
   Layers,
@@ -15,6 +15,19 @@ import {
   ArrowDown
 } from 'lucide-react';
 import type { Order, AppUser } from '../../types';
+import {
+  useGetProductionBoardQuery,
+  useGetAdminSupervisorReportsQuery,
+  useSubmitSupervisorReportMutation,
+} from '../../store/api/productionApi';
+import { useAdvanceOrderStageMutation } from '../../store/api/ordersApi';
+import {
+  CANONICAL_PRODUCTION_STAGES,
+  UNKNOWN_PRODUCTION_STAGE,
+  normalizeProductionStage,
+} from '../../utils/orderMapper';
+
+const isDemo = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
 
 // =========================================================================
 // DATA MODELS & TYPES
@@ -126,7 +139,9 @@ const generateSixStages = (
   productQuantity: number,
   targetStageNum: number, // Which stage is current (1 to 6)
   supervisor: string,
-  isAtRisk: boolean = false
+  isAtRisk: boolean = false,
+  orderDate?: string,
+  deadlineDate?: string
 ): ProductionStageDetail[] => {
   const stageDefs = [
     { num: 1, name: 'Yarn Inward', dept: 'Raw Material Bay & Cone Lab', machine: 'Zellweger Uster Yarn Tester #2' },
@@ -150,14 +165,14 @@ const generateSixStages = (
       progress = 100;
       produced = productQuantity;
       rejected = Math.round(productQuantity * 0.008); // 0.8% normal variance
-      actualStart = 'Oct 2026';
-      actualEnd = 'Oct 2026';
+      actualStart = orderDate || 'Oct 2026';
+      actualEnd = orderDate || 'Oct 2026';
     } else if (def.num === targetStageNum) {
       status = isAtRisk ? 'delayed' : 'in_progress';
       progress = isAtRisk ? 42 : 80;
       produced = Math.round(productQuantity * (progress / 100));
       rejected = Math.round(produced * 0.015);
-      actualStart = '28 Oct 2026';
+      actualStart = orderDate || 'Ongoing';
       actualEnd = 'Ongoing';
     }
 
@@ -171,9 +186,9 @@ const generateSixStages = (
       name: def.name,
       department: def.dept,
       status,
-      plannedStartDate: '24 Oct 2026',
+      plannedStartDate: orderDate || '24 Oct 2026',
       actualStartDate: actualStart,
-      plannedCompletionDate: '05 Nov 2026',
+      plannedCompletionDate: deadlineDate || '05 Nov 2026',
       actualCompletionDate: actualEnd,
       targetQuantity: productQuantity,
       producedQuantity: produced,
@@ -190,6 +205,131 @@ const generateSixStages = (
     };
   });
 };
+
+export const mapOrderToProductionOrder = (ord: Order): ProductionOrderWithProducts => {
+  const prodQty = ord.quantityMeters || 0;
+  const compQty = ord.producedMeters || 0;
+  const remQty = Math.max(0, prodQty - compQty);
+  const progressPct = prodQty > 0 ? Math.min(100, Math.round((compQty / prodQty) * 100)) : 0;
+
+  // Canonical stage normalization via orderMapper without arbitrary percentage inference
+  const canonicalStage = normalizeProductionStage(ord.currentPhase, undefined, ord.status);
+
+  // Map canonical stages (1-8) to the 6 factory floor stages (1-6):
+  // Canonical Stage 1 (Quote Accepted): Pre-floor production, floor stage 1 pending -> targetStageNum = 1
+  // Canonical Stages 2-7 (Yarn Sourcing -> Packaging & Dispatch): Floor stages 1 through 6
+  // Canonical Stage 8 (Delivered) or completed status: All stages complete -> targetStageNum = 7
+  // Canonical Stage 0 (Unavailable / unrecognized): All stages pending -> targetStageNum = 0
+  let targetStageNum = 0;
+  if (ord.status === 'completed' || ord.status === 'delivered' || canonicalStage.step >= 8) {
+    targetStageNum = 7;
+  } else if (canonicalStage.isKnown && canonicalStage.step >= 2 && canonicalStage.step <= 7) {
+    targetStageNum = canonicalStage.step - 1;
+  } else if (canonicalStage.isKnown && canonicalStage.step === 1) {
+    targetStageNum = 1;
+  } else {
+    targetStageNum = 0;
+  }
+
+  const isAtRisk = ord.riskStatus === 'at_risk';
+  const supervisorName = ord.assignedSupervisorName || 'Floor Supervisor';
+  const orderDate = ord.submittedDate;
+  const deadlineDate = ord.deadlineDate;
+
+  const resolvedStageName = canonicalStage.isKnown
+    ? canonicalStage.name
+    : (ord.currentPhase && ord.currentPhase.trim() ? ord.currentPhase : UNKNOWN_PRODUCTION_STAGE.name);
+
+  const products: ProductProductionItem[] = (ord.items && ord.items.length > 0)
+    ? ord.items.map((item, idx) => {
+        const itemQty = item.quantity || prodQty;
+        const itemComp = Math.round(itemQty * (progressPct / 100));
+        return {
+          id: `${ord.id}-${String.fromCharCode(65 + idx)}`,
+          name: item.name || `${ord.productName} - Variant ${idx + 1}`,
+          designCode: item.designCode || `DES-${idx + 1}`,
+          category: ord.category || 'Textiles',
+          quantity: itemQty,
+          completedQuantity: itemComp,
+          rejectedQuantity: 0,
+          remainingQuantity: Math.max(0, itemQty - itemComp),
+          currentStage: resolvedStageName,
+          progressPercent: progressPct,
+          riskStatus: ord.status === 'completed' || ord.status === 'delivered'
+            ? 'completed'
+            : isAtRisk
+            ? 'at_risk'
+            : 'on_track',
+          riskReason: ord.riskReason,
+          stages: generateSixStages(`${ord.id}-${idx}`, itemQty, targetStageNum, supervisorName, isAtRisk, orderDate, deadlineDate),
+        };
+      })
+    : [
+        {
+          id: `${ord.id}-A`,
+          name: ord.productName || 'Custom Manufactured Fabric',
+          designCode: ord.specs?.weave || 'STD-01',
+          category: ord.category || 'Textiles',
+          quantity: prodQty,
+          completedQuantity: compQty,
+          rejectedQuantity: 0,
+          remainingQuantity: remQty,
+          currentStage: resolvedStageName,
+          progressPercent: progressPct,
+          riskStatus: ord.status === 'completed' || ord.status === 'delivered'
+            ? 'completed'
+            : isAtRisk
+            ? 'at_risk'
+            : 'on_track',
+          riskReason: ord.riskReason,
+          stages: generateSixStages(ord.id, prodQty, targetStageNum, supervisorName, isAtRisk, orderDate, deadlineDate),
+        },
+      ];
+
+  let orderStatus: ProductionOrderWithProducts['status'] = 'in_production';
+  if (ord.status === 'completed' || ord.status === 'delivered' || progressPct === 100) {
+    orderStatus = 'completed';
+  } else if (isAtRisk) {
+    orderStatus = 'at_risk';
+  } else if (progressPct === 0) {
+    orderStatus = 'not_started';
+  }
+
+  return {
+    id: ord.id,
+    clientName: ord.clientName || 'Client',
+    clientEmail: ord.clientEmail || 'client@example.com',
+    productCategory: ord.category || 'Textiles',
+    totalQuantity: prodQty,
+    orderDate: orderDate || new Date().toISOString().split('T')[0],
+    committedDeliveryDate: deadlineDate || '2026-11-30',
+    forecastDeliveryDate: deadlineDate || '2026-11-30',
+    status: orderStatus,
+    riskStatus: isAtRisk ? 'at_risk' : 'on_track',
+    riskReason: ord.riskReason,
+    assignedSupervisorId: ord.assignedSupervisorId || '',
+    assignedSupervisorName: supervisorName,
+    products,
+  };
+};
+
+export const mapApiReportToShiftReport = (r: any): SupervisorShiftReport => ({
+  id: String(r._id || r.id || `REP-${r.reportDate}`),
+  orderId: r.outputs?.[0]?.orderId ? String(r.outputs[0].orderId) : (r.orderId || '-'),
+  productId: r.outputs?.[0]?.orderId ? `${r.outputs[0].orderId}-A` : (r.productId || '-'),
+  productName: r.productName || 'Manufactured Item',
+  stageName: r.outputs?.[0]?.stage || r.shift || 'Production Floor',
+  machineId: r.resources?.machinesDown ? `Machines Down: ${r.resources.machinesDown}` : 'Production Shed',
+  workersAssigned: r.employeesPresentTotal || r.workforce?.reduce((s: number, w: any) => s + (w.count || 0), 0) || 0,
+  dailyTargetQuantity: 0,
+  actualProducedQuantity: r.outputs?.reduce((s: number, o: any) => s + (o.produced || 0), 0) || r.metersProduced || 0,
+  rejectedQuantity: r.outputs?.reduce((s: number, o: any) => s + (o.defective || 0), 0) || r.scrapMeters || 0,
+  machineDowntimeMinutes: 0,
+  delayReason: r.issues?.[0]?.notes || undefined,
+  remarks: r.notes || r.remarks || 'Daily supervisor report submitted.',
+  submittedBy: r.supervisorName || (typeof r.supervisorId === 'string' ? r.supervisorId : 'Supervisor'),
+  timestamp: r.reportDate || (r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-GB') : new Date().toISOString().split('T')[0]),
+});
 
 // =========================================================================
 // INITIAL MOCK MASTER PRODUCTION ORDERS (With Multi-Product Breakdown)
@@ -653,21 +793,176 @@ interface ProductionTrackingModuleProps {
 }
 
 export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> = ({
+  orders = [],
+  supervisors: _supervisors = [],
   onSelectOrder,
   onOpenOrderModal: _onOpenOrderModal,
   onInvestigateDelay: _onInvestigateDelay
 }) => {
+  // Live RTK Query hooks for backend persistence
+  const {
+    isLoading: isBoardLoading,
+    isError: isBoardError,
+    refetch: refetchBoard,
+  } = useGetProductionBoardQuery(undefined, { skip: isDemo });
+
+  const {
+    data: reportsResponse,
+    isLoading: isReportsLoading,
+    isError: isReportsError,
+    refetch: refetchReports,
+  } = useGetAdminSupervisorReportsQuery(undefined, { skip: isDemo });
+
+  const [advanceOrderStageMutation, { isLoading: isAdvancingStage }] = useAdvanceOrderStageMutation();
+  const [submitSupervisorReportMutation, { isLoading: isSubmittingReport }] = useSubmitSupervisorReportMutation();
+
   // Master Production Orders State
-  const [productionOrders, setProductionOrders] = useState<ProductionOrderWithProducts[]>(INITIAL_PRODUCTION_ORDERS);
-  const [selectedOrderId, setSelectedOrderId] = useState<string>('LP-901');
-  const [selectedProductId, setSelectedProductId] = useState<string>('LP-901-A');
+  const [productionOrders, setProductionOrders] = useState<ProductionOrderWithProducts[]>(() => {
+    if (isDemo) return INITIAL_PRODUCTION_ORDERS;
+    return orders && orders.length > 0 ? orders.map(mapOrderToProductionOrder) : [];
+  });
+  const [selectedOrderId, setSelectedOrderId] = useState<string>(() => {
+    if (isDemo) return 'LP-901';
+    return orders[0]?.id || '';
+  });
+  const [selectedProductId, setSelectedProductId] = useState<string>(() => {
+    if (isDemo) return 'LP-901-A';
+    return orders[0] ? `${orders[0].id}-A` : '';
+  });
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showWorkspace, setShowWorkspace] = useState<boolean>(true);
 
-  // Alerts & Shift Reports State
-  const [riskAlerts] = useState<ProductionRiskAlert[]>(INITIAL_RISK_ALERTS);
-  const [shiftReports, setShiftReports] = useState<SupervisorShiftReport[]>(INITIAL_SHIFT_REPORTS);
+  // Synchronize productionOrders with live authoritative orders in normal mode
+  useEffect(() => {
+    if (!isDemo) {
+      if (orders && orders.length > 0) {
+        setProductionOrders(orders.map(mapOrderToProductionOrder));
+      } else {
+        setProductionOrders([]);
+      }
+    }
+  }, [orders]);
+
+  // Synchronize selectedOrderId with available production orders in normal mode
+  useEffect(() => {
+    if (!isDemo && productionOrders.length > 0) {
+      if (!selectedOrderId || !productionOrders.some((o) => o.id === selectedOrderId)) {
+        const first = productionOrders[0];
+        setSelectedOrderId(first.id);
+        if (first.products && first.products.length > 0) {
+          setSelectedProductId(first.products[0].id);
+        }
+      }
+    }
+  }, [productionOrders, selectedOrderId]);
+
+  // Alerts State: Derive risk alerts purely from persisted data in normal mode
+  const riskAlerts = useMemo<ProductionRiskAlert[]>(() => {
+    if (isDemo) {
+      return INITIAL_RISK_ALERTS;
+    }
+    const alerts: ProductionRiskAlert[] = [];
+    const nowMs = Date.now();
+
+    for (const ord of orders) {
+      const isOverdue =
+        ord.deadlineDate &&
+        new Date(ord.deadlineDate).getTime() < nowMs &&
+        ord.status !== 'completed' &&
+        ord.status !== 'delivered';
+      const isBehindOrAtRisk = ord.riskStatus === 'at_risk' || (ord.status as string) === 'at_risk';
+
+      if (isBehindOrAtRisk || isOverdue) {
+        alerts.push({
+          id: `risk_${ord.id}`,
+          severity: isOverdue ? 'critical' : 'warning',
+          alertType: isOverdue
+            ? 'below_target'
+            : (ord.riskReason?.toLowerCase().includes('material') ? 'material_shortage' : 'below_target'),
+          affectedOrderId: ord.id,
+          affectedProductId: `${ord.id}-A`,
+          affectedProductName: ord.productName || 'Order Product',
+          affectedStage: ord.currentPhase || 'Production',
+          reason:
+            ord.riskReason ||
+            (isOverdue
+              ? `Delivery deadline (${ord.deadlineDate}) has passed while production is ongoing.`
+              : `Order flagged at risk of production schedule delay.`),
+          businessImpact: isOverdue
+            ? `Committed dispatch deadline passed (${ord.deadlineDate}).`
+            : `Schedule variance threatens committed delivery date.`,
+          detectedTime: 'Active Monitoring Alert',
+          suggestedAction: 'Fast-track schedule and coordinate recovery action with floor supervisor.',
+        });
+      }
+    }
+
+    return alerts;
+  }, [orders]);
+
+  // Active backend order matching selectedOrderId
+  const currentBackendOrder = useMemo(() => {
+    return orders.find((o) => o.id === selectedOrderId);
+  }, [orders, selectedOrderId]);
+
+  // Shift Reports State: Derived from live supervisor reports endpoint & order daily reports
+  const [shiftReports, setShiftReports] = useState<SupervisorShiftReport[]>(() => {
+    if (isDemo) return INITIAL_SHIFT_REPORTS;
+    return [];
+  });
+
+  // Cross-supervisor report history with stable ID deduplication
+  useEffect(() => {
+    if (isDemo) {
+      setShiftReports(INITIAL_SHIFT_REPORTS);
+      return;
+    }
+
+    const reportMap = new Map<string, SupervisorShiftReport>();
+
+    // 1. Authoritative cross-supervisor reports from GET /api/v1/supervisor-reports
+    const apiReports = reportsResponse?.data || [];
+    if (Array.isArray(apiReports)) {
+      for (const r of apiReports) {
+        const mapped = mapApiReportToShiftReport(r);
+        const stableId = String(r._id || r.id || mapped.id);
+        if (stableId) {
+          reportMap.set(stableId, { ...mapped, id: stableId });
+        }
+      }
+    }
+
+    // 2. Supplement with order-embedded dailyReports if not already present
+    for (const ord of orders) {
+      if (ord.dailyReports && ord.dailyReports.length > 0) {
+        for (const rep of ord.dailyReports) {
+          const stableId = String(rep.id || '');
+          if (stableId && !reportMap.has(stableId)) {
+            reportMap.set(stableId, {
+              id: stableId,
+              orderId: ord.id,
+              productId: `${ord.id}-A`,
+              productName: ord.productName || 'Manufactured Item',
+              stageName: rep.shift || 'Production Floor',
+              machineId: 'Production Shed',
+              workersAssigned: rep.workersPresent || 0,
+              dailyTargetQuantity: 0,
+              actualProducedQuantity: rep.metersProduced || 0,
+              rejectedQuantity: rep.scrapMeters || 0,
+              machineDowntimeMinutes: 0,
+              delayReason: rep.issuesRaised || undefined,
+              remarks: rep.issuesRaised || 'Daily report recorded',
+              submittedBy: rep.supervisorName || 'Floor Supervisor',
+              timestamp: rep.date || new Date().toISOString().split('T')[0],
+            });
+          }
+        }
+      }
+    }
+
+    setShiftReports(Array.from(reportMap.values()));
+  }, [reportsResponse, orders]);
 
   // Modals & Dedicated Workspaces
   const [showTimelineModal, setShowTimelineModal] = useState<boolean>(false);
@@ -684,8 +979,8 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
 
   // Shift Log Form State
   const [shiftForm, setShiftForm] = useState({
-    orderId: 'LP-901',
-    productId: 'LP-901-A',
+    orderId: isDemo ? 'LP-901' : (orders[0]?.id || ''),
+    productId: isDemo ? 'LP-901-A' : (orders[0] ? `${orders[0].id}-A` : ''),
     stageName: 'Quality Inspection',
     machineId: 'Daro 4-Point QA Table #1',
     workersAssigned: 8,
@@ -694,8 +989,8 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
     rejectedQuantity: 8,
     machineDowntimeMinutes: 0,
     delayReason: '',
-    remarks: 'Shift completed with 98.4% first-pass inspection yield.',
-    submittedBy: 'Ramesh Kumar (Floor Supervisor)'
+    remarks: 'Shift completed with standard QA yield.',
+    submittedBy: 'Floor Supervisor'
   });
 
   // =========================================================================
@@ -770,19 +1065,34 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
 
   // Active Selected Product
   const currentProduct = useMemo(() => {
+    if (!currentOrder || !currentOrder.products || currentOrder.products.length === 0) return undefined;
     const found = currentOrder.products.find((p) => p.id === selectedProductId);
     return found || currentOrder.products[0];
   }, [currentOrder, selectedProductId]);
 
   // Active Production Stage of the current product
   const currentActiveStage = useMemo(() => {
+    if (!currentProduct || !currentProduct.stages || currentProduct.stages.length === 0) return undefined;
     const inProg = currentProduct.stages.find((s) => s.status === 'in_progress' || s.status === 'delayed');
     return inProg || currentProduct.stages[currentProduct.stages.length - 1];
   }, [currentProduct]);
 
+  // Synchronize shiftForm with active selected order and product
+  useEffect(() => {
+    if (currentOrder && currentProduct) {
+      setShiftForm((prev) => ({
+        ...prev,
+        orderId: currentOrder.id,
+        productId: currentProduct.id,
+        stageName: currentActiveStage?.name || prev.stageName,
+        submittedBy: currentOrder.assignedSupervisorName || prev.submittedBy,
+      }));
+    }
+  }, [currentOrder, currentProduct, currentActiveStage]);
+
   // Planned vs Actual Performance Metrics for the active stage (Section 6)
-  const dailyTarget = currentActiveStage.dailyTarget || 1000;
-  const dailyActual = currentActiveStage.dailyActual || 750;
+  const dailyTarget = currentActiveStage?.dailyTarget || 1000;
+  const dailyActual = currentActiveStage?.dailyActual || 750;
   const dailyVariance = dailyActual - dailyTarget;
   const dailyAchievementPercent = Math.round((dailyActual / (dailyTarget || 1)) * 100);
 
@@ -808,7 +1118,7 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
   };
 
   // Submit Supervisor Daily Shift Report (Section 8)
-  const handleSubmitShiftReport = (e: React.FormEvent) => {
+  const handleSubmitShiftReport = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const timestamp = new Date().toLocaleString('en-GB', {
@@ -825,7 +1135,7 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
       id: newReportId,
       orderId: shiftForm.orderId,
       productId: shiftForm.productId,
-      productName: currentProduct.name,
+      productName: currentProduct?.name || 'Manufactured Item',
       stageName: shiftForm.stageName,
       machineId: shiftForm.machineId,
       workersAssigned: Number(shiftForm.workersAssigned),
@@ -838,6 +1148,37 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
       submittedBy: shiftForm.submittedBy,
       timestamp
     };
+
+    const targetOrder = orders.find((o) => o.id === shiftForm.orderId);
+    const realId = targetOrder?.backendId || (targetOrder?.id && targetOrder.id.length === 24 ? targetOrder.id : undefined);
+
+    if (!isDemo && realId) {
+      try {
+        await submitSupervisorReportMutation({
+          reportDate: new Date().toISOString().split('T')[0],
+          employeesPresentTotal: Number(shiftForm.workersAssigned) || 1,
+          outputs: [
+            {
+              orderId: realId,
+              stage: shiftForm.stageName,
+              produced: Number(shiftForm.actualProducedQuantity) || 0,
+              defective: Number(shiftForm.rejectedQuantity) || 0,
+            },
+          ],
+          notes: shiftForm.remarks,
+        }).unwrap();
+        showToast(`Shift Report persisted to server! +${shiftForm.actualProducedQuantity} pcs committed to ${shiftForm.stageName}.`);
+      } catch (err: any) {
+        const errMsg = err?.data?.error?.message || err?.data?.message || err?.message || 'Failed to submit shift report to server.';
+        showToast(`Shift report failed: ${errMsg}`);
+        return;
+      }
+    } else if (isDemo) {
+      showToast(`Shift Report ${newReportId} logged! +${shiftForm.actualProducedQuantity} pcs committed to ${shiftForm.stageName}.`);
+    } else {
+      showToast(`Cannot submit shift report: Order ${shiftForm.orderId} does not have a valid server ID.`);
+      return;
+    }
 
     // 1. Append immutable audit history
     setShiftReports((prev) => [newReport, ...prev]);
@@ -891,15 +1232,56 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
       })
     );
 
-    showToast(`Shift Report ${newReportId} logged! +${shiftForm.actualProducedQuantity} pcs committed to ${shiftForm.stageName}.`);
     setShowShiftUpdateModal(false);
   };
 
   // Section 9: Logical Stage Progression (Completing a stage and advancing)
-  const handleAdvanceStage = (orderId: string, productId: string, currentStageNumber: number) => {
-    // Stage rule check: Cannot skip stages; Dispatch requires Quality Inspection passed!
-    if (currentStageNumber >= 6) {
-      alert('Product is already in the final Dispatch stage.');
+  const handleAdvanceStage = async (orderId: string, productId: string, currentStageNumber: number) => {
+    if (isAdvancingStage) return;
+
+    const targetOrder = orders.find((o) => o.id === orderId);
+    const canonical = isDemo
+      ? normalizeProductionStage(currentProduct?.currentStage || currentActiveStage?.name, undefined, currentOrder?.status)
+      : normalizeProductionStage(targetOrder?.currentPhase, undefined, targetOrder?.status);
+
+    // Disable advancement when current stage is unavailable, unrecognized, or already delivered
+    if (!canonical.isKnown || canonical.step === 0) {
+      showToast('Cannot advance stage: Current stage is unavailable or unrecognized.');
+      return;
+    }
+
+    if (canonical.step >= 8 || targetOrder?.status === 'completed' || targetOrder?.status === 'delivered') {
+      showToast('Cannot advance stage: Order is already delivered.');
+      return;
+    }
+
+    // Determine next canonical stage from the canonical 8-stage sequence
+    const nextCanonicalStage = CANONICAL_PRODUCTION_STAGES[canonical.step];
+    if (!nextCanonicalStage) {
+      showToast('Cannot advance stage: Already at final production stage.');
+      return;
+    }
+
+    const realId = targetOrder?.backendId || (targetOrder?.id && targetOrder.id.length === 24 ? targetOrder.id : undefined);
+
+    if (!isDemo && realId) {
+      try {
+        await advanceOrderStageMutation({
+          id: realId,
+          stage: nextCanonicalStage.numberedName,
+          notes: `Stage advanced from ${canonical.name} to ${nextCanonicalStage.name}`,
+        }).unwrap();
+        showToast(`Stage advanced to ${nextCanonicalStage.name} successfully.`);
+        refetchBoard();
+      } catch (err: any) {
+        const errMsg = err?.data?.error?.message || err?.data?.message || err?.message || 'Failed to advance stage on server.';
+        showToast(`Stage advance failed: ${errMsg}`);
+        return; // Preserve existing stage on failure; do NOT advance local state
+      }
+    } else if (isDemo) {
+      showToast(`Stage verified & completed! Advanced product to ${nextCanonicalStage.name}.`);
+    } else {
+      showToast(`Cannot advance stage: Order ${orderId} does not have a valid server ID.`);
       return;
     }
 
@@ -913,24 +1295,22 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
                   return {
                     ...stg,
                     status: 'completed' as StageStatus,
-                    actualCompletionDate: '30 Oct 2026'
+                    actualCompletionDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
                   };
                 }
                 if (stg.stageNumber === currentStageNumber + 1) {
                   return {
                     ...stg,
                     status: 'in_progress' as StageStatus,
-                    actualStartDate: '30 Oct 2026'
+                    actualStartDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
                   };
                 }
                 return stg;
               });
 
-              const nextStageName = updatedStages.find((s) => s.stageNumber === currentStageNumber + 1)?.name || prod.currentStage;
-
               return {
                 ...prod,
-                currentStage: nextStageName,
+                currentStage: nextCanonicalStage.name,
                 stages: updatedStages
               };
             }
@@ -939,15 +1319,62 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
 
           return {
             ...ord,
+            status: nextCanonicalStage.step >= 8 ? ('completed' as const) : ord.status,
             products: updatedProducts
           };
         }
         return ord;
       })
     );
-
-    showToast(`Stage ${currentStageNumber} verified & completed! Advanced product to Stage ${currentStageNumber + 1}.`);
   };
+
+  // Section 6: Loading, Error & Empty State Early Returns for Normal Mode
+  if (!isDemo && isBoardLoading && (!orders || orders.length === 0)) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, height: '100%', padding: '64px 24px', alignItems: 'center', justifyContent: 'center', background: '#ffffff' }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#0a0d10', marginBottom: 6 }}>
+          Loading Live Production Tracking...
+        </div>
+        <div style={{ fontSize: 13, color: '#64748b' }}>
+          Fetching active floor orders, stage progression, and supervisor metrics.
+        </div>
+      </div>
+    );
+  }
+
+  if (!isDemo && isBoardError && (!orders || orders.length === 0)) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, height: '100%', padding: '64px 24px', alignItems: 'center', justifyContent: 'center', background: '#ffffff' }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#b42318', marginBottom: 6 }}>
+          Unable to Load Production Data
+        </div>
+        <div style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
+          Could not retrieve live production tracking information from the server.
+        </div>
+        <button
+          type="button"
+          className="admin-btn-secondary"
+          onClick={() => refetchBoard()}
+          style={{ cursor: 'pointer', padding: '8px 18px', borderRadius: 9999, fontWeight: 700 }}
+        >
+          Retry Connection
+        </button>
+      </div>
+    );
+  }
+
+  if (!isDemo && enrichedOrders.length === 0) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, height: '100%', padding: '64px 24px', alignItems: 'center', justifyContent: 'center', background: '#ffffff' }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#0a0d10', marginBottom: 6 }}>
+          No Active Production Orders
+        </div>
+        <div style={{ fontSize: 13, color: '#64748b' }}>
+          Orders will appear here once quotations are accepted and handovers to production are confirmed.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, height: '100%', overflowY: 'auto', paddingRight: 4, background: '#ffffff' }}>
@@ -1539,33 +1966,39 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {topAlerts.map((alt) => (
-                    <div
-                      key={alt.id}
-                      style={{
-                        background: alt.severity === 'critical' ? '#fef2f2' : '#fffbeb',
-                        border: `1px solid ${alt.severity === 'critical' ? '#fecaca' : '#fde68a'}`,
-                        borderRadius: 10,
-                        padding: '10px 12px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 4
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: alt.severity === 'critical' ? '#dc2626' : '#b45309' }}>
-                          {alt.alertType.replace(/_/g, ' ')} &bull; {alt.affectedOrderId}
-                        </span>
-                        <span style={{ fontSize: 9.5, color: '#94a3b8' }}>{alt.detectedTime}</span>
-                      </div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#1e293b' }}>
-                        {alt.reason}
-                      </div>
-                      <div style={{ fontSize: 10, color: '#475569' }}>
-                        Action: <strong>{alt.suggestedAction}</strong>
-                      </div>
+                  {topAlerts.length === 0 ? (
+                    <div style={{ padding: '16px 12px', textAlign: 'center', color: '#64748b', fontSize: 11.5, background: '#f8fafc', borderRadius: 8 }}>
+                      No active production risk alerts. Orders are proceeding on schedule.
                     </div>
-                  ))}
+                  ) : (
+                    topAlerts.map((alt) => (
+                      <div
+                        key={alt.id}
+                        style={{
+                          background: alt.severity === 'critical' ? '#fef2f2' : '#fffbeb',
+                          border: `1px solid ${alt.severity === 'critical' ? '#fecaca' : '#fde68a'}`,
+                          borderRadius: 10,
+                          padding: '10px 12px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 4
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: alt.severity === 'critical' ? '#dc2626' : '#b45309' }}>
+                            {alt.alertType.replace(/_/g, ' ')} &bull; {alt.affectedOrderId}
+                          </span>
+                          <span style={{ fontSize: 9.5, color: '#94a3b8' }}>{alt.detectedTime}</span>
+                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#1e293b' }}>
+                          {alt.reason}
+                        </div>
+                        <div style={{ fontSize: 10, color: '#475569' }}>
+                          Action: <strong>{alt.suggestedAction}</strong>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -1689,23 +2122,47 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
                           {stg.producedQuantity.toLocaleString()} / {stg.targetQuantity.toLocaleString()} pcs
                         </span>
 
-                        {isInProg && (
-                          <button
-                            onClick={() => handleAdvanceStage(currentOrder.id, currentProduct.id, stg.stageNumber)}
-                            style={{
-                              background: '#79B4B7',
-                              color: '#ffffff',
-                              border: 'none',
-                              borderRadius: 9999,
-                              padding: '3px 10px',
-                              fontSize: 10,
-                              fontWeight: 700,
-                              cursor: 'pointer'
-                            }}
-                          >
-                            Verify & Advance Stage &rarr;
-                          </button>
-                        )}
+                        {isInProg && (() => {
+                          const canonical = isDemo
+                            ? normalizeProductionStage(currentProduct.currentStage || currentActiveStage?.name, undefined, currentOrder.status)
+                            : normalizeProductionStage(currentBackendOrder?.currentPhase, undefined, currentBackendOrder?.status);
+                          const isAdvanceDisabled =
+                            isAdvancingStage ||
+                            !canonical.isKnown ||
+                            canonical.step === 0 ||
+                            canonical.step >= 8 ||
+                            currentOrder.status === 'completed' ||
+                            currentOrder.status === 'delivered';
+
+                          return (
+                            <button
+                              onClick={() => handleAdvanceStage(currentOrder.id, currentProduct.id, stg.stageNumber)}
+                              disabled={isAdvanceDisabled}
+                              title={
+                                !canonical.isKnown || canonical.step === 0
+                                  ? 'Stage unavailable or unrecognized'
+                                  : canonical.step >= 8 || currentOrder.status === 'completed' || currentOrder.status === 'delivered'
+                                  ? 'Order is already delivered'
+                                  : isAdvancingStage
+                                  ? 'Advancing stage...'
+                                  : 'Verify & advance stage'
+                              }
+                              style={{
+                                background: isAdvanceDisabled ? '#94a3b8' : '#79B4B7',
+                                color: '#ffffff',
+                                border: 'none',
+                                borderRadius: 9999,
+                                padding: '3px 10px',
+                                fontSize: 10,
+                                fontWeight: 700,
+                                cursor: isAdvanceDisabled ? 'not-allowed' : 'pointer',
+                                opacity: isAdvanceDisabled ? 0.7 : 1
+                              }}
+                            >
+                              {isAdvancingStage ? 'Advancing...' : 'Verify & Advance Stage \u2192'}
+                            </button>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -2010,26 +2467,54 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
                   </tr>
                 </thead>
                 <tbody>
-                  {shiftReports.map((rep) => (
-                    <tr key={rep.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '8px 6px', fontWeight: 800, color: '#0a0d10' }}>{rep.id}</td>
-                      <td style={{ padding: '8px 6px', fontWeight: 600 }}>{rep.orderId} &bull; {rep.productName.split('-')[0]}</td>
-                      <td style={{ padding: '8px 6px' }}>
-                        <span style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
-                          {rep.stageName}
-                        </span>
+                  {!isDemo && isReportsLoading ? (
+                    <tr>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: '36px 16px', color: '#64748b' }}>
+                        Loading supervisor shift reports from server...
                       </td>
-                      <td style={{ padding: '8px 6px', fontWeight: 800, color: '#16a34a' }}>
-                        +{rep.actualProducedQuantity} pcs
-                      </td>
-                      <td style={{ padding: '8px 6px', color: rep.rejectedQuantity > 0 ? '#dc2626' : '#64748b', fontWeight: 700 }}>
-                        {rep.rejectedQuantity} pcs
-                      </td>
-                      <td style={{ padding: '8px 6px', color: '#64748b' }}>{rep.machineId.split(' ')[0]}</td>
-                      <td style={{ padding: '8px 6px', color: '#0a0d10' }}>{rep.submittedBy.split(' ')[0]}</td>
-                      <td style={{ padding: '8px 6px', color: '#64748b' }}>{rep.timestamp}</td>
                     </tr>
-                  ))}
+                  ) : !isDemo && isReportsError ? (
+                    <tr>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: '24px 16px', color: '#b42318' }}>
+                        <div style={{ marginBottom: 8, fontWeight: 600 }}>Failed to load supervisor shift reports from server.</div>
+                        <button
+                          type="button"
+                          className="admin-btn-secondary"
+                          onClick={() => refetchReports()}
+                          style={{ padding: '4px 12px', fontSize: 11, cursor: 'pointer', borderRadius: 9999 }}
+                        >
+                          Retry
+                        </button>
+                      </td>
+                    </tr>
+                  ) : shiftReports.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: '36px 16px', color: '#64748b' }}>
+                        No supervisor shift reports logged yet. Submit a daily report to record floor production.
+                      </td>
+                    </tr>
+                  ) : (
+                    shiftReports.map((rep) => (
+                      <tr key={rep.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '8px 6px', fontWeight: 800, color: '#0a0d10' }}>{rep.id}</td>
+                        <td style={{ padding: '8px 6px', fontWeight: 600 }}>{rep.orderId} &bull; {rep.productName.split('-')[0]}</td>
+                        <td style={{ padding: '8px 6px' }}>
+                          <span style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>
+                            {rep.stageName}
+                          </span>
+                        </td>
+                        <td style={{ padding: '8px 6px', fontWeight: 800, color: '#16a34a' }}>
+                          +{rep.actualProducedQuantity} pcs
+                        </td>
+                        <td style={{ padding: '8px 6px', color: rep.rejectedQuantity > 0 ? '#dc2626' : '#64748b', fontWeight: 700 }}>
+                          {rep.rejectedQuantity} pcs
+                        </td>
+                        <td style={{ padding: '8px 6px', color: '#64748b' }}>{rep.machineId.split(' ')[0]}</td>
+                        <td style={{ padding: '8px 6px', color: '#0a0d10' }}>{rep.submittedBy.split(' ')[0]}</td>
+                        <td style={{ padding: '8px 6px', color: '#64748b' }}>{rep.timestamp}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -2053,7 +2538,12 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
-              {riskAlerts.map((alt) => (
+              {riskAlerts.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '32px 16px', color: '#64748b', fontSize: 13, background: '#f8fafc', borderRadius: 12 }}>
+                  No active risk alerts. All production orders are running on track with committed schedules.
+                </div>
+              ) : (
+                riskAlerts.map((alt) => (
                 <div
                   key={alt.id}
                   style={{
@@ -2079,7 +2569,8 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
                     <strong>Recommended:</strong> {alt.suggestedAction}
                   </div>
                 </div>
-              ))}
+              ))
+              )}
             </div>
           </div>
         </div>

@@ -7,6 +7,8 @@ import { PaginationQuery, PaginatedResult, paginate } from "../utils/pagination.
 import { AuditService } from "./audit.service.js";
 import { AppError } from "../errors/app-error.js";
 import { ErrorCode } from "@loompilot/shared";
+import { IUnitOfWork } from "../interfaces/unit-of-work.interface.js";
+import { MongoUnitOfWork } from "../repositories/unit-of-work.js";
 
 export interface SupervisorMachineDto {
   id: string;
@@ -35,7 +37,8 @@ export class MachineService {
     private readonly machineRepo = new MachineRepository(),
     private readonly settingsRepo = new SettingsRepository(),
     private readonly ticketRepo = new MaintenanceTicketRepository(),
-    private readonly auditService = new AuditService()
+    private readonly auditService = new AuditService(),
+    private readonly unitOfWork: IUnitOfWork = new MongoUnitOfWork()
   ) {}
 
   private async validateProcessArea(tenantId: string, processArea: string): Promise<void> {
@@ -233,31 +236,52 @@ export class MachineService {
       }
     }
 
-    // Business rule: Cannot mark a machine available while it has an unresolved breakdown ticket
-    if (status === "available") {
-      const unresolvedTicket = await this.ticketRepo.findOne(tenantId, {
-        machineId: machine._id,
-        status: { $in: ["open", "assigned"] },
-      });
-      if (unresolvedTicket) {
+    const resolvedMachineId = String(machine._id);
+
+    const updated = await this.unitOfWork.withTransaction(async (tx) => {
+      const lockedMachine = await this.machineRepo.lockMachine(tenantId, resolvedMachineId, tx);
+      if (!lockedMachine) {
+        throw new AppError(ErrorCode.NOT_FOUND, `Machine '${id}' not found`, 404);
+      }
+
+      // Inactive safeguard: Supervisors cannot activate decommissioned or inactive machines
+      if (lockedMachine.currentStatus === "inactive" && status !== "inactive" && actor.role === "supervisor") {
         throw new AppError(
-          ErrorCode.VALIDATION_FAILED,
-          `Cannot mark machine available: active breakdown ticket '${unresolvedTicket._id}' is still unresolved`,
-          400
+          ErrorCode.FORBIDDEN,
+          "Access denied: Supervisors cannot activate decommissioned or inactive machines",
+          403
         );
       }
-    }
 
-    const updated = await this.machineRepo.updateMachineStatus(tenantId, String(machine._id), status);
-    if (!updated) {
-      throw new AppError(ErrorCode.NOT_FOUND, `Machine '${id}' not found`, 404);
-    }
+      // Business rule: Cannot mark a machine available while it has an unresolved breakdown ticket
+      if (status === "available") {
+        const unresolved = await this.ticketRepo.findUnresolvedTicketsForMachine(
+          tenantId,
+          lockedMachine._id,
+          undefined,
+          tx
+        );
+        if (unresolved.length > 0) {
+          throw new AppError(
+            ErrorCode.VALIDATION_FAILED,
+            `Cannot mark machine available: active breakdown ticket '${unresolved[0]._id}' is still unresolved`,
+            400
+          );
+        }
+      }
+
+      const res = await this.machineRepo.updateMachineStatus(tenantId, resolvedMachineId, status, tx);
+      if (!res) {
+        throw new AppError(ErrorCode.NOT_FOUND, `Machine '${id}' not found`, 404);
+      }
+      return res;
+    });
 
     await this.auditService.log({
       tenantId,
       actor: { id: actor.id, type: "user", email: actor.email },
       action: "MACHINE_STATUS_UPDATED",
-      entity: { collection: "machines", id: String(machine._id) },
+      entity: { collection: "machines", id: resolvedMachineId },
       before: { currentStatus: machine.currentStatus },
       after: { currentStatus: status, notes },
       ip: actor.ip,

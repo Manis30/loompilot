@@ -11,6 +11,8 @@ import {
 } from '../types';
 import { storageService } from '../services/storageService';
 
+const isDemo = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
+
 export interface ToastItem {
   id: string;
   message: string;
@@ -29,11 +31,16 @@ interface AppContextType {
   unreadCount: number;
   toasts: ToastItem[];
 
+  // Chat operational states
+  isChatSending: boolean;
+  chatError: string | null;
+
   // Actions
   addOrder: (order: Order) => void;
   updateOrder: (orderId: string, updates: Partial<Order>) => void;
   payInvoice: (invoiceNumber: string, method: string) => void;
-  sendChatMessage: (orderId: string, messageText: string) => void;
+  sendChatMessage: (orderId: string, messageText: string) => Promise<boolean>;
+  clearChatError: () => void;
   acceptQuotation: (orderId: string) => void;
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: () => void;
@@ -50,16 +57,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [products] = useState<Product[]>(() => storageService.getProducts());
   const [invoices, setInvoices] = useState<Invoice[]>(() => storageService.getInvoices());
   const [payments, setPayments] = useState<PaymentTransaction[]>(() => storageService.getPayments());
-  const [chats, setChats] = useState<Record<string, ChatThread>>(() => storageService.getChats());
+  // In normal mode, do not treat localStorage mock conversations as persisted records.
+  const [chats, setChats] = useState<Record<string, ChatThread>>(() =>
+    isDemo ? storageService.getChats() : {}
+  );
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => storageService.getNotifications());
   const [activities, setActivities] = useState<ActivityEvent[]>(() => storageService.getActivities());
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [isChatSending, setIsChatSending] = useState<boolean>(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+
+  const clearChatError = useCallback(() => {
+    setChatError(null);
+  }, []);
 
   const refreshData = useCallback(() => {
     setOrders(storageService.getOrders());
     setInvoices(storageService.getInvoices());
     setPayments(storageService.getPayments());
-    setChats(storageService.getChats());
+    setChats(isDemo ? storageService.getChats() : {});
     setNotifications(storageService.getNotifications());
     setActivities(storageService.getActivities());
   }, []);
@@ -95,71 +111,94 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [refreshData, addToast]);
 
-  const sendChatMessage = useCallback((orderId: string, messageText: string) => {
-    storageService.addChatMessage(orderId, messageText, 'user');
-    refreshData();
+  const sendChatMessage = useCallback(
+    async (orderId: string, messageText: string): Promise<boolean> => {
+      // Prevent duplicate submissions while a request is in progress
+      if (isChatSending) {
+        return false;
+      }
 
-    // Simulate AI response
-    setTimeout(() => {
-      const lower = messageText.toLowerCase();
-      let aiText = "Thank you Mr. Malhotra. Your message has been logged in our mill merchandising ledger.";
-      let badge: string | undefined;
+      setIsChatSending(true);
+      setChatError(null);
 
-      if (lower.includes('price') || lower.includes('discount') || lower.includes('reduce') || lower.includes('cost') || lower.includes('rate')) {
-        aiText = "Under LoomPilot governance, AI concierge cannot independently authorize discounts. I have formatted your volume negotiation request and forwarded it to our Senior VP of Production Merchandising, Anil Sharma.";
-        badge = "Negotiation Request Forwarded to Admin";
+      // Demo replies isolated strictly behind VITE_ENABLE_DEMO_LOGIN === 'true'
+      if (isDemo) {
+        storageService.addChatMessage(orderId, messageText, 'user');
+        refreshData();
 
-        // Simulate Admin counter-offer response shortly after
         setTimeout(() => {
-          const adminReply = "Hello Vikram! We reviewed your order volume. We are pleased to approve a revised rate of ₹282/metre for this batch, saving Raymond ₹2,34,000 total. Please review and accept the official revised quotation below.";
+          const lower = messageText.toLowerCase();
+          let aiText = "Thank you Mr. Malhotra. Your message has been logged in our mill merchandising ledger.";
+          let badge: string | undefined;
+
+          if (lower.includes('price') || lower.includes('discount') || lower.includes('reduce') || lower.includes('cost') || lower.includes('rate')) {
+            aiText = "Under LoomPilot governance, AI concierge cannot independently authorize discounts. I have formatted your volume negotiation request and forwarded it to our Senior VP of Production Merchandising, Anil Sharma.";
+            badge = "Negotiation Request Forwarded to Admin";
+
+            setTimeout(() => {
+              const adminReply = "Hello Vikram! We reviewed your order volume. We are pleased to approve a revised rate of ₹282/metre for this batch, saving Raymond ₹2,34,000 total. Please review and accept the official revised quotation below.";
+              const chatsMap = storageService.getChats();
+              const targetChat = chatsMap[orderId];
+              if (targetChat) {
+                targetChat.messages.push({
+                  id: `msg-${Date.now()}`,
+                  sender: 'admin',
+                  senderName: 'Anil Sharma (Senior VP Merchandising)',
+                  avatar: 'admin',
+                  time: `Today, ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+                  type: 'quote_revision',
+                  text: adminReply,
+                  revisedData: {
+                    originalRate: '₹295 / m',
+                    newRate: '₹282 / m',
+                    savings: '₹2,34,000',
+                    newTotal: '₹50,76,000',
+                    status: 'Admin Approved',
+                    actionRequired: 'Client Acceptance Needed',
+                  },
+                });
+                storageService.setChats(chatsMap);
+                refreshData();
+                addToast('Admin approved revised quotation received!', 'success');
+              }
+            }, 2200);
+          } else if (lower.includes('delivery') || lower.includes('lead') || lower.includes('expedite') || lower.includes('date')) {
+            aiText = "Standard lead time is 4 weeks. I have checked loom schedules and alerted our loom shed controller to explore expediting yarn warping on Line 3.";
+          } else if (lower.includes('swatch') || lower.includes('lab') || lower.includes('sample')) {
+            aiText = "A 3-shade lab dip strike-off will be dispatched to your Thane plant testing center within 4 business days.";
+          }
+
           const chatsMap = storageService.getChats();
           const targetChat = chatsMap[orderId];
           if (targetChat) {
             targetChat.messages.push({
               id: `msg-${Date.now()}`,
-              sender: 'admin',
-              senderName: 'Anil Sharma (Senior VP Merchandising)',
-              avatar: 'admin',
+              sender: 'assistant',
+              senderName: 'LoomPilot Assistant',
+              avatar: 'ai',
               time: `Today, ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
-              type: 'quote_revision',
-              text: adminReply,
-              revisedData: {
-                originalRate: '₹295 / m',
-                newRate: '₹282 / m',
-                savings: '₹2,34,000',
-                newTotal: '₹50,76,000',
-                status: 'Admin Approved',
-                actionRequired: 'Client Acceptance Needed',
-              },
+              text: aiText,
+              badge,
             });
             storageService.setChats(chatsMap);
             refreshData();
-            addToast('Admin approved revised quotation received!', 'success');
           }
-        }, 2200);
-      } else if (lower.includes('delivery') || lower.includes('lead') || lower.includes('expedite') || lower.includes('date')) {
-        aiText = "Standard lead time is 4 weeks. I have checked loom schedules and alerted our loom shed controller to explore expediting yarn warping on Line 3.";
-      } else if (lower.includes('swatch') || lower.includes('lab') || lower.includes('sample')) {
-        aiText = "A 3-shade lab dip strike-off will be dispatched to your Thane plant testing center within 4 business days.";
+          setIsChatSending(false);
+        }, 700);
+
+        return true;
       }
 
-      const chatsMap = storageService.getChats();
-      const targetChat = chatsMap[orderId];
-      if (targetChat) {
-        targetChat.messages.push({
-          id: `msg-${Date.now()}`,
-          sender: 'assistant',
-          senderName: 'LoomPilot Assistant',
-          avatar: 'ai',
-          time: `Today, ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
-          text: aiText,
-          badge,
-        });
-        storageService.setChats(chatsMap);
-        refreshData();
-      }
-    }, 700);
-  }, [refreshData, addToast]);
+      // Normal mode: Do not simulate AI execution or append fabricated responses.
+      // Backend conversation/agent endpoints (/api/v1/client/conversations) are not yet deployed.
+      const errMsg = "AI Concierge & Chat service is currently unavailable. Backend conversation endpoints (/api/v1/client/conversations) are not deployed in this environment.";
+      setChatError(errMsg);
+      addToast(errMsg, 'error');
+      setIsChatSending(false);
+      return false;
+    },
+    [isChatSending, refreshData, addToast]
+  );
 
   const acceptQuotation = useCallback((orderId: string) => {
     const order = storageService.getOrderById(orderId);
@@ -247,10 +286,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         metrics,
         unreadCount,
         toasts,
+        isChatSending,
+        chatError,
         addOrder,
         updateOrder,
         payInvoice,
         sendChatMessage,
+        clearChatError,
         acceptQuotation,
         markNotificationRead,
         markAllNotificationsRead,
@@ -272,4 +314,3 @@ export const useApp = () => {
   }
   return context;
 };
-

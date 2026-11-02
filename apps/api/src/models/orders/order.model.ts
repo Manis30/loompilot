@@ -308,6 +308,8 @@ export interface IDelivery {
   invoiceAmountPaise: number;
   onTime: boolean;
   delayDays?: number;
+  carrier?: string;
+  notes?: string;
   recordedBy: Types.ObjectId;
 }
 
@@ -804,10 +806,12 @@ const DeliverySchema = new Schema<IDelivery>(
   {
     deliveryDate: { type: String, required: true },
     qty: { type: Number, required: true },
-    invoiceNo: { type: String, required: true },
+    invoiceNo: { type: String, required: true, trim: true },
     invoiceAmountPaise: paiseField({ required: true }),
     onTime: { type: Boolean, required: true },
     delayDays: { type: Number, default: 0 },
+    carrier: { type: String, trim: true },
+    notes: { type: String, trim: true },
     recordedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
   { _id: false, strict: true }
@@ -877,6 +881,7 @@ OrderSchema.index({
   tenantId: 1,
   "financials.milestones.receipts.razorpayPaymentId": 1,
 });
+OrderSchema.index({ tenantId: 1, "deliveries.invoiceNo": 1 });
 OrderSchema.index(
   { tenantId: 1, idempotencyKey: 1 },
   {

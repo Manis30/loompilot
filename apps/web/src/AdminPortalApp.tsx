@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   useGetOrdersQuery,
   useApproveQuotationMutation,
+  useRejectQuotationMutation,
   useSendQuotationMutation,
   useAssignSupervisorsMutation,
   useCancelOrderMutation,
@@ -13,7 +14,11 @@ import {
   useGetProductsQuery,
   useGetMaterialsQuery,
   useGetUsersQuery,
+  useGetMachinesQuery,
 } from './store/api/catalogApi';
+import { useGetOrdersSummaryQuery, useGetAuditLogsQuery } from './store/api/dashboardApi';
+import { useGetProductionBoardQuery, useGetSupervisorNotificationsQuery } from './store/api/productionApi';
+import { useGetStockSummaryQuery } from './store/api/stockApi';
 import { mapApiOrderToAdminOrder } from './utils/orderMapper';
 import { useGetMeQuery, useLogoutStaffMutation } from './store/api/authApi';
 import { useAppDispatch } from './store/hooks';
@@ -122,12 +127,51 @@ export const AdminPortalApp: React.FC = () => {
   const [selectedOrderId, setSelectedOrderId] = useState<string>('');
 
   // Live RTK Query hooks for Backend persistence
-  const { data: ordersResponse } = useGetOrdersQuery(undefined);
+  const { data: ordersResponse, refetch: refetchOrders } = useGetOrdersQuery(undefined);
   const { data: clientsResponse } = useGetClientsQuery(undefined);
   const { data: productsResponse } = useGetProductsQuery(undefined);
   const { data: usersResponse } = useGetUsersQuery(undefined);
 
+  // Live Dashboard aggregate hooks
+  const {
+    data: ordersSummaryData,
+    isLoading: isOrdersSummaryLoading,
+    isError: isOrdersSummaryError,
+    refetch: refetchOrdersSummary,
+  } = useGetOrdersSummaryQuery(undefined);
+
+  const {
+    data: productionBoardData,
+    isLoading: isProductionBoardLoading,
+    refetch: refetchProductionBoard,
+  } = useGetProductionBoardQuery();
+
+  const {
+    data: stockSummaryData,
+    isLoading: isStockSummaryLoading,
+    refetch: refetchStockSummary,
+  } = useGetStockSummaryQuery();
+
+  const {
+    data: machinesData,
+    isLoading: isMachinesLoading,
+    refetch: refetchMachines,
+  } = useGetMachinesQuery({ limit: 100 });
+
+  const {
+    data: auditLogsData,
+    isLoading: isAuditLogsLoading,
+  } = useGetAuditLogsQuery({ limit: 20 });
+
+  const {
+    data: notificationsData,
+    isLoading: isNotificationsLoading,
+    isError: isNotificationsError,
+    refetch: refetchNotifications,
+  } = useGetSupervisorNotificationsQuery(undefined, { skip: isDemo });
+
   const [approveQuotationMutation] = useApproveQuotationMutation();
+  const [rejectQuotationMutation] = useRejectQuotationMutation();
   const [sendQuotationMutation] = useSendQuotationMutation();
   const [assignSupervisorsMutation] = useAssignSupervisorsMutation();
   const [cancelOrderMutation] = useCancelOrderMutation();
@@ -156,16 +200,31 @@ export const AdminPortalApp: React.FC = () => {
     return map;
   }, [productsResponse]);
 
+  const usersMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const raw = usersResponse?.data || [];
+    if (Array.isArray(raw)) {
+      raw.forEach((u: any) => {
+        if (u.id || u._id) map.set(String(u.id || u._id), u);
+      });
+    }
+    return map;
+  }, [usersResponse]);
+
   // 3. Operational State
-  const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
+  const [orders, setOrders] = useState<Order[]>(isDemo ? INITIAL_ORDERS : []);
 
   useEffect(() => {
     const raw = ordersResponse?.data || [];
-    if (Array.isArray(raw) && raw.length > 0) {
-      const mapped = raw.map((item) => mapApiOrderToAdminOrder(item, clientsMap, productsMap));
-      setOrders(mapped);
+    if (Array.isArray(raw)) {
+      if (raw.length > 0) {
+        const mapped = raw.map((item) => mapApiOrderToAdminOrder(item, clientsMap, productsMap, usersMap));
+        setOrders(mapped);
+      } else if (!isDemo) {
+        setOrders([]);
+      }
     }
-  }, [ordersResponse, clientsMap, productsMap]);
+  }, [ordersResponse, clientsMap, productsMap, usersMap]);
 
   useEffect(() => {
     const rawUsers = usersResponse?.data || [];
@@ -182,13 +241,13 @@ export const AdminPortalApp: React.FC = () => {
       );
     }
   }, [usersResponse]);
-  const [commodities] = useState<MarketCommodity[]>(INITIAL_COMMODITIES);
-  const [auditLogs, setAuditLogs] = useState<AuditEntry[]>(INITIAL_AUDIT_LOGS);
-  const [agentRuns, setAgentRuns] = useState<AgentRun[]>(INITIAL_AGENT_RUNS);
-  const [chatMessages, setChatMessages] = useState<Record<string, ChatMessage[]>>(INITIAL_CHAT_MESSAGES);
-  const [users, setUsers] = useState<AppUser[]>(INITIAL_USERS);
-  const [invites, setInvites] = useState<UserInvite[]>(INITIAL_INVITES);
-  const [materials, setMaterials] = useState<MaterialRequirement[]>(INITIAL_MATERIAL_REQUIREMENTS);
+  const [commodities] = useState<MarketCommodity[]>(isDemo ? INITIAL_COMMODITIES : []);
+  const [auditLogs, setAuditLogs] = useState<AuditEntry[]>(isDemo ? INITIAL_AUDIT_LOGS : []);
+  const [agentRuns, setAgentRuns] = useState<AgentRun[]>(isDemo ? INITIAL_AGENT_RUNS : []);
+  const [chatMessages, setChatMessages] = useState<Record<string, ChatMessage[]>>(isDemo ? INITIAL_CHAT_MESSAGES : {});
+  const [users, setUsers] = useState<AppUser[]>(isDemo ? INITIAL_USERS : []);
+  const [invites, setInvites] = useState<UserInvite[]>(isDemo ? INITIAL_INVITES : []);
+  const [materials, setMaterials] = useState<MaterialRequirement[]>(isDemo ? INITIAL_MATERIAL_REQUIREMENTS : []);
 
   // 4. Modal Dialogs State
   const [modalBuyOrder, setModalBuyOrder] = useState<Order | null>(null);
@@ -251,73 +310,123 @@ export const AdminPortalApp: React.FC = () => {
   const handleApproveQuotation = async (orderId: string, editedMargin?: number) => {
     const targetOrder = orders.find((o) => o.id === orderId);
     const realId = targetOrder?.backendId || orderId;
+
+    if (!isDemo && (!realId || realId.length !== 24)) {
+      showToast(`Cannot approve quotation: Order ${orderId} does not exist on server.`);
+      throw new Error(`Order ${orderId} is not a valid server record.`);
+    }
+
     try {
-      await approveQuotationMutation({
-        id: realId,
-        body: {
-          marginPercent: editedMargin ?? targetOrder?.quotation?.marginPercent ?? 18,
-          status: 'approved',
-          notes: `Admin approved quotation with ${editedMargin ?? 18}% margin.`,
-        },
-      }).unwrap();
+      if (realId && realId.length === 24) {
+        await approveQuotationMutation({
+          id: realId,
+          body: {
+            action: 'approve',
+            editedMarginPercent: editedMargin ?? targetOrder?.quotation?.marginPercent ?? 18,
+            notes: `Admin approved quotation with ${editedMargin ?? 18}% margin.`,
+          },
+        }).unwrap();
 
-      setOrders((prev) =>
-        prev.map((o) => {
-          if (o.id === orderId && o.quotation) {
-            const margin = editedMargin !== undefined ? editedMargin : o.quotation.marginPercent;
-            const costBefore = o.quotation.materialCost + o.quotation.processingCost + o.quotation.overheadCost + o.quotation.priceRiskBuffer;
-            const newTotal = Math.round(costBefore / (1 - margin / 100));
-            const newUnit = +(newTotal / o.quantityMeters).toFixed(2);
+        await refetchOrders();
+      } else if (isDemo) {
+        setOrders((prev) =>
+          prev.map((o) => {
+            if (o.id === orderId && o.quotation) {
+              const margin = editedMargin !== undefined ? editedMargin : o.quotation.marginPercent;
+              const costBefore =
+                o.quotation.materialCost +
+                o.quotation.processingCost +
+                o.quotation.overheadCost +
+                o.quotation.priceRiskBuffer;
+              const newTotal = Math.round(costBefore / (1 - margin / 100));
+              const newUnit = +(newTotal / o.quantityMeters).toFixed(2);
 
-            return {
-              ...o,
-              status: 'quotation_sent',
-              currentPhase: 'Quotation Sent to Client',
-              quotation: {
-                ...o.quotation,
-                marginPercent: margin,
-                totalPrice: newTotal,
-                pricePerUnit: newUnit,
-                adminApproved: true,
-                status: 'approved'
-              }
-            };
-          }
-          return o;
-        })
+              return {
+                ...o,
+                status: 'quotation_sent',
+                currentPhase: 'Quotation Sent to Client',
+                quotation: {
+                  ...o.quotation,
+                  marginPercent: margin,
+                  totalPrice: newTotal,
+                  pricePerUnit: newUnit,
+                  adminApproved: true,
+                  status: 'approved',
+                },
+              };
+            }
+            return o;
+          })
+        );
+      }
+
+      addAuditLog(
+        'QUOTATION_APPROVED',
+        `Admin approved quotation for ${orderId}. Client-safe PDF generated and dispatched.`,
+        orderId
       );
-
-      addAuditLog('QUOTATION_APPROVED', `Admin approved quotation for ${orderId}. Client-safe PDF generated and dispatched.`, orderId);
-      addAgentRun('Quotation Agent', 'SUCCESS', `Quotation for ${orderId} approved by Admin. Status moved to quotation_sent.`, orderId);
-      showToast(`Quotation approved! Order ${orderId} released to client with ${editedMargin || 18}% margin.`);
+      addAgentRun(
+        'Quotation Agent',
+        'SUCCESS',
+        `Quotation for ${orderId} approved by Admin.`,
+        orderId
+      );
+      showToast(`Quotation approved! Order ${orderId} approved with ${editedMargin || 18}% margin.`);
     } catch (err: any) {
-      const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to approve quotation on server.';
+      const errMsg =
+        err?.data?.message || err?.error || err?.message || 'Failed to approve quotation on server.';
       showToast(`Quotation approval failed: ${errMsg}`);
+      throw err;
     }
   };
 
-  const handleRejectQuotation = (orderId: string, reason: string) => {
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId && o.quotation) {
-          return {
-            ...o,
-            status: 'rejected_by_admin',
-            currentPhase: 'Quotation Rejected',
-            quotation: {
-              ...o.quotation,
-              adminApproved: false,
-              status: 'rejected',
-              rejectionReason: reason
-            }
-          };
-        }
-        return o;
-      })
-    );
+  const handleRejectQuotation = async (orderId: string, reason: string) => {
+    const targetOrder = orders.find((o) => o.id === orderId);
+    const realId = targetOrder?.backendId || orderId;
 
-    addAuditLog('QUOTATION_REJECTED', `Quotation for ${orderId} rejected by Admin. Reason: ${reason}`, orderId);
-    showToast(`Quotation for ${orderId} rejected by Admin.`);
+    if (!isDemo && (!realId || realId.length !== 24)) {
+      showToast(`Cannot reject quotation: Order ${orderId} does not exist on server.`);
+      throw new Error(`Order ${orderId} is not a valid server record.`);
+    }
+
+    try {
+      if (realId && realId.length === 24) {
+        await rejectQuotationMutation({
+          id: realId,
+          reason,
+          notes: `Admin rejected quotation: ${reason}`,
+        }).unwrap();
+
+        await refetchOrders();
+      } else if (isDemo) {
+        setOrders((prev) =>
+          prev.map((o) => {
+            if (o.id === orderId && o.quotation) {
+              return {
+                ...o,
+                status: 'rejected_by_admin',
+                currentPhase: 'Quotation Rejected',
+                quotation: {
+                  ...o.quotation,
+                  adminApproved: false,
+                  status: 'rejected',
+                  rejectionReason: reason,
+                },
+              };
+            }
+            return o;
+          })
+        );
+      }
+
+      addAuditLog('QUOTATION_REJECTED', `Quotation for ${orderId} rejected by Admin. Reason: ${reason}`, orderId);
+      showToast(`Quotation for ${orderId} rejected by Admin.`);
+    } catch (err: any) {
+      const errMsg =
+        err?.data?.message || err?.error || err?.message || 'Failed to reject quotation on server.';
+      showToast(`Quotation rejection failed: ${errMsg}`);
+      throw err;
+    }
   };
 
   const handleApprovePriceRevision = (orderId: string) => {
@@ -510,67 +619,244 @@ export const AdminPortalApp: React.FC = () => {
   // DELIVERIES & PAYMENTS HANDLERS
   // =========================================================================
 
-  const handleRecordDelivery = async (orderId: string, delivery: Omit<DeliveryRecord, 'id'>) => {
+  const handleRecordDelivery = async (
+    orderId: string,
+    delivery: Omit<DeliveryRecord, 'id'> & { invoiceAmount?: number }
+  ) => {
     const targetOrder = orders.find((o) => o.id === orderId);
     const realId = targetOrder?.backendId || orderId;
-    try {
-      await recordDeliveryMutation({
-        id: realId,
-        body: {
-          deliveryDate: delivery.date || new Date().toISOString().split('T')[0],
-          qty: delivery.quantityMeters,
-          invoiceNo: delivery.invoiceNumber || `INV-${Date.now()}`,
-          invoiceAmountPaise: delivery.quantityMeters * 22500,
-          notes: `Dispatched via ${delivery.carrier}`,
-        },
-      }).unwrap();
 
-      const record: DeliveryRecord = { ...delivery, id: `del_${Date.now()}` };
-      setOrders((prev) =>
-        prev.map((o) => {
-          if (o.id === orderId) {
-            return { ...o, deliveries: [...o.deliveries, record] };
-          }
-          return o;
-        })
+    if (
+      typeof delivery.quantityMeters !== 'number' ||
+      !Number.isFinite(delivery.quantityMeters) ||
+      delivery.quantityMeters <= 0
+    ) {
+      const errMsg = 'Delivery quantity must be a positive, finite number.';
+      showToast(`Delivery record failed: ${errMsg}`);
+      throw new Error(errMsg);
+    }
+
+    const invoiceNo = (delivery.invoiceNumber || '').trim();
+    if (!invoiceNo) {
+      const errMsg = 'Invoice / Gate pass number is required.';
+      showToast(`Delivery record failed: ${errMsg}`);
+      throw new Error(errMsg);
+    }
+
+    const alreadyDelivered =
+      targetOrder?.deliveredMeters ??
+      (targetOrder?.deliveries || []).reduce((s, d) => s + d.quantityMeters, 0);
+    const remainingQty = (targetOrder?.quantityMeters ?? 0) - alreadyDelivered;
+    if (remainingQty > 0 && delivery.quantityMeters > remainingQty) {
+      const errMsg = `Delivery quantity (${delivery.quantityMeters.toLocaleString()}m) exceeds remaining unfulfilled quantity (${remainingQty.toLocaleString()}m).`;
+      showToast(`Delivery record failed: ${errMsg}`);
+      throw new Error(errMsg);
+    }
+
+    // Duplicate check on already recorded deliveries for this order
+    const isDuplicate = (targetOrder?.deliveries || []).some(
+      (d) => d.invoiceNumber.trim().toLowerCase() === invoiceNo.toLowerCase()
+    );
+    if (isDuplicate) {
+      const errMsg = `Invoice #${invoiceNo} has already been recorded for this order.`;
+      showToast(`Delivery record failed: ${errMsg}`);
+      throw new Error(errMsg);
+    }
+
+    // Determine authoritative invoice amount according to backend contract
+    let finalInvoiceAmount: number | undefined;
+    if (delivery.invoiceAmount !== undefined) {
+      if (
+        typeof delivery.invoiceAmount !== 'number' ||
+        !Number.isFinite(delivery.invoiceAmount) ||
+        delivery.invoiceAmount <= 0
+      ) {
+        const errMsg = 'Delivery invoice amount must be a positive, finite number.';
+        showToast(`Delivery record failed: ${errMsg}`);
+        throw new Error(errMsg);
+      }
+      finalInvoiceAmount = delivery.invoiceAmount;
+    } else if (targetOrder?.quotation?.pricePerUnit && targetOrder.quotation.pricePerUnit > 0) {
+      finalInvoiceAmount = +(delivery.quantityMeters * targetOrder.quotation.pricePerUnit).toFixed(2);
+    } else if (targetOrder?.quotation?.totalPrice && targetOrder.quotation.totalPrice > 0) {
+      finalInvoiceAmount = targetOrder.quotation.totalPrice;
+    }
+
+    if (
+      typeof finalInvoiceAmount !== 'number' ||
+      !Number.isFinite(finalInvoiceAmount) ||
+      finalInvoiceAmount <= 0
+    ) {
+      const errMsg =
+        'Delivery invoice amount must be positive and finite. Please specify an invoice amount or ensure order quotation rate is available.';
+      showToast(`Delivery record failed: ${errMsg}`);
+      throw new Error(errMsg);
+    }
+
+    const invoiceAmountPaise = Math.round(finalInvoiceAmount * 100);
+    if (!Number.isSafeInteger(invoiceAmountPaise) || invoiceAmountPaise <= 0) {
+      const errMsg = 'Delivery invoice amount in paise must be a valid positive integer.';
+      showToast(`Delivery record failed: ${errMsg}`);
+      throw new Error(errMsg);
+    }
+
+    const previousInvoicedPaise = (targetOrder?.deliveries || []).reduce(
+      (sum, d) => sum + Math.round((d.invoiceAmount || 0) * 100),
+      0
+    );
+    const orderTotalPaise = targetOrder?.quotation?.totalPrice
+      ? Math.round(targetOrder.quotation.totalPrice * 100)
+      : 0;
+
+    if (orderTotalPaise > 0 && previousInvoicedPaise + invoiceAmountPaise > orderTotalPaise) {
+      const remainingAmount = ((orderTotalPaise - previousInvoicedPaise) / 100).toFixed(2);
+      const errMsg = `Cumulative invoice amount exceeds total order value. Maximum remaining invoice amount is ₹${remainingAmount}.`;
+      showToast(`Delivery record failed: ${errMsg}`);
+      throw new Error(errMsg);
+    }
+
+    const idempotencyKey = `idem-del-${realId}-${invoiceNo}`;
+
+    try {
+      if (realId && realId.length === 24) {
+        await recordDeliveryMutation({
+          id: realId,
+          body: {
+            deliveryDate: delivery.date || new Date().toISOString().split('T')[0],
+            qty: delivery.quantityMeters,
+            invoiceNo,
+            invoiceAmountPaise,
+            carrier: delivery.carrier?.trim() || undefined,
+            notes: delivery.notes || (delivery.carrier ? `Dispatched via ${delivery.carrier.trim()}` : undefined),
+          },
+          idempotencyKey,
+        }).unwrap();
+
+        // Refetch authoritative order from server to derive displayed records
+        await refetchOrders();
+      } else if (isDemo) {
+        const record: DeliveryRecord = { ...delivery, id: `del_${Date.now()}` };
+        setOrders((prev) =>
+          prev.map((o) => {
+            if (o.id === orderId) {
+              return { ...o, deliveries: [...o.deliveries, record] };
+            }
+            return o;
+          })
+        );
+      } else {
+        const errMsg = `Cannot record delivery: Order ${orderId} does not exist on server.`;
+        showToast(errMsg);
+        throw new Error(errMsg);
+      }
+
+      addAuditLog(
+        'DELIVERY_RECORDED',
+        `Logged dispatch of ${delivery.quantityMeters}m for ${orderId}. Invoice: ${invoiceNo}`,
+        orderId
       );
-      addAuditLog('DELIVERY_RECORDED', `Logged dispatch of ${delivery.quantityMeters}m for ${orderId}. Invoice: ${delivery.invoiceNumber}`, orderId);
       showToast(`Delivery recorded for ${orderId} (${delivery.quantityMeters}m).`);
     } catch (err: any) {
-      const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to record delivery on server.';
+      const errMsg =
+        err?.data?.error?.message ||
+        err?.data?.message ||
+        err?.error ||
+        err?.message ||
+        'Failed to record delivery on server.';
       showToast(`Delivery record failed: ${errMsg}`);
+      throw err;
     }
   };
 
-  const handleRecordPayment = async (orderId: string, payment: Omit<PaymentRecord, 'id'>) => {
+  const handleRecordPayment = async (
+    orderId: string,
+    payment: Omit<PaymentRecord, 'id'> & { milestoneIndex?: number; ref?: string; method?: string }
+  ) => {
     const targetOrder = orders.find((o) => o.id === orderId);
     const realId = targetOrder?.backendId || orderId;
-    try {
-      await recordManualReceiptMutation({
-        id: realId,
-        body: {
-          milestoneIndex: 0,
-          amountPaise: Math.round(payment.amount * 100),
-          ref: payment.invoiceNumber || `PAY-${Date.now()}`,
-          method: 'neft',
-          notes: `Payment receipt recorded for invoice ${payment.invoiceNumber}`,
-        },
-      }).unwrap();
 
-      const record: PaymentRecord = { ...payment, id: `pay_${Date.now()}` };
-      setOrders((prev) =>
-        prev.map((o) => {
-          if (o.id === orderId) {
-            return { ...o, payments: [...o.payments, record] };
-          }
-          return o;
-        })
+    if (!payment.amount || payment.amount <= 0) {
+      const errMsg = 'Payment amount must be a positive number.';
+      showToast(`Payment receipt failed: ${errMsg}`);
+      throw new Error(errMsg);
+    }
+
+    const ref = (payment.ref || payment.invoiceNumber || '').trim();
+    if (!ref) {
+      const errMsg = 'Payment reference / receipt number is required.';
+      showToast(`Payment receipt failed: ${errMsg}`);
+      throw new Error(errMsg);
+    }
+
+    const milestoneIndex = payment.milestoneIndex !== undefined ? payment.milestoneIndex : 0;
+    const amountPaise = Math.round(payment.amount * 100);
+
+    // Validate positive amount against selected milestone outstanding balance
+    const milestone = targetOrder?.financials?.milestones?.[milestoneIndex];
+    if (milestone) {
+      const currentReceived = milestone.receivedPaise || 0;
+      const remainingDuePaise = Math.max(0, milestone.amountPaise - currentReceived);
+      if (remainingDuePaise <= 0) {
+        const errMsg = `Milestone '${milestone.milestone}' is already fully paid.`;
+        showToast(`Payment receipt failed: ${errMsg}`);
+        throw new Error(errMsg);
+      }
+      if (amountPaise > remainingDuePaise) {
+        const errMsg = `Payment amount ($${payment.amount.toLocaleString()}) exceeds remaining due ($${(remainingDuePaise / 100).toLocaleString()}) for milestone '${milestone.milestone}'.`;
+        showToast(`Payment receipt failed: ${errMsg}`);
+        throw new Error(errMsg);
+      }
+    }
+
+    const idempotencyKey = `idem-pay-${realId}-${milestoneIndex}-${ref}`;
+
+    try {
+      if (realId && realId.length === 24) {
+        await recordManualReceiptMutation({
+          id: realId,
+          body: {
+            milestoneIndex,
+            amountPaise,
+            ref,
+            method: (payment.method as any) || 'neft',
+            notes: `Payment receipt recorded for reference ${ref}`,
+          },
+          idempotencyKey,
+        }).unwrap();
+
+        // Refetch authoritative order from server to derive displayed records
+        await refetchOrders();
+      } else if (isDemo) {
+        const record: PaymentRecord = { ...payment, id: `pay_${Date.now()}` };
+        setOrders((prev) =>
+          prev.map((o) => {
+            if (o.id === orderId) {
+              return { ...o, payments: [...o.payments, record] };
+            }
+            return o;
+          })
+        );
+      } else {
+        const errMsg = `Cannot record payment: Order ${orderId} does not exist on server.`;
+        showToast(errMsg);
+        throw new Error(errMsg);
+      }
+
+      addAuditLog(
+        'PAYMENT_RECORDED',
+        `Recorded payment receipt of $${payment.amount.toLocaleString()} for ${orderId}. Ref: ${ref}`,
+        orderId
       );
-      addAuditLog('PAYMENT_RECORDED', `Recorded payment receipt of $${payment.amount} for ${orderId}.`, orderId);
       showToast(`Payment receipt of $${payment.amount.toLocaleString()} logged.`);
     } catch (err: any) {
-      const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to record payment on server.';
+      const errMsg =
+        err?.data?.error?.message ||
+        err?.data?.message ||
+        err?.error ||
+        err?.message ||
+        'Failed to record payment on server.';
       showToast(`Payment receipt failed: ${errMsg}`);
+      throw err;
     }
   };
 
@@ -681,8 +967,8 @@ export const AdminPortalApp: React.FC = () => {
     showToast(`Feasibility rerun complete for ${orderId}.`);
   };
 
-  const handleAssignSupervisor = (orderId: string, supervisorId: string, supervisorName: string) => {
-    handleConfirmHandover(orderId, supervisorId, supervisorName);
+  const handleAssignSupervisor = async (orderId: string, supervisorId: string, supervisorName: string) => {
+    await handleConfirmHandover(orderId, supervisorId, supervisorName);
   };
 
   const handleApproveOvertime = (shedName: string) => {
@@ -754,7 +1040,25 @@ export const AdminPortalApp: React.FC = () => {
                 orders={orders}
                 users={users}
                 commodities={commodities}
-                auditLogs={auditLogs}
+                ordersSummary={ordersSummaryData?.data}
+                isOrdersSummaryLoading={isOrdersSummaryLoading}
+                isOrdersSummaryError={isOrdersSummaryError}
+                refetchOrdersSummary={refetchOrdersSummary}
+                productionBoard={productionBoardData?.data}
+                isProductionBoardLoading={isProductionBoardLoading}
+                refetchProductionBoard={refetchProductionBoard}
+                stockSummary={stockSummaryData?.data}
+                isStockSummaryLoading={isStockSummaryLoading}
+                refetchStockSummary={refetchStockSummary}
+                machines={machinesData?.data}
+                isMachinesLoading={isMachinesLoading}
+                refetchMachines={refetchMachines}
+                auditLogs={auditLogsData?.data || auditLogs}
+                isAuditLogsLoading={isAuditLogsLoading}
+                notifications={isDemo ? undefined : (isNotificationsError ? undefined : notificationsData?.data)}
+                isNotificationsLoading={isNotificationsLoading}
+                isNotificationsError={isNotificationsError}
+                refetchNotifications={refetchNotifications}
                 onNavigateTab={(tab) => setCurrentTab(tab)}
                 onSelectOrder={(id) => setSelectedOrderId(id)}
                 onOpenOrderModal={(o) => setModalInspectorOrder(o)}

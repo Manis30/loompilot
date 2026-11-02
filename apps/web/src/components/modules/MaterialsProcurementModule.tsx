@@ -23,8 +23,14 @@ import {
   AlertCircle
 } from 'lucide-react';
 import type { MaterialRequirement, Order } from '../../types';
-import { useGetMaterialsQuery } from '../../store/api/catalogApi';
-import { useRecordGoodsReceiptMutation, useCreatePurchaseDecisionMutation, useUpdatePurchaseDecisionMutation, useGetPurchaseDecisionsQuery } from '../../store/api/stockApi';
+import { useGetMaterialsQuery, useGetSuppliersQuery } from '../../store/api/catalogApi';
+import {
+  useRecordGoodsReceiptMutation,
+  useCreatePurchaseDecisionMutation,
+  useUpdatePurchaseDecisionMutation,
+  useGetPurchaseDecisionsQuery,
+  useGetStockMovementsQuery,
+} from '../../store/api/stockApi';
 
 // =========================================================================
 // DATA MODELS & TYPES
@@ -108,6 +114,8 @@ export type PurchaseOrderStatus =
 
 export interface PurchaseOrderRecord {
   poNo: string;
+  decisionId?: string;
+  rawOrderId?: string;
   supplierId: string;
   supplierName: string;
   relatedOrderIds: string[];
@@ -198,6 +206,8 @@ export interface ProcurementAlert {
 // =========================================================================
 // INITIAL MOCK MASTER DATA
 // =========================================================================
+
+const isDemoEnabled = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
 
 export function mapBackendMaterialToInventory(m: any): InventoryMaterial {
   const id = String(m._id || m.id || '');
@@ -684,12 +694,176 @@ interface MaterialsProcurementModuleProps {
   onRerunFeasibility?: (orderId: string) => void;
 }
 
+export function mapPurchaseDecisionToPo(dec: any): PurchaseOrderRecord {
+  const poNo = dec.supplierOrder?.orderNo || dec.decisionId || String(dec._id || 'PO-REQ');
+  const rawStatus = (dec.supplierOrder?.status || 'pending').toLowerCase();
+  let status: PurchaseOrderStatus = 'Pending Approval';
+  if (rawStatus === 'ordered' || rawStatus === 'approved') {
+    status = 'Ordered';
+  } else if (rawStatus === 'cancelled' || rawStatus === 'rejected') {
+    status = 'Rejected';
+  } else if (rawStatus === 'received' || rawStatus === 'completed') {
+    status = 'Completed';
+  } else if (rawStatus === 'partially_received' || (dec.supplierOrder?.recvQty && dec.supplierOrder.recvQty > 0)) {
+    status = 'Partially Received';
+  } else if (rawStatus === 'pending' || rawStatus === 'pending_approval') {
+    status = 'Pending Approval';
+  }
+
+  const orderedQuantity = dec.qty || 0;
+  const receivedQuantity = dec.supplierOrder?.recvQty || 0;
+  const unitPrice = (dec.ratePaise || 0) / 100;
+  const totalAmount = dec.totalPaise ? dec.totalPaise / 100 : Math.round(orderedQuantity * unitPrice);
+
+  let category: MaterialCategory = 'yarn';
+  const rawCat = (dec.materialType || '').toLowerCase();
+  if (rawCat === 'fabric') category = 'fabric';
+  else if (rawCat === 'dye' || rawCat === 'chemicals' || rawCat === 'dye_chemical') category = 'dye';
+  else if (rawCat === 'trims' || rawCat === 'trim' || rawCat === 'packing') category = 'trims';
+
+  let unit: MaterialUnit = 'kg';
+  if (dec.unit === 'm' || dec.unit === 'meters') unit = 'm';
+  else if (dec.unit === 'pcs' || dec.unit === 'pieces') unit = 'pcs';
+  else if (dec.unit === 'L' || dec.unit === 'liters') unit = 'L';
+
+  const rawOrderId = dec.orderId ? String(dec.orderId) : undefined;
+  const decisionId = dec.decisionId ? String(dec.decisionId) : (dec.supplierOrder?.orderNo ? String(dec.supplierOrder.orderNo) : undefined);
+  const orderNumber = dec.orderNumber || (rawOrderId ? rawOrderId : '');
+
+  return {
+    poNo,
+    decisionId,
+    rawOrderId,
+    supplierId: String(dec.supplierId || 'sup_default'),
+    supplierName: dec.supplierName || 'Verified Supplier',
+    relatedOrderIds: orderNumber ? [orderNumber] : [],
+    items: [
+      {
+        materialId: String(dec.materialId || ''),
+        materialName: dec.materialName || 'Textile Material',
+        category,
+        unit,
+        orderedQuantity,
+        receivedQuantity,
+        remainingQuantity: Math.max(0, orderedQuantity - receivedQuantity),
+        unitPrice,
+        totalItemCost: totalAmount,
+      },
+    ],
+    transportCost: 0,
+    otherCharges: 0,
+    totalAmount,
+    orderDate: dec.decidedAt
+      ? new Date(dec.decidedAt).toLocaleDateString('en-GB')
+      : dec.createdAt
+      ? new Date(dec.createdAt).toLocaleDateString('en-GB')
+      : 'Today',
+    expectedDelivery: dec.expectedArrivalDate
+      ? new Date(dec.expectedArrivalDate).toLocaleDateString('en-GB')
+      : 'TBD',
+    status,
+    purchaseJustification: dec.notes || dec.supplierOrder?.notes || 'Raw material purchase decision',
+    createdBy: dec.decidedBy || 'System / Procurement',
+    approvedBy: dec.supplierOrder?.placedAt ? (dec.decidedBy || 'Admin') : undefined,
+    approvedAt: dec.supplierOrder?.placedAt
+      ? new Date(dec.supplierOrder.placedAt).toLocaleString('en-GB')
+      : undefined,
+    rejectedReason: dec.supplierOrder?.cancelledReason || undefined,
+    history: [
+      {
+        id: `h_${dec.decisionId || poNo}`,
+        timestamp: dec.decidedAt
+          ? new Date(dec.decidedAt).toLocaleString('en-GB')
+          : 'Initial',
+        actor: dec.decidedBy || 'Admin',
+        action: status === 'Ordered' ? 'ADMIN_APPROVED' : status === 'Rejected' ? 'ADMIN_REJECTED' : 'PR_CREATED',
+        notes: dec.notes || `Purchase requisition ${poNo} registered in system.`,
+      },
+    ],
+  };
+}
+
+export function mapMovementToTransaction(
+  m: any,
+  materialsMap: Map<string, { name: string; unit: MaterialUnit }>,
+  ordersMap?: Map<string, string>
+): InventoryTransaction {
+  const matInfo = materialsMap.get(String(m.materialId));
+  const materialName = matInfo?.name || 'Raw Material';
+  const unit = matInfo?.unit || 'kg';
+
+  let transactionType: InventoryTransaction['transactionType'] = 'Stock Adjustment';
+  let quantityChange = m.qty;
+
+  switch (m.type) {
+    case 'receipt':
+      transactionType = 'Purchase Receipt';
+      quantityChange = Math.abs(m.qty);
+      break;
+    case 'consume':
+      transactionType = 'Material Consumption';
+      quantityChange = -Math.abs(m.qty);
+      break;
+    case 'reserve':
+      transactionType = 'Material Allocation';
+      quantityChange = -Math.abs(m.qty);
+      break;
+    case 'release':
+      transactionType = 'Stock Adjustment';
+      quantityChange = Math.abs(m.qty);
+      break;
+    case 'opening':
+      transactionType = 'Initial Stock';
+      quantityChange = Math.abs(m.qty);
+      break;
+    case 'adjust':
+      transactionType = 'Stock Adjustment';
+      quantityChange = m.qty;
+      break;
+    default:
+      transactionType = 'Stock Adjustment';
+  }
+
+  const rawId = String(m._id || m.id || '');
+  const id = rawId.length >= 6 ? `TXN-${rawId.slice(-6).toUpperCase()}` : `TXN-${rawId || 'MOV'}`;
+
+  const relatedRef = m.purchaseDecisionRef?.decisionId
+    ? `PO ${m.purchaseDecisionRef.decisionId}`
+    : m.orderId
+    ? `Order ${ordersMap?.get(String(m.orderId)) || String(m.orderId).slice(-6)}`
+    : 'Warehouse Direct';
+
+  const timestamp = m.createdAt
+    ? new Date(m.createdAt).toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : 'Recent';
+
+  return {
+    id,
+    materialId: String(m.materialId),
+    materialName,
+    transactionType,
+    quantityChange,
+    unit,
+    balanceAfter: m.qtyAfter ?? 0,
+    relatedRef,
+    timestamp,
+    userResponsible: 'System / Warehouse',
+    remarks: `${transactionType}: ${quantityChange > 0 ? `+${quantityChange}` : quantityChange} ${unit}`,
+  };
+}
+
 export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProps> = ({
   orders,
   onRecordPurchaseDecision,
   onRerunFeasibility
 }) => {
-  // Live API Materials Query
+  // Live API Queries
   const {
     data: materialsApiResponse,
     isLoading,
@@ -698,6 +872,30 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
     error,
     refetch: refetchMaterials,
   } = useGetMaterialsQuery(undefined);
+
+  const {
+    data: purchaseDecisionsResponse,
+    isLoading: isDecisionsLoading,
+    isError: isDecisionsError,
+    error: decisionsErrorResponse,
+    refetch: refetchPurchaseDecisions,
+  } = useGetPurchaseDecisionsQuery(undefined);
+
+  const {
+    data: suppliersApiResponse,
+    isLoading: isSuppliersLoading,
+    isError: isSuppliersError,
+    refetch: refetchSuppliers,
+  } = useGetSuppliersQuery(undefined);
+
+  const {
+    data: stockMovementsResponse,
+    isLoading: isMovementsLoading,
+    isFetching: isMovementsFetching,
+    isError: isMovementsError,
+    error: movementsError,
+    refetch: refetchMovements,
+  } = useGetStockMovementsQuery(undefined);
 
   const [recordGoodsReceiptMutation, { isLoading: isRecordingReceipt }] = useRecordGoodsReceiptMutation();
   const [inwardError, setInwardError] = useState<string | null>(null);
@@ -708,8 +906,6 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
   const [updatePurchaseDecision, { isLoading: isUpdatingDecision }] = useUpdatePurchaseDecisionMutation();
   const [decisionError, setDecisionError] = useState<string | null>(null);
   const [processingPoNo, setProcessingPoNo] = useState<string | null>(null);
-
-  const { data: purchaseDecisionsResponse } = useGetPurchaseDecisionsQuery(undefined);
 
   const liveMaterials: InventoryMaterial[] = useMemo(() => {
     if (!materialsApiResponse) return [];
@@ -727,8 +923,8 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
 
   useEffect(() => {
     if (liveMaterials.length > 0) {
+      setInventory(liveMaterials);
       if (!hasLoadedApiData) {
-        setInventory(liveMaterials);
         setHasLoadedApiData(true);
       }
       setInwardForm((prev) => {
@@ -736,97 +932,238 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
         return exists ? prev : { ...prev, materialId: liveMaterials[0].id };
       });
     }
-  }, [liveMaterials, hasLoadedApiData]);
+  }, [liveMaterials]);
 
   const handleRefresh = async () => {
-    const res = await refetchMaterials();
-    if (res.data) {
-      const list = Array.isArray(res.data)
-        ? res.data
-        : Array.isArray(res.data.data)
-        ? res.data.data
+    const [matRes] = await Promise.allSettled([
+      refetchMaterials(),
+      refetchPurchaseDecisions(),
+      refetchSuppliers(),
+      refetchMovements(),
+    ]);
+    if (matRes.status === 'fulfilled' && matRes.value?.data) {
+      const list = Array.isArray(matRes.value.data)
+        ? matRes.value.data
+        : Array.isArray(matRes.value.data.data)
+        ? matRes.value.data.data
         : [];
       setInventory(list.map(mapBackendMaterialToInventory));
-      showToast('Materials inventory refreshed from database.');
     }
+    showToast('Materials inventory and procurement data refreshed from database.');
   };
 
   const getErrorMessage = (err: any): string => {
-    if (!err) return 'Failed to connect to materials inventory service';
+    if (!err) return 'Failed to connect to backend service';
     if (typeof err === 'string') return err;
     if (err.data?.message) return err.data.message;
     if (err.error) return err.error;
     if (err.message) return err.message;
-    return 'Unable to fetch materials from API. Please verify server connectivity.';
+    return 'Unable to fetch data from API. Please verify server connectivity.';
   };
-  const [allocations] = useState<OrderAllocationItem[]>(INITIAL_ORDER_ALLOCATIONS);
-  const [supplierOffers] = useState<SupplierOffer[]>(INITIAL_SUPPLIER_OFFERS);
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderRecord[]>(INITIAL_PURCHASE_ORDERS_DETAILED);
-  const [receipts, setReceipts] = useState<MaterialReceiptRecord[]>(INITIAL_RECEIPTS_HISTORY);
-  const [transactions, setTransactions] = useState<InventoryTransaction[]>(INITIAL_TRANSACTIONS);
-  const [alerts, setAlerts] = useState<ProcurementAlert[]>(INITIAL_PROCUREMENT_ALERTS);
 
-  useEffect(() => {
-    const liveDecisions = Array.isArray(purchaseDecisionsResponse?.data)
+  // Derive supplier offers from backend materials and suppliers
+  const liveSupplierOffers: SupplierOffer[] = useMemo(() => {
+    const rawMaterials = Array.isArray(materialsApiResponse?.data)
+      ? materialsApiResponse.data
+      : Array.isArray(materialsApiResponse)
+      ? materialsApiResponse
+      : [];
+    const rawSuppliers = Array.isArray(suppliersApiResponse?.data)
+      ? suppliersApiResponse.data
+      : Array.isArray(suppliersApiResponse)
+      ? suppliersApiResponse
+      : [];
+
+    const suppliersMap = new Map<string, any>();
+    rawSuppliers.forEach((s: any) => {
+      const id = String(s._id || s.id);
+      suppliersMap.set(id, s);
+    });
+
+    const offers: SupplierOffer[] = [];
+
+    for (const mat of rawMaterials) {
+      const matId = String(mat._id || mat.id);
+      const matName = mat.materialName || mat.name || 'Textile Material';
+      const matUnit = (mat.unit === 'meters' || mat.unit === 'm' ? 'm' : mat.unit === 'pcs' ? 'pcs' : mat.unit === 'L' ? 'L' : 'kg') as MaterialUnit;
+
+      const rawOffers = Array.isArray(mat.supplierOffers) ? mat.supplierOffers : [];
+      rawOffers.forEach((o: any, idx: number) => {
+        const supId = String(o.supplierId?._id || o.supplierId?.id || o.supplierId || '');
+        const supplierObj = suppliersMap.get(supId) || (typeof o.supplierId === 'object' ? o.supplierId : null);
+        const supplierName = supplierObj?.supplierName || 'Verified Supplier';
+        const location = supplierObj?.city ? `${supplierObj.city}, ${supplierObj.country || 'IN'}` : 'Mill Depot';
+        const unitPrice = o.ratePaise ? o.ratePaise / 100 : (mat.currentRatePaise ? mat.currentRatePaise / 100 : 100);
+        const leadTimeDays = o.leadDays || supplierObj?.defaultLeadTimeDays || 4;
+
+        const deliveryDate = new Date();
+        deliveryDate.setDate(deliveryDate.getDate() + leadTimeDays);
+
+        offers.push({
+          id: `off_${matId}_${supId || idx}`,
+          supplierName,
+          location,
+          materialId: matId,
+          materialName: matName,
+          unit: matUnit,
+          unitPrice,
+          availableCapacity: 5000,
+          moq: 200,
+          leadTimeDays,
+          expectedDeliveryDate: deliveryDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          transportCost: 2000,
+          otherCharges: 500,
+          qualityRating: 4.8,
+          qualityHistory: '98% first-pass yield',
+          deliveryPerformance: '96% on-time record',
+          paymentTerms: 'Net 30 Days',
+          isAiRecommended: idx === 0,
+          aiRecommendation: idx === 0 ? 'Verified active contract supplier offer' : undefined,
+        });
+      });
+
+      if (rawOffers.length === 0 && (mat.preferredSupplierId || rawSuppliers.length > 0)) {
+        const targetSup = mat.preferredSupplierId ? (suppliersMap.get(String(mat.preferredSupplierId)) || rawSuppliers[0]) : rawSuppliers[0];
+        if (targetSup) {
+          const supId = String(targetSup._id || targetSup.id);
+          const unitPrice = mat.currentRatePaise ? mat.currentRatePaise / 100 : (mat.unitCost || 100);
+          const leadTimeDays = targetSup.defaultLeadTimeDays || 3;
+          const deliveryDate = new Date();
+          deliveryDate.setDate(deliveryDate.getDate() + leadTimeDays);
+
+          offers.push({
+            id: `off_pref_${matId}_${supId}`,
+            supplierName: targetSup.supplierName || 'Preferred Mill Supplier',
+            location: targetSup.city ? `${targetSup.city}, ${targetSup.country || 'IN'}` : 'Regional Hub',
+            materialId: matId,
+            materialName: matName,
+            unit: matUnit,
+            unitPrice,
+            availableCapacity: 5000,
+            moq: 200,
+            leadTimeDays,
+            expectedDeliveryDate: deliveryDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+            transportCost: 1500,
+            otherCharges: 400,
+            qualityRating: 4.7,
+            qualityHistory: 'Contracted supplier',
+            deliveryPerformance: 'Standard terms',
+            paymentTerms: 'Net 30 Days',
+            isAiRecommended: true,
+            aiRecommendation: 'Preferred contract partner for this catalog material',
+          });
+        }
+      }
+    }
+
+    return offers;
+  }, [materialsApiResponse, suppliersApiResponse]);
+
+  const supplierOffers = useMemo(() => {
+    if (liveSupplierOffers.length > 0) return liveSupplierOffers;
+    if (isDemoEnabled) return INITIAL_SUPPLIER_OFFERS;
+    return [];
+  }, [liveSupplierOffers]);
+
+  const allocations: OrderAllocationItem[] = useMemo(() => {
+    if (materials && materials.length > 0) {
+      return materials.map((m) => {
+        const matchingOrder = orders?.find((o) => o.id === m.affectedOrderId);
+        return {
+          id: `omr_${m.id}`,
+          orderId: m.affectedOrderId || matchingOrder?.id || 'ORD-REQ',
+          clientName: matchingOrder?.clientName || 'Committed Client',
+          productName: m.affectedProductName || matchingOrder?.productName || 'Textile Order',
+          materialId: m.id,
+          requiredQuantity: m.requiredQuantity,
+          allocatedQuantity: Math.max(0, m.requiredQuantity - m.shortageQuantity),
+          unit: (m.unit as MaterialUnit) || 'kg',
+          requiredByDate: m.expectedArrival || 'TBD',
+          status: (m.shortageQuantity > 0 ? 'Shortage' : 'Allocated') as OrderAllocationItem['status'],
+        };
+      });
+    }
+    if (isDemoEnabled) {
+      return INITIAL_ORDER_ALLOCATIONS;
+    }
+    return [];
+  }, [materials, orders]);
+
+  const livePurchaseOrders: PurchaseOrderRecord[] = useMemo(() => {
+    const rawList = Array.isArray(purchaseDecisionsResponse?.data)
       ? purchaseDecisionsResponse.data
       : Array.isArray(purchaseDecisionsResponse)
       ? purchaseDecisionsResponse
       : null;
 
-    if (liveDecisions && liveDecisions.length > 0) {
-      setPurchaseOrders((prev) => {
-        const merged = [...prev];
-        for (const dec of liveDecisions) {
-          const poNo = dec.supplierOrder?.orderNo || dec.decisionId;
-          if (!poNo) continue;
-          const status =
-            dec.supplierOrder?.status === 'ordered'
-              ? 'Ordered'
-              : dec.supplierOrder?.status === 'cancelled'
-              ? 'Rejected'
-              : 'Pending Approval';
-          const existingIdx = merged.findIndex((p) => p.poNo === poNo || (dec.decisionId && p.poNo === dec.decisionId));
-          if (existingIdx >= 0) {
-            merged[existingIdx] = {
-              ...merged[existingIdx],
-              status,
-              relatedOrderIds: dec.orderId ? [dec.orderId] : merged[existingIdx].relatedOrderIds,
-            };
-          } else {
-            merged.push({
-              poNo,
-              supplierId: dec.supplierId || 'sup_default',
-              supplierName: 'Supplier ' + (dec.supplierId || 'Partner'),
-              relatedOrderIds: dec.orderId ? [dec.orderId] : [],
-              items: [
-                {
-                  materialId: dec.materialId || 'mat_unknown',
-                  materialName: dec.materialId || 'Procured Material',
-                  category: 'yarn',
-                  unit: 'kg',
-                  orderedQuantity: dec.qty || 0,
-                  receivedQuantity: dec.supplierOrder?.recvQty || 0,
-                  remainingQuantity: Math.max(0, (dec.qty || 0) - (dec.supplierOrder?.recvQty || 0)),
-                  unitPrice: (dec.ratePaise || 0) / 100,
-                  totalItemCost: Math.round(((dec.ratePaise || 0) / 100) * (dec.qty || 0)),
-                },
-              ],
-              transportCost: 0,
-              otherCharges: 0,
-              totalAmount: Math.round(((dec.ratePaise || 0) / 100) * (dec.qty || 0)),
-              orderDate: dec.createdAt ? new Date(dec.createdAt).toLocaleDateString('en-GB') : 'Today',
-              expectedDelivery: dec.expectedArrivalDate || 'TBD',
-              status,
-              purchaseJustification: dec.notes || 'Procurement request',
-              createdBy: 'System / Procurement',
-              history: [],
-            });
-          }
-        }
-        return merged;
+    if (!rawList) return [];
+    return rawList.map(mapPurchaseDecisionToPo);
+  }, [purchaseDecisionsResponse]);
+
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderRecord[]>(
+    isDemoEnabled ? INITIAL_PURCHASE_ORDERS_DETAILED : []
+  );
+
+  useEffect(() => {
+    if (purchaseDecisionsResponse) {
+      if (livePurchaseOrders.length > 0) {
+        setPurchaseOrders(livePurchaseOrders);
+      } else if (!isDemoEnabled) {
+        setPurchaseOrders([]);
+      }
+    }
+  }, [purchaseDecisionsResponse, livePurchaseOrders]);
+
+  const [receipts, setReceipts] = useState<MaterialReceiptRecord[]>(isDemoEnabled ? INITIAL_RECEIPTS_HISTORY : []);
+
+  const materialsMap = useMemo(() => {
+    const map = new Map<string, { name: string; unit: MaterialUnit }>();
+    inventory.forEach((m) => {
+      map.set(m.id, { name: m.name, unit: m.unit });
+    });
+    const rawList = Array.isArray(materialsApiResponse?.data)
+      ? materialsApiResponse.data
+      : Array.isArray(materialsApiResponse)
+      ? materialsApiResponse
+      : [];
+    rawList.forEach((m: any) => {
+      const id = String(m._id || m.id || '');
+      if (id && !map.has(id)) {
+        const unit = (m.unit === 'meters' || m.unit === 'm' ? 'm' : m.unit === 'pcs' ? 'pcs' : m.unit === 'L' ? 'L' : 'kg') as MaterialUnit;
+        map.set(id, { name: m.materialName || m.name || 'Raw Material', unit });
+      }
+    });
+    return map;
+  }, [inventory, materialsApiResponse]);
+
+  const ordersMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (orders && orders.length > 0) {
+      orders.forEach((o) => {
+        if (o.backendId) map.set(o.backendId, o.id);
+        map.set(o.id, o.id);
       });
     }
-  }, [purchaseDecisionsResponse]);
+    return map;
+  }, [orders]);
+
+  const liveTransactions: InventoryTransaction[] = useMemo(() => {
+    const rawList = Array.isArray(stockMovementsResponse?.data)
+      ? stockMovementsResponse.data
+      : Array.isArray(stockMovementsResponse)
+      ? stockMovementsResponse
+      : null;
+
+    if (!rawList) return [];
+
+    return rawList.map((m: any) => mapMovementToTransaction(m, materialsMap, ordersMap));
+  }, [stockMovementsResponse, materialsMap, ordersMap]);
+
+  const transactions = useMemo<InventoryTransaction[]>(() => {
+    if (liveTransactions.length > 0) return liveTransactions;
+    if (isDemoEnabled && !stockMovementsResponse) return INITIAL_TRANSACTIONS;
+    return [];
+  }, [liveTransactions, stockMovementsResponse]);
 
   // Filters on Main Overview
   const [selectedOrderId, setSelectedOrderId] = useState<string>('all');
@@ -837,7 +1174,7 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
   const [showFullPoModal, setShowFullPoModal] = useState<boolean>(false);
   const [showApprovalModal, setShowApprovalModal] = useState<boolean>(false);
   const [showSupplierModal, setShowSupplierModal] = useState<boolean>(false);
-  const [selectedSupplierMaterialId, setSelectedSupplierMaterialId] = useState<string>('mat_cotton_40s');
+  const [selectedSupplierMaterialId, setSelectedSupplierMaterialId] = useState<string>(isDemoEnabled ? 'mat_cotton_40s' : '');
   const [showAllAlertsModal, setShowAllAlertsModal] = useState<boolean>(false);
 
   // Core Action Modals
@@ -847,8 +1184,8 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
   const [showRejectModal, setShowRejectModal] = useState<boolean>(false);
   const [rejectingPoNo, setRejectingPoNo] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState<string>('');
-  const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>(['mat_cotton_40s']);
-  const [selectedPoIds, setSelectedPoIds] = useState<string[]>(['PO-1001']);
+  const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>(isDemoEnabled ? ['mat_cotton_40s'] : []);
+  const [selectedPoIds, setSelectedPoIds] = useState<string[]>(isDemoEnabled ? ['PO-1001'] : []);
   const [showAlertsSection, setShowAlertsSection] = useState<boolean>(true);
 
   // Toast feedback
@@ -860,24 +1197,27 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
 
   // Forms
   const [inwardForm, setInwardForm] = useState({
-    poNo: 'PO-1001',
-    materialId: 'mat_cotton_fabric',
-    inwardQuantity: 1200,
-    acceptedQuantity: 1100,
-    rejectedQuantity: 100,
+    poNo: isDemoEnabled ? 'PO-1001' : '',
+    materialId: isDemoEnabled ? 'mat_cotton_fabric' : '',
+    inwardQuantity: isDemoEnabled ? 1200 : 0,
+    acceptedQuantity: isDemoEnabled ? 1100 : 0,
+    rejectedQuantity: isDemoEnabled ? 100 : 0,
     damagedQuantity: 0,
-    batchLotNo: 'LOT-ST-2026-902C',
-    inspectionResult: 'Passed with Concession' as 'Passed Full' | 'Passed with Concession' | 'Failed QC',
-    inspectorName: 'Ramesh Kumar (QC Supervisor)',
-    notes: '100m selvedge width variance rejected. 1,100m accepted and credited to inventory.'
+    batchLotNo: isDemoEnabled ? 'LOT-ST-2026-902C' : '',
+    inspectionResult: (isDemoEnabled ? 'Passed with Concession' : 'Passed Full') as 'Passed Full' | 'Passed with Concession' | 'Failed QC',
+    inspectorName: isDemoEnabled ? 'Ramesh Kumar (QC Supervisor)' : '',
+    notes: isDemoEnabled ? '100m selvedge width variance rejected. 1,100m accepted and credited to inventory.' : '',
+    idempotencyKey: (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `rcpt-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`),
   });
 
   const [prForm, setPrForm] = useState({
-    supplierId: 'sup_vardhman_yarn',
-    materialId: 'mat_cotton_40s',
-    relatedOrderId: 'LP-903',
-    quantity: 400,
-    justification: '400 kg shortage on Order LP-903 after reserving yarn for LP-901 and LP-902.'
+    supplierId: isDemoEnabled ? 'sup_vardhman_yarn' : '',
+    materialId: isDemoEnabled ? 'mat_cotton_40s' : '',
+    relatedOrderId: isDemoEnabled ? 'LP-903' : '',
+    quantity: isDemoEnabled ? 400 : 0,
+    justification: isDemoEnabled ? '400 kg shortage on Order LP-903 after reserving yarn for LP-901 and LP-902.' : ''
   });
 
   // =========================================================================
@@ -887,15 +1227,7 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
   // Full MRP calculated list
   const mrpCalculatedList = useMemo(() => {
     return inventory.map((mat) => {
-      const liveAllocations = allocations.map((alloc, idx) => {
-        const liveMat = inventory[idx % Math.max(1, inventory.length)];
-        return {
-          ...alloc,
-          materialId: liveMat ? liveMat.id : alloc.materialId,
-          unit: liveMat ? liveMat.unit : alloc.unit,
-        };
-      });
-      const matAllocations = liveAllocations.filter((a) => a.materialId === mat.id);
+      const matAllocations = allocations.filter((a) => a.materialId === mat.id || a.materialId === mat.name);
       const targetAllocations = selectedOrderId === 'all'
         ? matAllocations
         : matAllocations.filter((a) => a.orderId === selectedOrderId);
@@ -927,6 +1259,63 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
       };
     });
   }, [inventory, allocations, selectedOrderId]);
+
+  // Dynamic Procurement Alerts calculated from authoritative state
+  const dynamicAlerts = useMemo<ProcurementAlert[]>(() => {
+    const list: ProcurementAlert[] = [];
+
+    mrpCalculatedList.forEach((mat) => {
+      if (mat.shortageQuantity > 0) {
+        const orderRef = mat.affectedOrders[0];
+        list.push({
+          id: `alt_shortage_${mat.id}`,
+          severity: 'critical',
+          type: 'critical_shortage',
+          materialName: mat.name,
+          affectedOrderId: orderRef,
+          issue: `Critical Shortage: ${mat.shortageQuantity.toLocaleString()} ${mat.unit} shortfall${orderRef ? ` affecting Order ${orderRef}` : ''}. Free inventory is exhausted.`,
+          quantityAffected: `${mat.shortageQuantity.toLocaleString()} ${mat.unit}`,
+          recommendedAction: `Initiate purchase request for ${mat.name} to avoid production stoppage.`,
+          actionPayload: { materialId: mat.id, orderId: orderRef },
+        });
+      } else if (mat.mrpStatus === 'Low Stock') {
+        list.push({
+          id: `alt_lowstock_${mat.id}`,
+          severity: 'warning',
+          type: 'low_stock',
+          materialName: mat.name,
+          issue: `Low Stock: Available inventory (${mat.availableToAllocate} ${mat.unit}) has breached reorder buffer (${mat.reorderPoint} ${mat.unit}).`,
+          quantityAffected: `${mat.availableToAllocate} ${mat.unit}`,
+          recommendedAction: 'Procure replenishment buffer from preferred suppliers.',
+          actionPayload: { materialId: mat.id },
+        });
+      }
+    });
+
+    purchaseOrders.forEach((po) => {
+      if (po.status === 'Pending Approval') {
+        list.push({
+          id: `alt_po_${po.poNo}`,
+          severity: 'info',
+          type: 'po_pending_approval',
+          materialName: po.items[0]?.materialName || 'Procurement Order',
+          affectedOrderId: po.relatedOrderIds[0],
+          issue: `Purchase Order ${po.poNo} awaits Admin Approval (₹${po.totalAmount.toLocaleString('en-IN')} commitment with ${po.supplierName}).`,
+          quantityAffected: po.items[0] ? `${po.items[0].orderedQuantity.toLocaleString()} ${po.items[0].unit}` : undefined,
+          recommendedAction: 'Review supplier comparison and approve purchase order.',
+          actionPayload: { poNo: po.poNo, orderId: po.relatedOrderIds[0] },
+        });
+      }
+    });
+
+    return list;
+  }, [mrpCalculatedList, purchaseOrders]);
+
+  const alerts = useMemo<ProcurementAlert[]>(() => {
+    if (dynamicAlerts.length > 0) return dynamicAlerts;
+    if (isDemoEnabled) return INITIAL_PROCUREMENT_ALERTS;
+    return [];
+  }, [dynamicAlerts]);
 
   // Sort and filter for top 5 materials:
   // Priority: Shortage first, then Low Stock, then Sufficient
@@ -965,6 +1354,16 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
   const topAlerts = useMemo(() => {
     return alerts.slice(0, 3);
   }, [alerts]);
+
+  const filterOrderIds = useMemo(() => {
+    if (orders && orders.length > 0) {
+      return orders.slice(0, 3).map((o) => o.id);
+    }
+    if (isDemoEnabled) {
+      return ['LP-901', 'TX-1024'];
+    }
+    return [];
+  }, [orders]);
 
   // Primary Pending PO for the approval widget
   const primaryPendingPo = useMemo(() => {
@@ -1024,13 +1423,13 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
         })
       );
 
-      setAlerts((prev) => prev.filter((a) => a.actionPayload?.poNo !== poNo || a.type !== 'po_pending_approval'));
       if (onRecordPurchaseDecision) {
         onRecordPurchaseDecision(poNo, 'approved', `Admin approved ${poNo}`);
       }
 
       showToast(`Purchase Order ${poNo} APPROVED by Admin. Supplier dispatch order sent!`);
       setShowApprovalModal(false);
+      refetchPurchaseDecisions();
     } catch (err: any) {
       const msg = err?.data?.message || err?.message || 'Failed to approve purchase request. Please try again.';
       setDecisionError(msg);
@@ -1100,6 +1499,7 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
       setRejectingPoNo(null);
       setRejectionReason('');
       setShowApprovalModal(false);
+      refetchPurchaseDecisions();
     } catch (err: any) {
       const msg = err?.data?.message || err?.message || 'Failed to reject purchase request. Please try again.';
       setDecisionError(msg);
@@ -1123,8 +1523,8 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
 
     const inwardQty = Number(inwardForm.inwardQuantity);
     const acceptedQty = Number(inwardForm.acceptedQuantity);
-    const rejectedQty = Number(inwardForm.rejectedQuantity);
-    const damagedQty = Number(inwardForm.damagedQuantity);
+    const rejectedQty = Number(inwardForm.rejectedQuantity || 0);
+    const damagedQty = Number(inwardForm.damagedQuantity || 0);
 
     if (inwardQty <= 0) {
       setInwardError('Inward quantity must be greater than zero.');
@@ -1147,34 +1547,48 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
       minute: '2-digit'
     });
 
-    const isLiveMaterial = mat.id && mat.id.length === 24;
-
     try {
-      let authoritativeStock = mat.physicalStock + acceptedQty;
+      const rawSuppliers = Array.isArray(suppliersApiResponse?.data)
+        ? suppliersApiResponse.data
+        : Array.isArray(suppliersApiResponse)
+        ? suppliersApiResponse
+        : [];
+      const firstSupplierId = rawSuppliers[0] ? String(rawSuppliers[0]._id || rawSuppliers[0].id) : undefined;
 
-      if (isLiveMaterial) {
-        const supplierId =
-          mat.preferredSupplierId ||
-          (po?.supplierId && po.supplierId.length === 24 ? po.supplierId : '668004000000000000000001');
+      const supplierId =
+        (po?.supplierId && po.supplierId !== 'sup_default' && po.supplierId.length === 24
+          ? po.supplierId
+          : undefined) ||
+        (mat.preferredSupplierId && mat.preferredSupplierId.length === 24
+          ? mat.preferredSupplierId
+          : undefined) ||
+        firstSupplierId ||
+        (po?.supplierId && po.supplierId !== 'sup_default' ? po.supplierId : undefined);
 
-        const res = await recordGoodsReceiptMutation({
-          materialId: mat.id,
-          qty: acceptedQty,
-          unitCostPaise: Math.round(mat.unitCost * 100) || 10000,
-          supplierId,
-        }).unwrap();
-
-        if (res?.data?.stockQty !== undefined) {
-          authoritativeStock = res.data.stockQty;
-        }
+      if (!supplierId) {
+        setInwardError('No valid supplier found for this tenant. Please register or select a supplier first.');
+        return;
       }
 
-      // ONLY on success do we update displayed stock & local records
+      // Call backend Goods Receipt mutation
+      const res = await recordGoodsReceiptMutation({
+        materialId: mat.id,
+        qty: acceptedQty,
+        unitCostPaise: Math.round(mat.unitCost * 100) || 10000,
+        supplierId,
+        purchaseDecisionId: po?.decisionId || (po?.poNo && po.poNo !== 'PO-DIRECT' ? po.poNo : undefined),
+        orderId: po?.rawOrderId || po?.relatedOrderIds?.[0],
+        idempotencyKey: inwardForm.idempotencyKey,
+      }).unwrap();
+
+      const authoritativeStock = res?.data?.stockQty ?? (mat.physicalStock + acceptedQty);
+
+      // ONLY on confirmed backend success do we update displayed stock & local records
       setInventory((prev) =>
         prev.map((item) => (item.id === mat.id ? { ...item, physicalStock: authoritativeStock } : item))
       );
 
-      // 1. Record receipt
+      // 1. Record receipt history
       const newReceipt: MaterialReceiptRecord = {
         receiptId: `REC-${8000 + receipts.length + 1}`,
         poNo: po?.poNo || 'PO-DIRECT',
@@ -1201,7 +1615,7 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
           prev.map((p) => {
             if (p.poNo === po.poNo) {
               const updatedItems = p.items.map((item) => {
-                if (item.materialId === mat.id) {
+                if (item.materialId === mat.id || p.items.length === 1) {
                   const newReceived = item.receivedQuantity + inwardQty;
                   return {
                     ...item,
@@ -1224,22 +1638,6 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
         );
       }
 
-      // 3. Log Transaction
-      const newTxn: InventoryTransaction = {
-        id: `TXN-${900 + transactions.length + 1}`,
-        materialId: mat.id,
-        materialName: mat.name,
-        transactionType: 'Purchase Receipt',
-        quantityChange: acceptedQty,
-        unit: mat.unit,
-        balanceAfter: authoritativeStock,
-        relatedRef: `${po?.poNo || 'DIRECT'} / ${inwardForm.batchLotNo}`,
-        timestamp,
-        userResponsible: inwardForm.inspectorName,
-        remarks: `QC Inward approved ${acceptedQty} ${mat.unit} (${rejectedQty} ${mat.unit} rejected/quarantined).`
-      };
-      setTransactions((prev) => [newTxn, ...prev]);
-
       if (onRerunFeasibility && po?.relatedOrderIds?.[0]) {
         onRerunFeasibility(po.relatedOrderIds[0]);
       }
@@ -1248,10 +1646,10 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
       setShowInwardModal(false);
       setInwardError(null);
 
-      // Refetch materials to sync with authoritative server state
-      if (isLiveMaterial) {
-        refetchMaterials();
-      }
+      // Refetch materials, purchase decisions, and stock movements from authoritative server state
+      refetchMaterials();
+      refetchPurchaseDecisions();
+      refetchMovements();
     } catch (err: any) {
       console.error('Failed to persist stock receipt to API:', err);
       const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to record goods receipt on server. Stock was not updated.';
@@ -1361,6 +1759,7 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
       showToast(`Purchase requisition ${newPoNo} created successfully!`);
       setShowCreatePrModal(false);
       refetchMaterials();
+      refetchPurchaseDecisions();
     } catch (err: any) {
       const errMsg = err?.data?.message || err?.message || 'Failed to submit purchase request to server';
       setCreatePrError(errMsg);
@@ -1449,9 +1848,16 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
           <button
             onClick={() => {
               setInwardError(null);
-              if (inventory.length > 0 && !inventory.some((m) => m.id === inwardForm.materialId)) {
-                setInwardForm((prev) => ({ ...prev, materialId: inventory[0].id }));
-              }
+              const newKey = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+                ? crypto.randomUUID()
+                : `rcpt-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+              setInwardForm((prev) => ({
+                ...prev,
+                idempotencyKey: newKey,
+                materialId: inventory.length > 0 && !inventory.some((m) => m.id === prev.materialId)
+                  ? inventory[0].id
+                  : prev.materialId,
+              }));
               setShowInwardModal(true);
             }}
             style={{
@@ -1483,7 +1889,7 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
         </div>
       </div>
 
-      {/* Error Alert Banner */}
+      {/* Error Alert Banners */}
       {isError && (
         <div style={{
           background: '#fef2f2',
@@ -1506,6 +1912,44 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
           </div>
           <button
             onClick={() => refetchMaterials()}
+            style={{
+              padding: '6px 14px',
+              background: '#dc2626',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 8,
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Retry Connection
+          </button>
+        </div>
+      )}
+
+      {isDecisionsError && (
+        <div style={{
+          background: '#fef2f2',
+          border: '1px solid #fecaca',
+          borderRadius: 12,
+          padding: '12px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#991b1b', fontSize: 12 }}>
+            <AlertTriangle size={18} />
+            <div>
+              <strong style={{ display: 'block' }}>Failed to fetch purchase decisions from API</strong>
+              <span style={{ fontSize: 11, color: '#b91c1c' }}>
+                {getErrorMessage(decisionsErrorResponse)}
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={() => refetchPurchaseDecisions()}
             style={{
               padding: '6px 14px',
               background: '#dc2626',
@@ -1605,20 +2049,30 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
               display: 'inline-flex',
               alignItems: 'center',
               gap: 6,
-              background: '#fef3f2',
-              color: '#b42318',
+              background: alerts.length > 0 ? '#fef3f2' : '#F8F0DF',
+              color: alerts.length > 0 ? '#b42318' : '#18191B',
               padding: '4px 10px',
               borderRadius: 9999,
               fontSize: 11.5,
               fontWeight: 700
             }}>
-              <AlertTriangle size={14} color="#dc2626" />
+              {alerts.length > 0 ? (
+                <AlertTriangle size={14} color="#dc2626" />
+              ) : (
+                <CheckCircle2 size={14} color="#16a34a" />
+              )}
               <span>{alerts.length} Active Alerts</span>
             </div>
 
+            {alerts.length === 0 && (
+              <span style={{ fontSize: 12, color: '#344054' }}>
+                &bull; All material inventory buffers and purchase requisitions are up to date.
+              </span>
+            )}
+
             {criticalMaterialShortages > 0 && (
               <span style={{ fontSize: 12, color: '#344054' }}>
-                &bull; <strong>{criticalMaterialShortages} Critical Shortage{criticalMaterialShortages > 1 ? 's' : ''}</strong> (e.g. 400 kg shortfall halting LP-903)
+                &bull; <strong>{criticalMaterialShortages} Critical Shortage{criticalMaterialShortages > 1 ? 's' : ''}</strong>
               </span>
             )}
 
@@ -1696,7 +2150,7 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
               >
                 All orders
               </button>
-              {['LP-901', 'TX-1024'].map(oid => (
+              {filterOrderIds.map(oid => (
                 <button
                   key={oid}
                   type="button"
@@ -1808,6 +2262,17 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
                         {inventory.length === 0
                           ? 'No live material records were returned from the backend API.'
                           : 'Try clearing your search query or switching order filter.'}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                {!isLoading && top5Materials.length === 0 && (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '32px 16px', color: '#64748b' }}>
+                      <Boxes size={24} style={{ margin: '0 auto 8px', color: '#94a3b8', display: 'block' }} />
+                      <div style={{ fontWeight: 600, fontSize: 13, color: '#334155' }}>No material requirements found</div>
+                      <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 2 }}>
+                        Materials will appear here once inventory items and production requirements are configured.
                       </div>
                     </td>
                   </tr>
@@ -1987,6 +2452,17 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
                 </tr>
               </thead>
               <tbody>
+                {recentPurchaseOrders.length === 0 && (
+                  <tr>
+                    <td colSpan={7} style={{ textAlign: 'center', padding: '32px 16px', color: '#64748b' }}>
+                      <Boxes size={24} style={{ margin: '0 auto 8px', color: '#94a3b8', display: 'block' }} />
+                      <div style={{ fontWeight: 600, fontSize: 13, color: '#334155' }}>No purchase orders recorded</div>
+                      <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 2 }}>
+                        New purchase requisitions will appear here when created or synchronized with suppliers.
+                      </div>
+                    </td>
+                  </tr>
+                )}
                 {recentPurchaseOrders.map((po) => {
                   const isSelected = selectedPoIds.includes(po.poNo);
                   let pillClass = 'warning';
@@ -2125,7 +2601,22 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
 
               {/* Top 3 alerts in compact row list */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {topAlerts.map((alt) => (
+                {topAlerts.length === 0 ? (
+                  <div style={{
+                    padding: '16px',
+                    textAlign: 'center',
+                    background: '#f8fafc',
+                    borderRadius: 12,
+                    border: '1px dashed #cbd5e1',
+                    fontSize: 11,
+                    color: '#64748b'
+                  }}>
+                    <CheckCircle2 size={22} color="#16a34a" style={{ margin: '0 auto 4px' }} />
+                    <div>No active procurement alerts.</div>
+                    <div style={{ fontSize: 10, color: '#94a3b8' }}>All material inventory buffers and order requirements are healthy.</div>
+                  </div>
+                ) :
+                  topAlerts.map((alt) => (
                   <div
                     key={alt.id}
                     style={{
@@ -2331,6 +2822,13 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
                   </tr>
                 </thead>
                 <tbody>
+                  {mrpCalculatedList.length === 0 && (
+                    <tr>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: '24px 12px', color: '#64748b' }}>
+                        No material records available.
+                      </td>
+                    </tr>
+                  )}
                   {mrpCalculatedList.map((item) => (
                     <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                       <td style={{ padding: '8px 6px', fontWeight: 700, color: '#0a0d10' }}>
@@ -2410,9 +2908,18 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
 
             {/* Supplier Offers Grid */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
-              {supplierOffers
-                .filter((s) => s.materialId === selectedSupplierMaterialId)
-                .map((sup) => {
+              {supplierOffers.filter((s) => s.materialId === selectedSupplierMaterialId).length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '28px 16px', background: '#f8fafc', borderRadius: 16, border: '1px dashed #cbd5e1', color: '#64748b' }}>
+                  <AlertCircle size={22} color="#94a3b8" style={{ margin: '0 auto 6px', display: 'block' }} />
+                  <div style={{ fontWeight: 600, color: '#334155', fontSize: 12 }}>No supplier quotes or offers found</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                    No live supplier offers configured for this material. You can initiate a purchase request directly with verified suppliers.
+                  </div>
+                </div>
+              ) :
+                supplierOffers
+                  .filter((s) => s.materialId === selectedSupplierMaterialId)
+                  .map((sup) => {
                   const sampleQty = 500;
                   const totalLandedCost = (sup.unitPrice * sampleQty) + sup.transportCost + sup.otherCharges;
 
@@ -2536,6 +3043,13 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
                   </tr>
                 </thead>
                 <tbody>
+                  {purchaseOrders.length === 0 && (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '24px 12px', color: '#64748b' }}>
+                        No purchase orders found.
+                      </td>
+                    </tr>
+                  )}
                   {purchaseOrders.map((po) => {
                     const statusBadge = getPoStatusBadge(po.status);
                     const item = po.items[0];
@@ -2703,7 +3217,16 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
-              {alerts.map((alt) => (
+              {alerts.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '32px 16px', color: '#64748b', fontSize: 12 }}>
+                  <CheckCircle2 size={24} color="#16a34a" style={{ margin: '0 auto 8px', display: 'block' }} />
+                  <div style={{ fontWeight: 600, color: '#334155' }}>No active alerts</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                    All stock balances meet reorder levels and no pending purchase bottlenecks exist.
+                  </div>
+                </div>
+              ) :
+                alerts.map((alt) => (
                 <div
                   key={alt.id}
                   style={{
@@ -2791,6 +3314,7 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
                     }));
                   }}
                 >
+                  <option value="PO-DIRECT">Direct Inward (No PO Reference)</option>
                   {purchaseOrders
                     .filter((p) => p.status !== 'Completed' && p.status !== 'Rejected')
                     .map((p) => (
@@ -2999,11 +3523,21 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
                   value={prForm.supplierId}
                   onChange={(e) => setPrForm({ ...prForm, supplierId: e.target.value })}
                 >
-                  {supplierOffers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.supplierName} &bull; ₹{s.unitPrice}/{s.unit} &bull; {s.leadTimeDays}d lead
-                    </option>
-                  ))}
+                  {supplierOffers.length > 0 ? (
+                    supplierOffers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.supplierName} &bull; ₹{s.unitPrice}/{s.unit} &bull; {s.leadTimeDays}d lead
+                      </option>
+                    ))
+                  ) : suppliersApiResponse?.data && suppliersApiResponse.data.length > 0 ? (
+                    suppliersApiResponse.data.map((s: any) => (
+                      <option key={s.id || s._id} value={String(s.id || s._id)}>
+                        {s.supplierName} &bull; {s.city || 'Depot'} &bull; {s.defaultLeadTimeDays || 4}d lead
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">No suppliers available</option>
+                  )}
                 </select>
               </div>
 
@@ -3023,7 +3557,7 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
                           {o.id} {o.productName ? `- ${o.productName}` : ''}
                         </option>
                       ))
-                    ) : (
+                    ) : isDemoEnabled ? (
                       <>
                         <option value="LP-901">Order LP-901</option>
                         <option value="LP-902">Order LP-902</option>
@@ -3031,6 +3565,8 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
                         <option value="TX-1024">Order TX-1024</option>
                         <option value="TX-1025">Order TX-1025</option>
                       </>
+                    ) : (
+                      <option value="">No production orders available</option>
                     )}
                   </select>
                 </div>
@@ -3222,9 +3758,34 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
                   Immutable log of all material receipts, reservations, and consumptions.
                 </div>
               </div>
-              <button className="modal-close-btn" onClick={() => setShowAuditModal(false)}>
-                <X size={15} />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => refetchMovements()}
+                  disabled={isMovementsFetching}
+                  style={{
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 8,
+                    padding: '4px 10px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: '#475569',
+                    cursor: isMovementsFetching ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    opacity: isMovementsFetching ? 0.6 : 1,
+                  }}
+                  title="Refresh audit ledger"
+                >
+                  <RefreshCw size={12} className={isMovementsFetching ? 'animate-spin' : ''} color="#18191B" />
+                  <span>Refresh</span>
+                </button>
+                <button className="modal-close-btn" onClick={() => setShowAuditModal(false)}>
+                  <X size={15} />
+                </button>
+              </div>
             </div>
 
             <div style={{ overflowX: 'auto', marginTop: 14 }}>
@@ -3242,7 +3803,55 @@ export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProp
                   </tr>
                 </thead>
                 <tbody>
-                  {transactions.map((tx) => (
+                  {isMovementsLoading && (
+                    <tr>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: '36px 16px', color: '#64748b' }}>
+                        <Loader2 size={24} className="animate-spin" style={{ margin: '0 auto 8px', color: '#79B4B7', display: 'block' }} />
+                        <div style={{ fontWeight: 600, color: '#334155' }}>Loading inventory movements...</div>
+                      </td>
+                    </tr>
+                  )}
+                  {!isMovementsLoading && isMovementsError && (
+                    <tr>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: '28px 16px', color: '#b91c1c' }}>
+                        <AlertCircle size={24} style={{ margin: '0 auto 8px', color: '#dc2626', display: 'block' }} />
+                        <div style={{ fontWeight: 700, color: '#991b1b', marginBottom: 4 }}>
+                          Failed to load stock movements from server
+                        </div>
+                        <div style={{ fontSize: 11, color: '#b91c1c', marginBottom: 12 }}>
+                          {getErrorMessage(movementsError)}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => refetchMovements()}
+                          style={{
+                            padding: '6px 16px',
+                            background: '#dc2626',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: 8,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Retry Query
+                        </button>
+                      </td>
+                    </tr>
+                  )}
+                  {!isMovementsLoading && !isMovementsError && transactions.length === 0 && (
+                    <tr>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: '32px 16px', color: '#64748b' }}>
+                        <History size={24} style={{ margin: '0 auto 8px', color: '#94a3b8', display: 'block' }} />
+                        <div style={{ fontWeight: 600, color: '#334155' }}>No inventory transactions recorded</div>
+                        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                          Material receipts, stock allocations, and warehouse adjustments will appear here.
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {!isMovementsLoading && !isMovementsError && transactions.map((tx) => (
                     <tr key={tx.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                       <td style={{ padding: '8px 6px', fontWeight: 800, color: '#0a0d10' }}>{tx.id}</td>
                       <td style={{ padding: '8px 6px', fontWeight: 600 }}>{tx.materialName}</td>

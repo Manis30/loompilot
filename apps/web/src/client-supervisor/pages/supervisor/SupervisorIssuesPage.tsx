@@ -1,18 +1,40 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { AlertTriangle, PlusCircle, CheckCircle2, Clock, Wrench, X, Loader2, RefreshCw } from 'lucide-react';
 import { useSupervisor } from '../../context/SupervisorContext';
 import { useApp } from '../../context/AppContext';
-import { useGetMaintenanceTicketsQuery, useCreateMaintenanceTicketMutation } from '../../../store/api/productionApi';
+import {
+  useGetMaintenanceTicketsQuery,
+  useCreateMaintenanceTicketMutation,
+  useUpdateMaintenanceTicketMutation,
+} from '../../../store/api/productionApi';
 import { useGetMachinesQuery } from '../../../store/api/catalogApi';
 import type { IssueTicket } from '../../types/supervisor';
+
+const isDemo = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
 
 export const SupervisorIssuesPage: React.FC = () => {
   const { issues: mockIssues, reportIssue, orders, machines: mockMachines } = useSupervisor();
   const { addToast } = useApp();
 
-  const { data: ticketsRes, isLoading: isLoadingTickets, isError: isTicketsError, error: ticketsError, refetch: refetchTickets } = useGetMaintenanceTicketsQuery(undefined);
-  const { data: machinesRes } = useGetMachinesQuery(undefined);
+  const {
+    data: ticketsRes,
+    isLoading: isLoadingTickets,
+    isError: isTicketsError,
+    error: ticketsError,
+    refetch: refetchTickets,
+  } = useGetMaintenanceTicketsQuery(undefined);
+
+  const {
+    data: machinesRes,
+    isLoading: isLoadingMachines,
+    isError: isMachinesError,
+    refetch: refetchMachines,
+  } = useGetMachinesQuery(undefined);
+
   const [createMaintenanceTicket, { isLoading: isSubmittingTicket }] = useCreateMaintenanceTicketMutation();
+  const [updateMaintenanceTicket, { isLoading: isUpdatingTicket }] = useUpdateMaintenanceTicketMutation();
+
+  const [resolvingTicketId, setResolvingTicketId] = useState<string | null>(null);
 
   const availableMachines = useMemo(() => {
     const rawList = Array.isArray(machinesRes?.data) ? machinesRes.data : [];
@@ -23,7 +45,7 @@ export const SupervisorIssuesPage: React.FC = () => {
         name: m.machineName || m.name || 'Textile Machine',
       }));
     }
-    return mockMachines.map((m) => ({ id: m.id, code: m.id, name: m.name }));
+    return isDemo ? mockMachines.map((m) => ({ id: m.id, code: m.id, name: m.name })) : [];
   }, [machinesRes, mockMachines]);
 
   const liveIssues: IssueTicket[] = useMemo(() => {
@@ -32,46 +54,96 @@ export const SupervisorIssuesPage: React.FC = () => {
     return rawList.map((t: any) => {
       const machineObj = typeof t.machineId === 'object' ? t.machineId : null;
       const machineCode = machineObj?.machineCode || (typeof t.machineId === 'string' ? t.machineId : 'Machine');
+      const machineName = machineObj?.machineName;
       const createdDate = t.createdAt ? new Date(t.createdAt) : new Date();
 
       let statusLabel: 'Open' | 'Technician Assigned' | 'Resolved' = 'Open';
       if (t.status === 'assigned') statusLabel = 'Technician Assigned';
       else if (t.status === 'resolved') statusLabel = 'Resolved';
 
+      // Parse structured category and description if formatted as "Category: Description"
+      let parsedCategory = 'Machine Breakdown';
+      let parsedDescription = t.issue || 'Breakdown reported';
+      if (t.issue && t.issue.includes(': ')) {
+        const colonIdx = t.issue.indexOf(': ');
+        parsedCategory = t.issue.slice(0, colonIdx);
+        parsedDescription = t.issue.slice(colonIdx + 2);
+      }
+
+      // Parse severity, order, and impact from notes if structured
+      let parsedSeverity: 'Critical' | 'High' | 'Medium' | 'Low' = 'High';
+      let parsedOrder = 'Floor Station';
+      let parsedImpact = t.notes || 'Maintenance triage initiated';
+      if (t.notes) {
+        const sevMatch = t.notes.match(/Severity:\s*(Critical|High|Medium|Low)/i);
+        if (sevMatch) {
+          const matched = sevMatch[1];
+          parsedSeverity = (matched.charAt(0).toUpperCase() + matched.slice(1).toLowerCase()) as any;
+        }
+        const ordMatch = t.notes.match(/Related Order:\s*([^|]+)/i) || t.notes.match(/Order:\s*([^|]+)/i);
+        if (ordMatch) {
+          parsedOrder = ordMatch[1].trim();
+        }
+        const impMatch = t.notes.match(/Impact:\s*(.+)/i);
+        if (impMatch) {
+          parsedImpact = impMatch[1].trim();
+        }
+      }
+
+      const rawMachineId = machineObj
+        ? String(machineObj._id || machineObj.id)
+        : (typeof t.machineId === 'string' && t.machineId.length === 24 ? t.machineId : undefined);
+
       return {
         id: String(t._id || t.id || ''),
+        rawStatus: t.status,
+        backendMachineId: rawMachineId,
         date: createdDate.toISOString().split('T')[0],
         time: createdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        category: 'Machine Breakdown',
-        relatedOrder: 'Floor Station',
-        machineId: machineCode,
-        severity: 'High' as const,
-        description: t.issue || 'Breakdown reported',
-        impact: t.notes || 'Maintenance triage initiated',
+        category: parsedCategory,
+        relatedOrder: parsedOrder,
+        machineId: machineName ? `${machineCode} (${machineName})` : machineCode,
+        severity: parsedSeverity,
+        description: parsedDescription,
+        impact: parsedImpact,
         status: statusLabel,
         adminResponse: t.technicianName
-          ? `Assigned to: ${t.technicianName}`
+          ? `Assigned to: ${t.technicianName}${t.technicianContact ? ` (${t.technicianContact})` : ''}`
           : t.status === 'resolved'
-          ? 'Issue resolved & verified'
+          ? (t.resolvedAt ? `Resolved on ${new Date(t.resolvedAt).toLocaleDateString()}` : 'Issue resolved & verified')
           : 'Maintenance triage initiated.',
       };
     });
   }, [ticketsRes]);
 
-  const displayedIssues = liveIssues.length > 0 || !isLoadingTickets ? liveIssues : mockIssues;
+  const displayedIssues = isDemo ? (liveIssues.length > 0 ? liveIssues : mockIssues) : liveIssues;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [category, setCategory] = useState('Machine Breakdown');
-  const [relatedOrder, setRelatedOrder] = useState(orders[0]?.id || 'ORD-8092');
-  const [machineId, setMachineId] = useState(availableMachines[0]?.id || 'LOOM-A01');
+  const [relatedOrder, setRelatedOrder] = useState<string>(() => orders[0]?.id || '');
+  const [machineId, setMachineId] = useState<string>(() => availableMachines[0]?.id || '');
   const [severity, setSeverity] = useState<'Critical' | 'High' | 'Medium' | 'Low'>('High');
   const [description, setDescription] = useState('');
   const [impact, setImpact] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // Synchronize machine selection when availableMachines loads
+  useEffect(() => {
+    if (!machineId && availableMachines.length > 0) {
+      setMachineId(availableMachines[0].id);
+    }
+  }, [availableMachines, machineId]);
+
+  // Synchronize order selection when orders load
+  useEffect(() => {
+    if (!relatedOrder && orders.length > 0) {
+      setRelatedOrder(orders[0].id);
+    }
+  }, [orders, relatedOrder]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!description || isSubmittingTicket) return;
+    if (!description.trim() || isSubmittingTicket) return;
     setSubmitError(null);
 
     // Resolve real backend machine ID
@@ -79,33 +151,87 @@ export const SupervisorIssuesPage: React.FC = () => {
     const matched = rawList.find(
       (m: any) => String(m._id) === machineId || m.id === machineId || m.machineCode === machineId
     );
-    const targetMachineId = matched ? String(matched._id || matched.id) : machineId;
+    const targetMachineId = matched ? String(matched._id || matched.id) : (isDemo ? machineId : undefined);
 
-    try {
-      await createMaintenanceTicket({
-        machineId: targetMachineId,
-        issue: `${category}: ${description}`,
-        notes: `Severity: ${severity}${impact ? ` | Impact: ${impact}` : ''}`,
-      }).unwrap();
+    if (!isDemo && !targetMachineId) {
+      setSubmitError('Please select a valid factory machine from the available machine list.');
+      return;
+    }
 
-      // Also update local mock for offline sync
+    const constructedNotes = `Severity: ${severity}${relatedOrder ? ` | Related Order: ${relatedOrder}` : ''}${impact.trim() ? ` | Impact: ${impact.trim()}` : ''}`;
+
+    if (!isDemo && targetMachineId) {
+      try {
+        await createMaintenanceTicket({
+          machineId: targetMachineId,
+          issue: `${category}: ${description.trim()}`,
+          notes: constructedNotes,
+        }).unwrap();
+
+        addToast('Breakdown ticket submitted for machine. Maintenance engineer notified.', 'success');
+        setDescription('');
+        setImpact('');
+        setIsModalOpen(false);
+        refetchTickets();
+      } catch (err: any) {
+        const errMsg = err?.data?.error?.message || err?.data?.message || err?.message || 'Failed to submit maintenance ticket';
+        setSubmitError(errMsg);
+      }
+    } else if (isDemo) {
       reportIssue({
         category,
-        relatedOrder,
-        machineId: matched?.machineCode || machineId,
+        relatedOrder: relatedOrder || 'ORD-DEMO',
+        machineId: matched?.machineCode || machineId || 'LOOM-DEMO',
         severity,
-        description,
-        impact,
+        description: description.trim(),
+        impact: impact.trim() || 'Floor inspection scheduled',
       });
 
-      addToast(`Breakdown ticket submitted for machine. Maintenance engineer notified.`, 'success');
+      addToast('Breakdown ticket recorded (demo mode).', 'success');
       setDescription('');
       setImpact('');
       setIsModalOpen(false);
-      refetchTickets();
-    } catch (err: any) {
-      const errMsg = err?.data?.message || err?.message || 'Failed to submit maintenance ticket';
-      setSubmitError(errMsg);
+    }
+  };
+
+  const handleResolveIssue = async (ticket: any) => {
+    // State machine guard: only open or assigned tickets may transition to resolved
+    const rawStatus = (ticket.rawStatus || '').toLowerCase();
+    const isPermitted =
+      rawStatus === 'open' ||
+      rawStatus === 'assigned' ||
+      ticket.status === 'Open' ||
+      ticket.status === 'Technician Assigned';
+
+    if (!isPermitted) {
+      addToast(`Cannot resolve ticket: Current status '${ticket.status}' does not permit resolution.`, 'error');
+      return;
+    }
+
+    if (resolvingTicketId || isUpdatingTicket) return;
+    setResolvingTicketId(ticket.id);
+
+    if (!isDemo) {
+      try {
+        await updateMaintenanceTicket({
+          id: ticket.id,
+          machineId: ticket.backendMachineId,
+          status: 'resolved',
+          notes: 'Issue verified & resolved by floor supervisor',
+        }).unwrap();
+
+        addToast('Maintenance ticket resolved and verified.', 'success');
+        refetchTickets();
+        refetchMachines();
+      } catch (err: any) {
+        const errMsg = err?.data?.error?.message || err?.data?.message || err?.message || 'Failed to resolve maintenance ticket';
+        addToast(errMsg, 'error');
+      } finally {
+        setResolvingTicketId(null);
+      }
+    } else {
+      addToast('Maintenance ticket marked as resolved (demo mode).', 'success');
+      setResolvingTicketId(null);
     }
   };
 
@@ -158,7 +284,11 @@ export const SupervisorIssuesPage: React.FC = () => {
         <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertTriangle size={15} />
-            <span>Failed to load live maintenance tickets from backend. Showing local cache.</span>
+            <span>
+              {(ticketsError as any)?.data?.message ||
+                (ticketsError as any)?.error ||
+                'Failed to load live maintenance tickets from backend.'}
+            </span>
           </div>
           <button onClick={() => refetchTickets()} className="font-bold underline text-xs">Retry</button>
         </div>
@@ -216,14 +346,42 @@ export const SupervisorIssuesPage: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="pt-2 border-t border-[#EAE2D9]/70">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-0.5 flex items-center gap-1">
-                      <Wrench size={11} className="text-[#20845A]" />
-                      <span>Resolution Status: {iss.status}</span>
+                  <div className="pt-2 border-t border-[#EAE2D9]/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-0.5 flex items-center gap-1">
+                        <Wrench size={11} className={iss.status === 'Resolved' ? 'text-[#20845A]' : 'text-[#C78627]'} />
+                        <span>Resolution Status: {iss.status}</span>
+                      </div>
+                      <div className="text-[11px] text-gray-700 italic">
+                        "{iss.adminResponse || 'Investigating...'}"
+                      </div>
                     </div>
-                    <div className="text-[11px] text-gray-700 italic">
-                      "{iss.adminResponse || 'Investigating...'}"
-                    </div>
+
+                    {iss.status !== 'Resolved' && (iss.rawStatus === 'open' || iss.rawStatus === 'assigned' || iss.status === 'Open' || iss.status === 'Technician Assigned') ? (
+                      <button
+                        onClick={() => handleResolveIssue(iss)}
+                        disabled={resolvingTicketId === iss.id || isUpdatingTicket}
+                        className="self-start sm:self-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-[#20845A] hover:bg-[#196B49] transition-all disabled:opacity-50 shadow-sm"
+                        title="Mark issue as resolved on server"
+                      >
+                        {resolvingTicketId === iss.id ? (
+                          <>
+                            <Loader2 size={12} className="animate-spin" />
+                            <span>Resolving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 size={12} />
+                            <span>Mark Resolved</span>
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <span className="self-start sm:self-auto flex items-center gap-1 text-[11px] font-bold text-[#20845A]">
+                        <CheckCircle2 size={13} />
+                        <span>Resolved</span>
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -231,11 +389,11 @@ export const SupervisorIssuesPage: React.FC = () => {
           );
         })}
 
-        {!isLoadingTickets && displayedIssues.length === 0 && (
+        {!isLoadingTickets && !isTicketsError && displayedIssues.length === 0 && (
           <div className="p-12 text-center bg-white rounded-2xl border border-dashed border-[#EAE2D9]">
             <CheckCircle2 className="mx-auto text-green-600 mb-2" size={32} />
             <p className="text-sm font-bold text-[#252622]">No Active Breakdown Issues</p>
-            <p className="text-xs text-gray-500 mt-1">All machinery is currently operating normally.</p>
+            <p className="text-xs text-gray-500 mt-1">All machinery is currently operating normally without open maintenance tickets.</p>
           </div>
         )}
       </div>
@@ -305,11 +463,20 @@ export const SupervisorIssuesPage: React.FC = () => {
                   <select
                     value={machineId}
                     onChange={(e) => setMachineId(e.target.value)}
-                    className="w-full p-2 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0]"
+                    disabled={availableMachines.length === 0}
+                    className="w-full p-2 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] disabled:opacity-60"
                   >
-                    {availableMachines.map((m: any) => (
-                      <option key={m.id} value={m.id}>{m.code} ({m.name})</option>
-                    ))}
+                    {isLoadingMachines ? (
+                      <option value="">Loading machines...</option>
+                    ) : isMachinesError ? (
+                      <option value="">Error loading machines from server</option>
+                    ) : availableMachines.length === 0 ? (
+                      <option value="">No factory machines registered</option>
+                    ) : (
+                      availableMachines.map((m: any) => (
+                        <option key={m.id} value={m.id}>{m.code} ({m.name})</option>
+                      ))
+                    )}
                   </select>
                 </div>
                 <div>
@@ -319,9 +486,13 @@ export const SupervisorIssuesPage: React.FC = () => {
                     onChange={(e) => setRelatedOrder(e.target.value)}
                     className="w-full p-2 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0]"
                   >
-                    {orders.map((o) => (
-                      <option key={o.id} value={o.id}>{o.id} ({o.fabricName.slice(0, 18)}...)</option>
-                    ))}
+                    {orders.length === 0 ? (
+                      <option value="">No active production orders (Floor Station)</option>
+                    ) : (
+                      orders.map((o) => (
+                        <option key={o.id} value={o.id}>{o.id} ({o.fabricName ? o.fabricName.slice(0, 18) : 'Order'}...)</option>
+                      ))
+                    )}
                   </select>
                 </div>
               </div>
@@ -360,7 +531,7 @@ export const SupervisorIssuesPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmittingTicket}
+                  disabled={isSubmittingTicket || (!isDemo && availableMachines.length === 0)}
                   className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-[#E65338] hover:bg-[#D24227] disabled:opacity-50 shadow-sm flex items-center gap-1.5"
                 >
                   {isSubmittingTicket ? (

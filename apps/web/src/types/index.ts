@@ -154,6 +154,7 @@ export interface DeliveryRecord {
   carrier: string;
   deliveryType: 'partial' | 'full';
   status: 'dispatched' | 'delivered';
+  invoiceAmount?: number;
 }
 
 export interface PaymentRecord {
@@ -162,8 +163,14 @@ export interface PaymentRecord {
   invoiceNumber: string;
   amount: number;
   date: string;
-  type: 'advance_30' | 'mid_progress_40' | 'final_balance_30';
-  status: 'pending' | 'received' | 'overdue';
+  type: 'advance_30' | 'mid_progress_40' | 'final_balance_30' | string;
+  status: 'pending' | 'received' | 'overdue' | 'partial';
+  milestoneIndex?: number;
+  milestoneName?: string;
+  dueAmount?: number;
+  receivedAmount?: number;
+  ref?: string;
+  method?: string;
 }
 
 export interface ProductionTimelineStage {
@@ -217,6 +224,24 @@ export interface Order {
   assignedSupervisorName?: string;
   handoverDate?: string;
   productionPlanConfirmed?: boolean;
+  deliveredMeters?: number;
+  financials?: {
+    totalAmountPaise?: number;
+    totalPaidPaise?: number;
+    amountDuePaise?: number;
+    advanceReceivedPaise?: number;
+    milestones?: Array<{
+      milestone: string;
+      trigger: string;
+      stage?: string;
+      amountPaise: number;
+      dueDate?: string;
+      status: string;
+      receivedPaise?: number;
+      duePaise?: number;
+      invoiceNo?: string;
+    }>;
+  };
   deliveries: DeliveryRecord[];
   payments: PaymentRecord[];
   dailyReports: SupervisorDailyReport[];

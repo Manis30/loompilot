@@ -597,9 +597,10 @@ export const OrderReverseReceiptSchema = z.object({
 export const OrderDeliverySchema = z.object({
   deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "deliveryDate must be YYYY-MM-DD"),
   qty: z.number().int().positive("quantity must be positive"),
-  invoiceNo: z.string().min(1, "invoiceNo is required"),
+  invoiceNo: z.string().trim().min(1, "invoiceNo is required"),
   invoiceAmountPaise: z.number().int().positive("invoiceAmountPaise must be positive"),
-  notes: z.string().optional(),
+  carrier: z.string().trim().optional(),
+  notes: z.string().trim().optional(),
 });
 
 // ============================================================================

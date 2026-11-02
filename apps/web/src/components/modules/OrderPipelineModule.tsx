@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { useGetOrdersQuery, useAdvanceOrderStageMutation } from '../../store/api/ordersApi';
 import { useGetClientsQuery, useGetProductsQuery } from '../../store/api/catalogApi';
-import { mapApiOrderToAdminOrder } from '../../utils/orderMapper';
+import { mapApiOrderToAdminOrder, normalizeProductionStage } from '../../utils/orderMapper';
 import type { Order, OrderItemProduct } from '../../types';
 import { GarmentVisual3D } from '../common/GarmentVisual3D';
 import { SerpentineStagesPipeline } from '../common/SerpentineStagesPipeline';
@@ -176,37 +176,59 @@ export const OrderPipelineModule: React.FC<OrderPipelineModuleProps> = ({
     const currentItem = ord.items.find((item) => item.id === itemId);
     if (!currentItem) return;
 
-    let targetStageName = '';
+    const isOrderDelivered = ord.status === 'completed' || ord.status === 'delivered';
+    if (isOrderDelivered) {
+      showNotification(`Order #${orderId} is already completed/delivered.`);
+      return;
+    }
+
+    // Explicitly check current stage from in_progress timeline item
+    const currentInProgStage = currentItem.timeline.find((s) => s.status === 'in_progress');
     const currentInProgIdx = currentItem.timeline.findIndex((s) => s.status === 'in_progress');
-    if (currentInProgIdx === -1) {
-      const firstPendingIdx = currentItem.timeline.findIndex((s) => s.status === 'pending');
-      if (firstPendingIdx !== -1) {
-        targetStageName = currentItem.timeline[firstPendingIdx].name;
-      }
-    } else if (currentInProgIdx + 1 < currentItem.timeline.length) {
-      targetStageName = currentItem.timeline[currentInProgIdx + 1].name;
-    } else {
-      targetStageName = currentItem.timeline[currentInProgIdx].name;
+
+    // Explicitly guard against missing or unknown current stages.
+    // Do not infer stage from progressPercent, order status alone, or array position.
+    if (!currentInProgStage || currentInProgIdx === -1 || ord.currentPhase === 'Unavailable') {
+      const errMsg = `Cannot advance stage: Production stage for order #${orderId} is Unavailable. The backend production phase must be resolved first.`;
+      setStageError(errMsg);
+      showNotification(`Error: ${errMsg}`);
+      return;
+    }
+
+    const canonicalCurrent = normalizeProductionStage(currentInProgStage.name);
+    if (!canonicalCurrent.isKnown) {
+      const errMsg = `Cannot advance stage: Current stage "${currentInProgStage.name}" is unrecognized. The backend production phase must be resolved first.`;
+      setStageError(errMsg);
+      showNotification(`Error: ${errMsg}`);
+      return;
+    }
+
+    if (currentInProgIdx >= currentItem.timeline.length - 1) {
+      showNotification(`Order #${orderId} is already at the final stage (${currentInProgStage.name}).`);
+      return;
+    }
+
+    const nextTimelineStage = currentItem.timeline[currentInProgIdx + 1];
+    if (!nextTimelineStage) {
+      const errMsg = `Cannot advance stage: No subsequent stage found in timeline for order #${orderId}.`;
+      setStageError(errMsg);
+      showNotification(`Error: ${errMsg}`);
+      return;
+    }
+
+    const canonicalTarget = normalizeProductionStage(nextTimelineStage.name);
+    if (!canonicalTarget.isKnown) {
+      const errMsg = `Cannot advance stage: Target stage "${nextTimelineStage.name}" is invalid or unrecognized.`;
+      setStageError(errMsg);
+      showNotification(`Error: ${errMsg}`);
+      return;
     }
 
     const updatedItems = ord.items.map((item) => {
       if (item.id !== itemId) return item;
 
       const inProgIdx = item.timeline.findIndex((s) => s.status === 'in_progress');
-      if (inProgIdx === -1) {
-        const firstPendingIdx = item.timeline.findIndex((s) => s.status === 'pending');
-        if (firstPendingIdx !== -1) {
-          const newTimeline = [...item.timeline];
-          newTimeline[firstPendingIdx] = {
-            ...newTimeline[firstPendingIdx],
-            status: 'in_progress',
-            dateOrDetails: 'In progress · Current stage'
-          };
-          const newProgress = Math.min(100, item.progressPercent + 15);
-          return { ...item, progressPercent: newProgress, timeline: newTimeline };
-        }
-        return item;
-      }
+      if (inProgIdx === -1) return item;
 
       const newTimeline = [...item.timeline];
       newTimeline[inProgIdx] = {
@@ -237,52 +259,35 @@ export const OrderPipelineModule: React.FC<OrderPipelineModuleProps> = ({
     const newWeighted = calculateWeightedProgress(updatedItems);
     const newProduced = Math.round((ord.quantityMeters * newWeighted) / 100);
 
-    // Resolve real MongoDB ObjectId
+    // Resolve real MongoDB ObjectId from live orders query
     const rawList = ordersResponse?.data || [];
     const rawOrder = Array.isArray(rawList)
       ? rawList.find((o: any) => o._id === orderId || o.id === orderId || o.orderNumber === orderId)
       : null;
     const realOrderId = rawOrder?._id || rawOrder?.id || (orderId.length === 24 ? orderId : null);
 
-    if (realOrderId) {
-      try {
-        await advanceOrderStageMutation({
-          id: realOrderId,
-          stage: targetStageName || 'In Production',
-          producedQty: newProduced,
-          percentComplete: newWeighted,
-          notes: `Stage advanced to ${targetStageName || 'next phase'}`
-        }).unwrap();
+    if (!realOrderId) {
+      const errMsg = `Cannot advance stage: order ID ${orderId} does not map to a recognized backend order record.`;
+      setStageError(errMsg);
+      showNotification(`Error: ${errMsg}`);
+      return;
+    }
 
-        setOrders((prevOrders) =>
-          prevOrders.map((o) => {
-            if (o.id !== orderId) return o;
-            return {
-              ...o,
-              items: updatedItems,
-              producedMeters: newProduced
-            };
-          })
-        );
-        showNotification(`Stage advanced on ${currentItem.name}!`);
-        refetch();
-      } catch (err: any) {
-        const errMsg = err?.data?.message || err?.message || 'Failed to advance order stage on server';
-        setStageError(errMsg);
-        showNotification(`Error: ${errMsg}`);
-      }
-    } else {
-      setOrders((prevOrders) =>
-        prevOrders.map((o) => {
-          if (o.id !== orderId) return o;
-          return {
-            ...o,
-            items: updatedItems,
-            producedMeters: newProduced
-          };
-        })
-      );
-      showNotification(`Stage advanced on ${currentItem.name}!`);
+    try {
+      await advanceOrderStageMutation({
+        id: realOrderId,
+        stage: canonicalTarget.numberedName,
+        producedQty: newProduced,
+        percentComplete: newWeighted,
+        notes: `Stage advanced to ${canonicalTarget.name}`
+      }).unwrap();
+
+      showNotification(`Stage advanced to ${canonicalTarget.name} on ${currentItem.name}!`);
+      await refetch();
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.message || 'Failed to advance order stage on server';
+      setStageError(errMsg);
+      showNotification(`Error: ${errMsg}`);
     }
   };
 
@@ -675,9 +680,11 @@ export const OrderPipelineModule: React.FC<OrderPipelineModuleProps> = ({
           <div className="order-detail-right-panel-clean">
             {/* 1. Compact Basic Details & Which Stage It Is In */}
             {(() => {
-              const inProgStage = currentItem?.timeline.find((s) => s.status === 'in_progress') || currentItem?.timeline[4] || currentItem?.timeline[0];
-              const inProgIdx = currentItem?.timeline.findIndex((s) => s.id === inProgStage?.id) ?? 4;
-              const isCompletedAll = currentItem?.timeline.every((s) => s.status === 'completed');
+              const isOrderDelivered = activeOrder.status === 'completed' || activeOrder.status === 'delivered';
+              const inProgStage = currentItem?.timeline.find((s) => s.status === 'in_progress');
+              const inProgIdx = inProgStage ? currentItem?.timeline.findIndex((s) => s.id === inProgStage.id) : -1;
+              const isCompletedAll = isOrderDelivered || (currentItem?.timeline.length ? currentItem.timeline.every((s) => s.status === 'completed') : false);
+              const isStageUnavailable = !isCompletedAll && (activeOrder.currentPhase === 'Unavailable' || !inProgStage || inProgIdx === -1);
 
               return (
                 <div className="clean-order-summary-header">
@@ -718,29 +725,48 @@ export const OrderPipelineModule: React.FC<OrderPipelineModuleProps> = ({
 
                   <div className="clean-current-stage-bar">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <div className="clean-stage-indicator-pill">
-                        <span className="pulsing-live-stage-dot" />
-                        <span>CURRENT STAGE {inProgIdx + 1} OF 6</span>
+                      <div className="clean-stage-indicator-pill" style={isStageUnavailable ? { background: '#FEF3C7', color: '#92400E' } : undefined}>
+                        {!isStageUnavailable && <span className="pulsing-live-stage-dot" />}
+                        <span>
+                          {isCompletedAll
+                            ? 'COMPLETED'
+                            : isStageUnavailable
+                            ? 'STAGE UNAVAILABLE'
+                            : `CURRENT STAGE ${(inProgIdx ?? 0) + 1} OF ${currentItem?.timeline.length || 8}`}
+                        </span>
                       </div>
-                      <strong className="clean-stage-title">
-                        {isCompletedAll ? 'All Manufacturing Stages Completed' : inProgStage?.name || 'Quality Inspection'}
+                      <strong className="clean-stage-title" style={isStageUnavailable ? { color: '#92400E' } : undefined}>
+                        {isCompletedAll
+                          ? 'All Manufacturing Stages Completed'
+                          : isStageUnavailable
+                          ? 'Production Phase Unavailable'
+                          : inProgStage?.name || 'Production Stage'}
                       </strong>
-                      <span style={{ fontSize: 11, color: '#166534', fontWeight: 600 }}>
-                        &bull; {inProgStage?.dateOrDetails || 'Underway · 98.5% First-Pass Yield'}
+                      <span style={{ fontSize: 11, color: isStageUnavailable ? '#B45309' : '#166534', fontWeight: 600 }}>
+                        &bull; {isStageUnavailable
+                          ? 'Backend production phase must be resolved before advancing'
+                          : inProgStage?.dateOrDetails || 'Underway · 98.5% First-Pass Yield'}
                       </span>
                       <span style={{ fontSize: 11, color: '#64748b' }}>
-                        &bull; Supervisor: <strong>Ramesh Kumar (Shed A)</strong>
+                        &bull; Supervisor: <strong>{activeOrder.assignedSupervisorName || 'Unassigned'}</strong>
                       </span>
                     </div>
 
                     <button
                       className="clean-stage-advance-btn"
-                      disabled={isAdvancingStage}
+                      disabled={isAdvancingStage || isStageUnavailable || isCompletedAll}
                       onClick={() => {
-                        if (!currentItem || isAdvancingStage) return;
+                        if (!currentItem || isAdvancingStage || isStageUnavailable || isCompletedAll) return;
                         handleAdvanceStage(activeOrder.id, currentItem.id);
                       }}
-                      title={`Advance ${inProgStage?.name} to Next Stage`}
+                      title={
+                        isStageUnavailable
+                          ? 'Stage advancement disabled: Backend production phase must be resolved first.'
+                          : isCompletedAll
+                          ? 'All manufacturing stages completed'
+                          : `Advance ${inProgStage?.name} to Next Stage`
+                      }
+                      style={isStageUnavailable || isCompletedAll ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
                     >
                       {isAdvancingStage ? (
                         <>
@@ -767,10 +793,22 @@ export const OrderPipelineModule: React.FC<OrderPipelineModuleProps> = ({
                 productName={currentItem.name}
                 designCode={currentItem.designCode}
                 onAdvanceStage={() => {
-                  if (!currentItem || isAdvancingStage) return;
+                  const isOrderDelivered = activeOrder.status === 'completed' || activeOrder.status === 'delivered';
+                  const inProgStage = currentItem?.timeline.find((s) => s.status === 'in_progress');
+                  const inProgIdx = inProgStage ? currentItem?.timeline.findIndex((s) => s.id === inProgStage.id) : -1;
+                  const isCompletedAll = isOrderDelivered || (currentItem?.timeline.length ? currentItem.timeline.every((s) => s.status === 'completed') : false);
+                  const isStageUnavailable = !isCompletedAll && (activeOrder.currentPhase === 'Unavailable' || !inProgStage || inProgIdx === -1);
+                  if (!currentItem || isAdvancingStage || isStageUnavailable || isCompletedAll) return;
                   handleAdvanceStage(activeOrder.id, currentItem.id);
                 }}
-                canAdvance={!isAdvancingStage}
+                canAdvance={(() => {
+                  const isOrderDelivered = activeOrder.status === 'completed' || activeOrder.status === 'delivered';
+                  const inProgStage = currentItem?.timeline.find((s) => s.status === 'in_progress');
+                  const inProgIdx = inProgStage ? currentItem?.timeline.findIndex((s) => s.id === inProgStage.id) : -1;
+                  const isCompletedAll = isOrderDelivered || (currentItem?.timeline.length ? currentItem.timeline.every((s) => s.status === 'completed') : false);
+                  const isStageUnavailable = !isCompletedAll && (activeOrder.currentPhase === 'Unavailable' || !inProgStage || inProgIdx === -1);
+                  return !isAdvancingStage && !isStageUnavailable && !isCompletedAll;
+                })()}
               />
             )}
           </div>

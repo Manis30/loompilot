@@ -645,6 +645,26 @@ export class OrdersRepository {
     return updated!;
   }
 
+  async findByDeliveryInvoice(
+    tenantId: string,
+    invoiceNo: string,
+    tx?: TxContext
+  ): Promise<IOrder | null> {
+    const session = this.getSession(tx);
+    const escaped = invoiceNo.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return this.model
+      .findOne(
+        {
+          tenantId,
+          "deliveries.invoiceNo": { $regex: new RegExp(`^${escaped}$`, "i") },
+        },
+        ORDER_SUMMARY_PROJECTION
+      )
+      .session(session ?? null)
+      .lean<IOrder>()
+      .exec();
+  }
+
   async addDelivery(
     tenantId: string,
     orderId: string | Types.ObjectId,
@@ -669,11 +689,38 @@ export class OrdersRepository {
       );
     }
 
+    const trimmedInvoiceNo = String(delivery.invoiceNo || "").trim();
+    const escapedInvoice = trimmedInvoiceNo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const invoiceRegex = new RegExp(`^${escapedInvoice}$`, "i");
+
+    // 1. Tenant-wide duplicate check within the transaction
+    const existingWithInvoice = await this.model
+      .findOne({
+        tenantId,
+        "deliveries.invoiceNo": { $regex: invoiceRegex },
+      })
+      .session(session ?? null)
+      .lean<IOrder>()
+      .exec();
+
+    if (existingWithInvoice) {
+      const isSameOrder = String(existingWithInvoice._id) === String(orderId);
+      throw new AppError(
+        ErrorCode.DUPLICATE,
+        isSameOrder
+          ? `Delivery with invoice number '${trimmedInvoiceNo}' has already been recorded for this order`
+          : `Delivery invoice number '${trimmedInvoiceNo}' has already been recorded for order ${existingWithInvoice.orderNumber}`,
+        409
+      );
+    }
+
+    // 2. Atomic findOneAndUpdate with duplicate guard against concurrent race conditions
     const updated = await this.model
       .findOneAndUpdate(
         {
           tenantId,
           _id: orderId,
+          "deliveries.invoiceNo": { $not: invoiceRegex },
           $expr: {
             $lte: [
               { $add: [{ $ifNull: ["$production.deliveredQty", 0] }, delivery.qty] },
@@ -682,7 +729,14 @@ export class OrdersRepository {
           },
         },
         {
-          $push: { deliveries: delivery },
+          $push: {
+            deliveries: {
+              ...delivery,
+              invoiceNo: trimmedInvoiceNo,
+              carrier: delivery.carrier ? String(delivery.carrier).trim() : undefined,
+              notes: delivery.notes ? String(delivery.notes).trim() : undefined,
+            },
+          },
           $inc: { "production.deliveredQty": delivery.qty, version: 1 },
         },
         { new: true, session: session ?? null }
@@ -691,6 +745,26 @@ export class OrdersRepository {
       .exec();
 
     if (!updated) {
+      // Re-query order under current session to determine if failure was due to duplicate or volume
+      const rechecked = await this.model
+        .findOne({ tenantId, _id: orderId })
+        .session(session ?? null)
+        .lean<IOrder>()
+        .exec();
+
+      if (rechecked) {
+        const hasDuplicate = (rechecked.deliveries || []).some(
+          (d: any) => d.invoiceNo && d.invoiceNo.trim().toLowerCase() === trimmedInvoiceNo.toLowerCase()
+        );
+        if (hasDuplicate) {
+          throw new AppError(
+            ErrorCode.DUPLICATE,
+            `Delivery with invoice number '${trimmedInvoiceNo}' has already been recorded for this order`,
+            409
+          );
+        }
+      }
+
       throw new AppError(
         ErrorCode.VALIDATION_FAILED,
         `Concurrent delivery exceeds remaining unfulfilled quantity for order`,
@@ -920,7 +994,10 @@ export class OrdersRepository {
       .findOne({
         tenantId,
         _id: orderId,
-        "purchaseDecisions.decisionId": decisionId,
+        $or: [
+          { "purchaseDecisions.decisionId": decisionId },
+          { "purchaseDecisions.supplierOrder.orderNo": decisionId },
+        ],
       })
       .session(session ?? null)
       .lean<IOrder>()
@@ -930,7 +1007,9 @@ export class OrdersRepository {
       return null;
     }
 
-    const decision = order.purchaseDecisions?.find((d) => d.decisionId === decisionId);
+    const decision = order.purchaseDecisions?.find(
+      (d) => d.decisionId === decisionId || d.supplierOrder?.orderNo === decisionId
+    );
     if (!decision) return null;
 
     if (decision.supplierOrder?.status === "cancelled") {
@@ -941,18 +1020,43 @@ export class OrdersRepository {
       );
     }
 
+    if (decision.supplierOrder?.status === "received") {
+      throw new AppError(
+        ErrorCode.VALIDATION_FAILED,
+        "Cannot receive goods against a purchase decision that has already been fully received",
+        400
+      );
+    }
+
     const currentRecv = decision.supplierOrder?.recvQty || 0;
     const newRecv = currentRecv + receivedQty;
     const targetQty = decision.qty;
+
+    if (newRecv > targetQty) {
+      throw new AppError(
+        ErrorCode.VALIDATION_FAILED,
+        `Received quantity (${receivedQty}) exceeds remaining due quantity (${targetQty - currentRecv}) for this purchase decision`,
+        400
+      );
+    }
+
     const status = newRecv >= targetQty ? "received" : "partially_received";
     const now = new Date();
 
-    return this.model
+    const updated = await this.model
       .findOneAndUpdate(
         {
           tenantId,
           _id: orderId,
-          "purchaseDecisions.decisionId": decisionId,
+          purchaseDecisions: {
+            $elemMatch: {
+              decisionId: decision.decisionId,
+              $or: [
+                { "supplierOrder.recvQty": currentRecv },
+                ...(currentRecv === 0 ? [{ "supplierOrder.recvQty": { $exists: false } }, { "supplierOrder.recvQty": null }] : []),
+              ],
+            },
+          },
         },
         {
           $set: {
@@ -966,6 +1070,16 @@ export class OrdersRepository {
       )
       .lean<IOrder>()
       .exec();
+
+    if (!updated) {
+      throw new AppError(
+        ErrorCode.CONFLICT,
+        "Concurrent update detected on purchase decision receipt. Please retry.",
+        409
+      );
+    }
+
+    return updated;
   }
 
   async findByPurchaseDecisionId(

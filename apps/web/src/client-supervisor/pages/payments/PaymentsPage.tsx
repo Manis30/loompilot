@@ -5,13 +5,18 @@ import { formatCurrency, formatLakhs } from '../../utils/formatters';
 import {
   Download,
   FileText,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { RazorpayModal } from '../../components/payments/RazorpayModal';
 import { useGetClientOrdersQuery } from '../../../store/api/ordersApi';
+import { isMilestoneSettled } from '../../../utils/orderMapper';
+
+const isDemo = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
 
 export const PaymentsPage: React.FC = () => {
-  const { payments, addToast } = useApp();
-  const { data: ordersResponse, isLoading, isError, refetch } = useGetClientOrdersQuery(undefined);
+  const { payments: localPayments, invoices: localInvoices, addToast } = useApp();
+  const { data: ordersResponse, isLoading, isError, error: ordersError, refetch } = useGetClientOrdersQuery(undefined);
   const [activeInvoice, setActiveInvoice] = useState<Invoice | null>(null);
 
   const invoices = useMemo<Invoice[]>(() => {
@@ -19,30 +24,73 @@ export const PaymentsPage: React.FC = () => {
     if (Array.isArray(rawOrders) && rawOrders.length > 0) {
       const generated: Invoice[] = [];
       rawOrders.forEach((o: any) => {
-        const milestones = o.financials?.milestones || [];
+        const milestones = o.financials?.milestones || o.quotation?.paymentSchedule || [];
         milestones.forEach((m: any, idx: number) => {
-          const isPaid = m.status === 'received' || (m.receivedPaise || 0) >= m.amountPaise;
+          const isPaid = isMilestoneSettled(m);
+          const amountPaise = Number(m.amountPaise) || 0;
+          const receivedPaise = Number(m.receivedPaise) || 0;
           generated.push({
-            invoiceNumber: `INV-${o.orderNumber || String(o._id).slice(-6)}-M${idx + 1}`,
-            orderId: o.orderNumber || String(o._id).slice(-8).toUpperCase(),
+            invoiceNumber: `INV-${o.orderNumber || String(o._id || o.id).slice(-6)}-M${idx + 1}`,
+            orderId: o.orderNumber || String(o._id || o.id).slice(-8).toUpperCase(),
             backendOrderId: String(o._id || o.id),
             milestoneIndex: idx,
-            productName: o.productDescription || o.styleName || 'Apparel Production',
+            productName: o.productDescription || o.styleName || o.spec?.fabric || 'Apparel Production',
             milestonePhase: m.milestone || `Milestone ${idx + 1}`,
-            issueDate: o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '01 Nov 2026',
-            dueDate: m.dueDate ? new Date(m.dueDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '15 Nov 2026',
-            amount: (m.amountPaise || 0) / 100,
-            paidAmount: (m.receivedPaise || 0) / 100,
-            remainingAmount: Math.max(0, ((m.amountPaise || 0) - (m.receivedPaise || 0)) / 100),
+            issueDate: o.createdAt
+              ? new Date(o.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+              : o.orderDate
+              ? new Date(o.orderDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+              : '01 Nov 2026',
+            dueDate: m.dueDate
+              ? new Date(m.dueDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+              : '15 Nov 2026',
+            amount: amountPaise / 100,
+            paidAmount: receivedPaise / 100,
+            remainingAmount: Math.max(0, (amountPaise - receivedPaise) / 100),
             status: isPaid ? 'Paid' : 'Pending',
-            paidDate: m.receipts?.[0]?.date || undefined,
+            paidDate: m.receipts?.[0]?.date
+              ? new Date(m.receipts[0].date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+              : undefined,
           });
         });
       });
       return generated;
     }
-    return [];
-  }, [ordersResponse]);
+    return isDemo ? localInvoices : [];
+  }, [ordersResponse, localInvoices]);
+
+  // Verified payment transactions derived strictly from backend-confirmed receipts
+  const payments = useMemo(() => {
+    const rawOrders = ordersResponse?.data || [];
+    if (Array.isArray(rawOrders) && rawOrders.length > 0) {
+      const verifiedList: any[] = [];
+      rawOrders.forEach((o: any) => {
+        const orderId = o.orderNumber || String(o._id || o.id).slice(-8).toUpperCase();
+        const milestones = o.financials?.milestones || [];
+        milestones.forEach((m: any, idx: number) => {
+          const invoiceNumber = `INV-${o.orderNumber || String(o._id || o.id).slice(-6)}-M${idx + 1}`;
+          const receipts = m.receipts || [];
+          receipts.forEach((r: any, rIdx: number) => {
+            if (r.reversedAt) return; // skip reversed receipts
+            verifiedList.push({
+              paymentId: r.receiptId || r.razorpayPaymentId || `RCP-${orderId}-M${idx + 1}-${rIdx + 1}`,
+              invoiceNumber,
+              orderId,
+              paymentDate: r.date
+                ? new Date(r.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                : 'Settled',
+              amount: (r.amountPaise || m.amountPaise || 0) / 100,
+              method: r.mode ? String(r.mode).toUpperCase() : (r.razorpayPaymentId ? 'Razorpay' : 'Direct Transfer'),
+              transactionRef: r.razorpayPaymentId || r.ref || 'Settled on Mill Ledger',
+              status: 'Success',
+            });
+          });
+        });
+      });
+      return verifiedList;
+    }
+    return isDemo ? localPayments : [];
+  }, [ordersResponse, localPayments]);
 
   const totalPaid = invoices.reduce((acc, i) => acc + (i.paidAmount || 0), 0);
   const totalOutstanding = invoices.reduce((acc, i) => acc + (i.remainingAmount || 0), 0);
@@ -141,8 +189,18 @@ export const PaymentsPage: React.FC = () => {
         )}
 
         {isError && (
-          <div className="py-8 text-center text-sm text-vermilion">
-            Failed to load commercial invoices from mill server.
+          <div className="py-8 text-center text-sm text-vermilion space-y-3">
+            <div>
+              Failed to load commercial invoices from mill server.{' '}
+              {((ordersError as any)?.data?.message || (ordersError as any)?.error || '')}
+            </div>
+            <button
+              onClick={() => refetch()}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-vermilion text-white text-xs font-bold hover:bg-vermilion-hover transition-colors"
+            >
+              <RefreshCw size={13} />
+              <span>Retry</span>
+            </button>
           </div>
         )}
 
@@ -255,22 +313,30 @@ export const PaymentsPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-muted-border/60">
-              {payments.map((p) => (
-                <tr key={p.paymentId} className="hover:bg-ivory/50 transition-colors">
-                  <td className="py-3.5 px-4 font-mono font-bold text-charcoal">{p.paymentId}</td>
-                  <td className="py-3.5 px-4 font-mono text-muted">{p.invoiceNumber}</td>
-                  <td className="py-3.5 px-4 font-mono font-bold text-vermilion">{p.orderId}</td>
-                  <td className="py-3.5 px-4 text-muted">{p.paymentDate}</td>
-                  <td className="py-3.5 px-4 font-extrabold text-success">{formatCurrency(p.amount)}</td>
-                  <td className="py-3.5 px-4 text-charcoal">{p.method}</td>
-                  <td className="py-3.5 px-4 font-mono text-[11px] text-muted">{p.transactionRef}</td>
-                  <td className="py-3.5 px-4">
-                    <span className="px-2.5 py-1 rounded-full bg-success-bg text-success text-[11px] font-bold">
-                      Success
-                    </span>
+              {payments.length > 0 ? (
+                payments.map((p) => (
+                  <tr key={p.paymentId} className="hover:bg-ivory/50 transition-colors">
+                    <td className="py-3.5 px-4 font-mono font-bold text-charcoal">{p.paymentId}</td>
+                    <td className="py-3.5 px-4 font-mono text-muted">{p.invoiceNumber}</td>
+                    <td className="py-3.5 px-4 font-mono font-bold text-vermilion">{p.orderId}</td>
+                    <td className="py-3.5 px-4 text-muted">{p.paymentDate}</td>
+                    <td className="py-3.5 px-4 font-extrabold text-success">{formatCurrency(p.amount)}</td>
+                    <td className="py-3.5 px-4 text-charcoal">{p.method}</td>
+                    <td className="py-3.5 px-4 font-mono text-[11px] text-muted">{p.transactionRef}</td>
+                    <td className="py-3.5 px-4">
+                      <span className="px-2.5 py-1 rounded-full bg-success-bg text-success text-[11px] font-bold">
+                        Success
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-xs text-muted">
+                    No verified disbursement transactions recorded on mill ledger.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>

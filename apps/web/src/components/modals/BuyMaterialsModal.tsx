@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ShoppingCart, X } from 'lucide-react';
 import type { Order } from '../../types';
+import { useGetSuppliersQuery } from '../../store/api/catalogApi';
+
+const isDemoEnabled = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
 
 interface BuyMaterialsModalProps {
   order: Order | null;
@@ -15,7 +18,18 @@ export const BuyMaterialsModal: React.FC<BuyMaterialsModalProps> = ({
 }) => {
   if (!order) return null;
 
-  const [supplier, setSupplier] = useState<string>('Vardhman Textiles Ltd. (Ludhiana Depot)');
+  const { data: suppliersResponse } = useGetSuppliersQuery(undefined);
+  const liveSuppliers = suppliersResponse?.data || [];
+
+  const [supplier, setSupplier] = useState<string>(
+    isDemoEnabled ? 'Vardhman Textiles Ltd. (Ludhiana Depot)' : ''
+  );
+
+  useEffect(() => {
+    if (liveSuppliers.length > 0 && !supplier) {
+      setSupplier(liveSuppliers[0].supplierName);
+    }
+  }, [liveSuppliers, supplier]);
   const [quantityKg, setQuantityKg] = useState<number>(6200);
   const [ratePerKg, setRatePerKg] = useState<number>(4.60);
 
@@ -47,9 +61,21 @@ export const BuyMaterialsModal: React.FC<BuyMaterialsModalProps> = ({
               Verified Supplier Source
             </label>
             <select className="admin-form-input" value={supplier} onChange={(e) => setSupplier(e.target.value)}>
-              <option value="Vardhman Textiles Ltd. (Ludhiana Depot)">Vardhman Textiles Ltd. (Spot Delivery: 2 Days)</option>
-              <option value="Arvind Mills Yarn Division">Arvind Mills Yarn Division (Delivery: 3 Days)</option>
-              <option value="Jayshree Textiles (Coimbatore Depot)">Jayshree Textiles (Delivery: 4 Days)</option>
+              {liveSuppliers.length > 0 ? (
+                liveSuppliers.map((s: any) => (
+                  <option key={s.id || s._id} value={s.supplierName}>
+                    {s.supplierName} ({s.city || 'Regional Depot'}{s.defaultLeadTimeDays ? ` • ${s.defaultLeadTimeDays}d lead` : ''})
+                  </option>
+                ))
+              ) : isDemoEnabled ? (
+                <>
+                  <option value="Vardhman Textiles Ltd. (Ludhiana Depot)">Vardhman Textiles Ltd. (Spot Delivery: 2 Days)</option>
+                  <option value="Arvind Mills Yarn Division">Arvind Mills Yarn Division (Delivery: 3 Days)</option>
+                  <option value="Jayshree Textiles (Coimbatore Depot)">Jayshree Textiles (Delivery: 4 Days)</option>
+                </>
+              ) : (
+                <option value="">No suppliers available</option>
+              )}
             </select>
           </div>
 

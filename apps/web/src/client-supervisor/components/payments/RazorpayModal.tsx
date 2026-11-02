@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Invoice } from '../../types';
 import { formatCurrency } from '../../utils/formatters';
-import { X, CheckCircle2, XCircle, Shield, Building2, Zap, FileText, CreditCard, Loader2, Clock } from 'lucide-react';
+import { X, CheckCircle2, XCircle, Shield, Building2, Zap, FileText, CreditCard, Loader2, Clock, RefreshCw, AlertCircle } from 'lucide-react';
 import { useClientCreatePaymentOrderMutation, useGetClientOrderByIdQuery } from '../../../store/api/ordersApi';
+import { useApp } from '../../context/AppContext';
+import { isMilestoneSettled } from '../../../utils/orderMapper';
+
+const isDemo = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
 
 interface RazorpayModalProps {
   invoiceNumber: string;
@@ -27,6 +31,7 @@ const loadRazorpayScript = (): Promise<boolean> => {
 
 export const RazorpayModal: React.FC<RazorpayModalProps> = ({ invoiceNumber, onClose, invoiceData }) => {
   const invoice = invoiceData;
+  const { payInvoice } = useApp();
   const [clientCreatePaymentOrder] = useClientCreatePaymentOrderMutation();
 
   const [selectedMethod, setSelectedMethod] = useState<'netbanking' | 'upi' | 'neft' | 'card'>('netbanking');
@@ -34,33 +39,54 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({ invoiceNumber, onC
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [txnRef, setTxnRef] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [pollTimedOut, setPollTimedOut] = useState<boolean>(false);
 
   const isPendingConfirmation = paymentState === 'pending_confirmation';
+  const shouldPoll = isPendingConfirmation && !pollTimedOut;
 
-  const { data: orderDetailsResponse } = useGetClientOrderByIdQuery(
+  // Poll backend until confirmation, definitive failure, or timeout. Stop when modal closes.
+  const { data: orderDetailsResponse, refetch: refetchOrder } = useGetClientOrderByIdQuery(
     invoice?.backendOrderId || '',
     {
-      skip: !invoice?.backendOrderId || !isPendingConfirmation,
-      pollingInterval: isPendingConfirmation ? 2500 : 0,
+      skip: !invoice?.backendOrderId || !shouldPoll,
+      pollingInterval: shouldPoll ? 2500 : 0,
       refetchOnFocus: true,
       refetchOnReconnect: true,
     }
   );
 
+  // 30-second polling timeout controller
   useEffect(() => {
-    if (paymentState !== 'pending_confirmation' || !txnRef) return;
+    let timer: NodeJS.Timeout | null = null;
+    if (paymentState === 'pending_confirmation' && !pollTimedOut) {
+      timer = setTimeout(() => {
+        setPollTimedOut(true);
+      }, 30000); // 30 seconds reasonable timeout
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [paymentState, pollTimedOut]);
+
+  // Settlement verification: derive paid state exclusively from verified backend receipts/settlement
+  useEffect(() => {
+    if (paymentState !== 'pending_confirmation') return;
     const order = orderDetailsResponse?.data;
     if (!order || invoice?.milestoneIndex === undefined) return;
+
+    if (order.status === 'cancelled') {
+      setErrorMessage('Order was cancelled by administrator.');
+      setPaymentState('failed');
+      return;
+    }
 
     const milestone = order.financials?.milestones?.[invoice.milestoneIndex];
     if (!milestone) return;
 
-    const hasMatchingReceipt = (milestone.receipts || []).some(
-      (r: any) => !r.reversedAt && (r.razorpayPaymentId === txnRef || r.ref === txnRef)
-    );
-
-    if (hasMatchingReceipt) {
+    // Show milestone as paid ONLY when refreshed backend order confirms matching transaction or settlement
+    if (isMilestoneSettled(milestone, txnRef)) {
       setPaymentState('success');
+      setPollTimedOut(false);
     }
   }, [orderDetailsResponse, paymentState, txnRef, invoice?.milestoneIndex]);
 
@@ -69,8 +95,21 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({ invoiceNumber, onC
   const handleLaunchRazorpayCheckout = async () => {
     setIsProcessing(true);
     setErrorMessage(null);
+    setPollTimedOut(false);
 
     const razorpayKey = (import.meta as any).env.VITE_RAZORPAY_KEY_ID;
+
+    // Isolated demo payment behavior strictly behind VITE_ENABLE_DEMO_LOGIN === 'true'
+    if (isDemo && (!razorpayKey || !invoice.backendOrderId)) {
+      setTimeout(() => {
+        payInvoice?.(invoice.invoiceNumber, selectedMethod);
+        setTxnRef(`pay_demo_${Date.now().toString().slice(-6)}`);
+        setPaymentState('success');
+        setIsProcessing(false);
+      }, 900);
+      return;
+    }
+
     if (!razorpayKey) {
       setErrorMessage('Payment gateway public key (VITE_RAZORPAY_KEY_ID) is not configured in environment.');
       setPaymentState('failed');
@@ -128,8 +167,8 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({ invoiceNumber, onC
         handler: (response: any) => {
           const paymentId = response?.razorpay_payment_id || '';
           setTxnRef(paymentId);
-          // Backend processes payment capture asynchronously via webhook (/webhooks/razorpay)
-          // Do not call payInvoice() or simulate local success without confirmed server verification
+          // Razorpay checkout completion is treated strictly as pending confirmation—never proof of settlement
+          setPollTimedOut(false);
           setPaymentState('pending_confirmation');
         },
         prefill: {
@@ -295,24 +334,53 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({ invoiceNumber, onC
           {paymentState === 'pending_confirmation' && (
             <div className="text-center py-6 space-y-3">
               <div className="w-14 h-14 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
-                <Loader2 size={32} className="animate-spin text-amber-600" />
+                {pollTimedOut ? (
+                  <Clock size={32} className="text-amber-600" />
+                ) : (
+                  <Loader2 size={32} className="animate-spin text-amber-600" />
+                )}
               </div>
-              <h3 className="text-lg font-extrabold text-charcoal">Awaiting Settlement Confirmation</h3>
-              <p className="text-xs text-muted max-w-xs mx-auto">
-                Payment reference <span className="font-mono font-bold text-charcoal">{txnRef}</span> was submitted to gateway. Settlement is awaiting verified server webhook confirmation from mill accounts.
+              <h3 className="text-lg font-extrabold text-charcoal">
+                {pollTimedOut ? 'Awaiting Settlement Confirmation (Pending)' : 'Awaiting Settlement Confirmation'}
+              </h3>
+              <p className="text-xs text-muted max-w-xs mx-auto leading-relaxed">
+                {pollTimedOut ? (
+                  <>
+                    Payment reference <span className="font-mono font-bold text-charcoal">{txnRef || 'Captured'}</span> was submitted to gateway. Mill ledger has not confirmed receipt yet. This can take several minutes during banking reconciliation.
+                  </>
+                ) : (
+                  <>
+                    Payment reference <span className="font-mono font-bold text-charcoal">{txnRef}</span> was submitted to gateway. Polling mill ledger for confirmed webhook settlement...
+                  </>
+                )}
               </p>
               <div className="p-3 bg-ivory rounded-lg text-xs text-charcoal border border-muted-border text-left space-y-1">
-                <div className="font-bold text-[11px] uppercase tracking-wider text-muted">Settlement Status</div>
-                <div className="text-xs">
-                  Invoice remains pending until the backend records the verified receipt. Polling mill ledger automatically.
+                <div className="font-bold text-[11px] uppercase tracking-wider text-muted">Settlement Rule BR-P3</div>
+                <div className="text-xs text-muted leading-snug">
+                  Milestone remains <strong className="text-warning">Pending</strong> until the backend verifies the incoming payment webhook. Checkout completion alone is never treated as settlement.
                 </div>
               </div>
-              <button
-                onClick={onClose}
-                className="w-full py-2 text-xs font-bold text-charcoal bg-ivory border border-muted-border hover:bg-white rounded-lg transition-colors mt-2"
-              >
-                Close & Check Later
-              </button>
+
+              <div className="pt-2 space-y-2">
+                {pollTimedOut && (
+                  <button
+                    onClick={() => {
+                      setPollTimedOut(false);
+                      refetchOrder?.();
+                    }}
+                    className="w-full py-2.5 text-xs font-bold text-white bg-vermilion hover:bg-vermilion-hover rounded-xl shadow-sm transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <RefreshCw size={13} />
+                    <span>Check Again Now</span>
+                  </button>
+                )}
+                <button
+                  onClick={onClose}
+                  className="w-full py-2 text-xs font-bold text-charcoal bg-ivory border border-muted-border hover:bg-white rounded-lg transition-colors"
+                >
+                  Close &amp; Check Later
+                </button>
+              </div>
             </div>
           )}
 
@@ -324,14 +392,14 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({ invoiceNumber, onC
               </div>
               <h3 className="text-lg font-extrabold text-charcoal">Payment Confirmed by Mill!</h3>
               <p className="text-xs text-muted max-w-xs mx-auto">
-                {formatCurrency(invoice.amount)} successfully credited to LoomPilot Mill Accounts for {invoice.invoiceNumber}.
+                {formatCurrency(invoice.amount)} successfully verified and settled on LoomPilot Mill Accounts for {invoice.invoiceNumber}.
               </p>
               <div className="p-3 bg-ivory rounded-lg text-xs font-mono text-charcoal border border-muted-border">
-                Gateway Reference: {txnRef}
+                Gateway Reference: {txnRef || 'Confirmed'}
               </div>
               <button
                 onClick={onClose}
-                className="w-full py-2 text-xs font-bold text-white bg-success hover:bg-success/90 rounded-lg transition-colors"
+                className="w-full py-2.5 text-xs font-bold text-white bg-success hover:bg-success/90 rounded-xl transition-colors shadow-sm"
               >
                 Done
               </button>

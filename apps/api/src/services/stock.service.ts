@@ -1,7 +1,9 @@
+import { Types } from "mongoose";
 import { MaterialRepository } from "../repositories/material.repository.js";
 import { StockMovementRepository } from "../repositories/stock-movement.repository.js";
 import { SupplierRepository } from "../repositories/supplier.repository.js";
 import { OrdersRepository } from "../repositories/orders.repository.js";
+import { IOrder } from "../models/orders/order.model.js";
 import { IUnitOfWork } from "../interfaces/unit-of-work.interface.js";
 import { MongoUnitOfWork } from "../repositories/unit-of-work.js";
 import { AuditService } from "./audit.service.js";
@@ -46,23 +48,69 @@ export class StockService {
       throw new AppError(ErrorCode.NOT_FOUND, `Supplier '${supplierId}' not found`, 404);
     }
 
-    if (orderId && purchaseDecisionId) {
-      const order = await this.ordersRepo.findById(tenantId, orderId);
-      if (!order) {
+    let resolvedOrderId: Types.ObjectId | undefined;
+    let resolvedDecisionId: string | undefined;
+
+    if (orderId || purchaseDecisionId) {
+      let order: IOrder | null = null;
+      if (orderId) {
+        if (Types.ObjectId.isValid(orderId)) {
+          order = await this.ordersRepo.findById(tenantId, orderId);
+        }
+        if (!order) {
+          order = await this.ordersRepo.findByOrderNumber(tenantId, orderId);
+        }
+      }
+      if (!order && purchaseDecisionId) {
+        order = await this.ordersRepo.findByPurchaseDecisionId(tenantId, purchaseDecisionId);
+      }
+
+      if (orderId && !order) {
         throw new AppError(ErrorCode.NOT_FOUND, `Order '${orderId}' not found`, 404);
       }
-      const decision = order.purchaseDecisions?.find((d: any) => d.decisionId === purchaseDecisionId);
-      if (!decision) {
-        throw new AppError(ErrorCode.NOT_FOUND, `Purchase decision '${purchaseDecisionId}' not found on order`, 404);
+      if (purchaseDecisionId && !order) {
+        throw new AppError(ErrorCode.NOT_FOUND, `Purchase decision '${purchaseDecisionId}' not found on any order`, 404);
       }
-      if (String(decision.materialId) !== String(materialId)) {
-        throw new AppError(ErrorCode.VALIDATION_FAILED, "Material does not match purchase decision", 400);
-      }
-      if (decision.supplierId && String(decision.supplierId) !== String(supplierId)) {
-        throw new AppError(ErrorCode.VALIDATION_FAILED, "Supplier does not match purchase decision", 400);
-      }
-      if (decision.supplierOrder?.status === "cancelled") {
-        throw new AppError(ErrorCode.VALIDATION_FAILED, "Cannot receive goods against a cancelled purchase decision", 400);
+
+      if (order) {
+        resolvedOrderId = order._id as Types.ObjectId;
+
+        const decision = order.purchaseDecisions?.find(
+          (d: any) =>
+            d.decisionId === purchaseDecisionId ||
+            d.supplierOrder?.orderNo === purchaseDecisionId ||
+            (String(d.materialId) === String(materialId) && !purchaseDecisionId)
+        );
+
+        if (purchaseDecisionId && !decision) {
+          throw new AppError(ErrorCode.NOT_FOUND, `Purchase decision '${purchaseDecisionId}' not found on order`, 404);
+        }
+
+        if (decision) {
+          resolvedDecisionId = decision.decisionId;
+
+          if (String(decision.materialId) !== String(materialId)) {
+            throw new AppError(ErrorCode.VALIDATION_FAILED, "Material does not match purchase decision", 400);
+          }
+          if (decision.supplierId && String(decision.supplierId) !== String(supplierId)) {
+            throw new AppError(ErrorCode.VALIDATION_FAILED, "Supplier does not match purchase decision", 400);
+          }
+          if (decision.supplierOrder?.status === "cancelled") {
+            throw new AppError(ErrorCode.VALIDATION_FAILED, "Cannot receive goods against a cancelled purchase decision", 400);
+          }
+          if (decision.supplierOrder?.status === "received") {
+            throw new AppError(ErrorCode.VALIDATION_FAILED, "Cannot receive goods against a purchase decision that has already been fully received", 400);
+          }
+
+          const currentRecv = decision.supplierOrder?.recvQty || 0;
+          if (currentRecv + qty > decision.qty) {
+            throw new AppError(
+              ErrorCode.VALIDATION_FAILED,
+              `Received quantity (${qty}) exceeds remaining due quantity (${decision.qty - currentRecv}) for this purchase decision`,
+              400
+            );
+          }
+        }
       }
     }
 
@@ -81,21 +129,24 @@ export class StockService {
           type: "receipt",
           qty,
           qtyAfter: updated.stockQty,
-          orderId,
-          purchaseDecisionId,
+          orderId: resolvedOrderId ? String(resolvedOrderId) : undefined,
+          purchaseDecisionId: resolvedDecisionId,
         },
         tx
       );
 
       // 3. Atomically update supplierOrder status, recvQty and recvAt if linked to order purchase decision
-      if (orderId && purchaseDecisionId) {
-        await this.ordersRepo.updatePurchaseDecisionReceipt(
+      if (resolvedOrderId && resolvedDecisionId) {
+        const orderUpdated = await this.ordersRepo.updatePurchaseDecisionReceipt(
           tenantId,
-          orderId,
-          purchaseDecisionId,
+          resolvedOrderId,
+          resolvedDecisionId,
           qty,
           tx
         );
+        if (!orderUpdated) {
+          throw new AppError(ErrorCode.INTERNAL_ERROR, "Failed to update purchase decision receipt on order", 500);
+        }
       }
 
       // 4. Audit
@@ -104,7 +155,15 @@ export class StockService {
         actor: { id: actor.id, type: "user", email: actor.email },
         action: "STOCK_GOODS_RECEIPT",
         entity: { collection: "stockMovements", id: String(movement._id) },
-        after: { materialId, qty, qtyAfter: updated.stockQty, supplierId, unitCostPaise, orderId, purchaseDecisionId },
+        after: {
+          materialId,
+          qty,
+          qtyAfter: updated.stockQty,
+          supplierId,
+          unitCostPaise,
+          orderId: resolvedOrderId ? String(resolvedOrderId) : undefined,
+          purchaseDecisionId: resolvedDecisionId,
+        },
         ip: actor.ip,
         requestId: actor.requestId,
       });

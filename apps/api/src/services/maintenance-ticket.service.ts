@@ -5,12 +5,15 @@ import { AuditService } from "./audit.service.js";
 import { AppError } from "../errors/app-error.js";
 import { ErrorCode, assertTransition } from "@loompilot/shared";
 import { PaginationQuery, PaginatedResult } from "../utils/pagination.js";
+import { IUnitOfWork } from "../interfaces/unit-of-work.interface.js";
+import { MongoUnitOfWork } from "../repositories/unit-of-work.js";
 
 export class MaintenanceTicketService {
   constructor(
     private readonly ticketRepo = new MaintenanceTicketRepository(),
     private readonly machineRepo = new MachineRepository(),
-    private readonly auditService = new AuditService()
+    private readonly auditService = new AuditService(),
+    private readonly unitOfWork: IUnitOfWork = new MongoUnitOfWork()
   ) {}
 
   async createTicket(
@@ -20,6 +23,7 @@ export class MaintenanceTicketService {
       machineId: string;
       issue: string;
       notes?: string;
+      sourceReportId?: string;
     }
   ): Promise<any> {
     let machine = null;
@@ -37,17 +41,39 @@ export class MaintenanceTicketService {
 
     const resolvedMachineId = String(machine._id);
 
-    const ticket = await this.ticketRepo.create(tenantId, {
-      machineId: new Types.ObjectId(resolvedMachineId),
-      issue: data.issue,
-      notes: data.notes,
-      status: "open",
-      openedBy: actor.id && Types.ObjectId.isValid(actor.id) ? new Types.ObjectId(actor.id) : undefined,
-      version: 1,
-    } as any);
+    const ticket = await this.unitOfWork.withTransaction(async (tx) => {
+      // Concurrency lock: serialize against concurrent ticket resolution or status updates
+      const lockedMachine = await this.machineRepo.lockMachine(tenantId, resolvedMachineId, tx);
+      if (!lockedMachine) {
+        throw new AppError(ErrorCode.NOT_FOUND, "Machine not found", 404);
+      }
 
-    // Update machine status to breakdown
-    await this.machineRepo.updateMachineStatus(tenantId, resolvedMachineId, "breakdown");
+      const created = await this.ticketRepo.create(
+        tenantId,
+        {
+          machineId: new Types.ObjectId(resolvedMachineId),
+          sourceReportId:
+            data.sourceReportId && Types.ObjectId.isValid(data.sourceReportId)
+              ? new Types.ObjectId(data.sourceReportId)
+              : undefined,
+          issue: data.issue,
+          notes: data.notes,
+          status: "open",
+          openedBy: actor.id && Types.ObjectId.isValid(actor.id) ? new Types.ObjectId(actor.id) : undefined,
+          version: 1,
+        } as any,
+        tx
+      );
+
+      // Inactive safeguard: preserve inactive status if machine is decommissioned
+      if (lockedMachine.currentStatus !== "inactive") {
+        if (lockedMachine.currentStatus !== "breakdown") {
+          await this.machineRepo.updateMachineStatus(tenantId, resolvedMachineId, "breakdown", tx);
+        }
+      }
+
+      return created;
+    });
 
     await this.auditService.log({
       tenantId,
@@ -87,53 +113,88 @@ export class MaintenanceTicketService {
       notes?: string;
     }
   ): Promise<any> {
-    const currentTicket = await this.ticketRepo.findById(tenantId, ticketId);
-    if (!currentTicket) {
-      throw new AppError(ErrorCode.NOT_FOUND, "Maintenance ticket not found", 404);
-    }
+    const { updated, currentTicket, updates } = await this.unitOfWork.withTransaction(async (tx) => {
+      const currentTicket = await this.ticketRepo.findById(tenantId, ticketId, tx);
+      if (!currentTicket) {
+        throw new AppError(ErrorCode.NOT_FOUND, "Maintenance ticket not found", 404);
+      }
 
-    const updates: Record<string, any> = {};
+      const updates: Record<string, any> = {};
 
-    if (data.notes !== undefined) {
-      updates.notes = data.notes;
-    }
+      if (data.notes !== undefined) {
+        updates.notes = data.notes;
+      }
 
-    if (data.technicianName !== undefined) {
-      updates.technicianName = data.technicianName;
-    }
+      if (data.technicianName !== undefined) {
+        updates.technicianName = data.technicianName;
+      }
 
-    if (data.technicianContact !== undefined) {
-      updates.technicianContact = data.technicianContact;
-    }
+      if (data.technicianContact !== undefined) {
+        updates.technicianContact = data.technicianContact;
+      }
 
-    if (data.status && data.status !== currentTicket.status) {
-      // Validate transition via shared state machine safeguards
-      assertTransition("ticket", currentTicket.status, data.status, {
-        technicianName: data.technicianName || currentTicket.technicianName,
-        technicianContact: data.technicianContact || currentTicket.technicianContact,
-      });
+      if (data.status && data.status !== currentTicket.status) {
+        // Validate transition via shared state machine safeguards
+        assertTransition("ticket", currentTicket.status, data.status, {
+          technicianName: data.technicianName || currentTicket.technicianName,
+          technicianContact: data.technicianContact || currentTicket.technicianContact,
+        });
 
-      updates.status = data.status;
+        updates.status = data.status;
 
-      if (data.status === "assigned") {
-        updates.assignedAt = new Date();
-        // Update machine status to maint
-        if (currentTicket.machineId) {
-          await this.machineRepo.updateMachineStatus(tenantId, String(currentTicket.machineId), "maint");
-        }
-      } else if (data.status === "resolved") {
-        updates.resolvedAt = new Date();
-        // Machine is back to available
-        if (currentTicket.machineId) {
-          await this.machineRepo.updateMachineStatus(tenantId, String(currentTicket.machineId), "available");
+        if (data.status === "assigned") {
+          updates.assignedAt = new Date();
+        } else if (data.status === "resolved") {
+          updates.resolvedAt = new Date();
         }
       }
-    }
 
-    const updated = await this.ticketRepo.updateTicket(tenantId, ticketId, updates);
-    if (!updated) {
-      throw new AppError(ErrorCode.NOT_FOUND, "Maintenance ticket not found", 404);
-    }
+      const updated = await this.ticketRepo.updateTicket(tenantId, ticketId, updates, tx);
+      if (!updated) {
+        throw new AppError(ErrorCode.NOT_FOUND, "Maintenance ticket not found", 404);
+      }
+
+      // Safely recalculate machine availability if ticket status changed
+      if (data.status && data.status !== currentTicket.status && currentTicket.machineId) {
+        const machineIdStr = String(currentTicket.machineId);
+
+        // Lock the machine document inside the transaction to serialize concurrent
+        // ticket status resolutions for the same machine and trigger WriteConflict on race.
+        const machine = await this.machineRepo.lockMachine(tenantId, machineIdStr, tx);
+
+        if (machine && machine.currentStatus !== "inactive") {
+          const remainingUnresolved = await this.ticketRepo.findUnresolvedTicketsForMachine(
+            tenantId,
+            currentTicket.machineId,
+            ticketId,
+            tx
+          );
+
+          if (data.status === "resolved") {
+            if (remainingUnresolved.length === 0) {
+              // No other unresolved tickets: machine is safe to return to available
+              await this.machineRepo.updateMachineStatus(tenantId, machineIdStr, "available", tx);
+            } else {
+              // Other unresolved tickets exist:
+              // If any unresolved ticket is open, machine remains in breakdown; otherwise maint
+              const hasOpen = remainingUnresolved.some((t) => t.status === "open");
+              const targetStatus = hasOpen ? "breakdown" : "maint";
+              if (machine.currentStatus !== targetStatus) {
+                await this.machineRepo.updateMachineStatus(tenantId, machineIdStr, targetStatus, tx);
+              }
+            }
+          } else if (data.status === "assigned") {
+            const hasOpen = remainingUnresolved.some((t) => t.status === "open");
+            const targetStatus = hasOpen ? "breakdown" : "maint";
+            if (machine.currentStatus !== targetStatus) {
+              await this.machineRepo.updateMachineStatus(tenantId, machineIdStr, targetStatus, tx);
+            }
+          }
+        }
+      }
+
+      return { updated, currentTicket, updates };
+    });
 
     await this.auditService.log({
       tenantId,

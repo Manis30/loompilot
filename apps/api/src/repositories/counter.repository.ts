@@ -16,4 +16,33 @@ export class CounterRepository extends BaseRepository<ICounter> {
     );
     return result.seq;
   }
+
+  /**
+   * Attempts to claim a unique key within the tenant using CounterModel's unique { tenantId: 1, key: 1 } index.
+   * If the key already exists (E11000 duplicate key error), returns false.
+   * When executed inside a multi-document transaction (tx), aborting the transaction automatically
+   * rolls back the claimed key.
+   */
+  async claimUniqueKey(tenantId: string, key: string, tx?: TxContext): Promise<boolean> {
+    const session = this.getSession(tx);
+    try {
+      await this.model.create(
+        [
+          {
+            tenantId,
+            key,
+            seq: 1,
+            version: 1,
+          },
+        ],
+        session ? { session } : {}
+      );
+      return true;
+    } catch (err: any) {
+      if (err?.code === 11000 || err?.code === "11000") {
+        return false;
+      }
+      throw err;
+    }
+  }
 }

@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { UserCheck, CheckCircle2, ShieldCheck, Calendar } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { UserCheck, CheckCircle2, ShieldCheck, Calendar, Loader2, AlertCircle } from 'lucide-react';
 import type { Order } from '../../types';
+import { useGetUsersQuery } from '../../store/api/catalogApi';
 
 interface HandoverSupervisorModuleProps {
   orders: Order[];
   onSelectOrder: (id: string) => void;
-  onConfirmHandover: (orderId: string, supervisorId: string, supervisorName: string) => void;
+  onConfirmHandover: (orderId: string, supervisorId: string, supervisorName: string) => Promise<void> | void;
 }
 
 export const HandoverSupervisorModule: React.FC<HandoverSupervisorModuleProps> = ({
@@ -13,10 +14,38 @@ export const HandoverSupervisorModule: React.FC<HandoverSupervisorModuleProps> =
   onSelectOrder,
   onConfirmHandover
 }) => {
+  const { data: usersData } = useGetUsersQuery(undefined);
+
+  const liveSupervisors = useMemo(() => {
+    const raw = usersData?.data || [];
+    if (Array.isArray(raw)) {
+      const sups = raw.filter((u: any) => u.role === 'supervisor');
+      if (sups.length > 0) {
+        return sups.map((s: any) => ({
+          id: String(s._id || s.id),
+          name: `${s.name} (${s.processAreas?.join(', ') || 'Floor Master'})`,
+        }));
+      }
+    }
+    return [
+      { id: 'sup_1', name: 'Murugan K. (Weaving Master - Airjet Shed A)' },
+      { id: 'sup_2', name: 'Arunachalam S. (Finishing Master - Rapier Shed B)' },
+    ];
+  }, [usersData]);
+
   const [selectedSupervisor, setSelectedSupervisor] = useState<{ id: string; name: string }>({
     id: 'sup_1',
     name: 'Murugan K. (Weaving Master - Shed A)'
   });
+
+  useEffect(() => {
+    if (liveSupervisors.length > 0 && !liveSupervisors.some((s) => s.id === selectedSupervisor.id)) {
+      setSelectedSupervisor(liveSupervisors[0]);
+    }
+  }, [liveSupervisors, selectedSupervisor.id]);
+
+  const [submittingOrderId, setSubmittingOrderId] = useState<string | null>(null);
+  const [handoverErrors, setHandoverErrors] = useState<Record<string, string>>({});
 
   const acceptedOrders = orders.filter((o) => ['client_accepted', 'assigned', 'in_production'].includes(o.status));
 
@@ -47,6 +76,8 @@ export const HandoverSupervisorModule: React.FC<HandoverSupervisorModuleProps> =
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 12 }}>
         {acceptedOrders.map((order) => {
           const isAssigned = !!order.assignedSupervisorId;
+          const isSubmitting = submittingOrderId === order.id;
+          const currentError = handoverErrors[order.id];
 
           return (
             <div
@@ -99,7 +130,7 @@ export const HandoverSupervisorModule: React.FC<HandoverSupervisorModuleProps> =
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: isAssigned ? '#16a34a' : 'var(--c-terracotta)', fontWeight: 700 }}>
                     <UserCheck size={14} />
-                    <span>Assigned Supervisor: {order.assignedSupervisorName || 'Unassigned'}</span>
+                    <span>Assigned Supervisor: {order.assignedSupervisorName || (isAssigned ? 'Assigned' : 'Unassigned')}</span>
                   </div>
                 </div>
               </div>
@@ -113,30 +144,61 @@ export const HandoverSupervisorModule: React.FC<HandoverSupervisorModuleProps> =
                     value={selectedSupervisor.id}
                     onChange={(e) => {
                       const id = e.target.value;
-                      const name = id === 'sup_1' ? 'Murugan K. (Shed A)' : 'Arunachalam S. (Shed B)';
-                      setSelectedSupervisor({ id, name });
+                      const matched = liveSupervisors.find((s) => s.id === id);
+                      setSelectedSupervisor({ id, name: matched ? matched.name : id });
                     }}
                     style={{ fontSize: 11, padding: '7px 10px' }}
                   >
-                    <option value="sup_1">Murugan K. (Weaving Master - Airjet Shed A)</option>
-                    <option value="sup_2">Arunachalam S. (Finishing Master - Rapier Shed B)</option>
+                    {liveSupervisors.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
                   </select>
+
+                  {currentError && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      background: '#fef2f2',
+                      border: '1px solid #fecaca',
+                      color: '#b91c1c',
+                      padding: '6px 10px',
+                      borderRadius: 8,
+                      fontSize: 10.5,
+                      fontWeight: 600
+                    }}>
+                      <AlertCircle size={13} />
+                      <span>{currentError}</span>
+                    </div>
+                  )}
 
                   <button
                     className="admin-btn-primary"
-                    style={{ padding: '8px', fontSize: 11 }}
-                    onClick={(e) => {
+                    style={{ padding: '8px', fontSize: 11, opacity: isSubmitting ? 0.7 : 1 }}
+                    disabled={isSubmitting}
+                    onClick={async (e) => {
                       e.stopPropagation();
-                      onConfirmHandover(order.id, selectedSupervisor.id, selectedSupervisor.name);
+                      setHandoverErrors((prev) => ({ ...prev, [order.id]: '' }));
+                      setSubmittingOrderId(order.id);
+                      try {
+                        await onConfirmHandover(order.id, selectedSupervisor.id, selectedSupervisor.name);
+                      } catch (err: any) {
+                        const errMsg = err?.data?.message || err?.error || err?.message || 'Handover failed on server.';
+                        setHandoverErrors((prev) => ({ ...prev, [order.id]: errMsg }));
+                      } finally {
+                        setSubmittingOrderId(null);
+                      }
                     }}
                   >
-                    <CheckCircle2 size={13} />
-                    <span>Execute Handover & Authorize Floor Start</span>
+                    {isSubmitting ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                    <span>{isSubmitting ? 'Confirming with Server...' : 'Execute Handover & Authorize Floor Start'}</span>
                   </button>
                 </div>
               ) : (
                 <div style={{ fontSize: 10.5, color: '#16a34a', fontWeight: 700, borderTop: '1px solid #f6ebe3', paddingTop: 8 }}>
-                  ✓ Handed over on {order.handoverDate || '2026-10-18'}. Daily progress reports active.
+                  ✓ Handed over{order.handoverDate ? ` on ${order.handoverDate}` : ''}. Daily progress reports active.
                 </div>
               )}
             </div>

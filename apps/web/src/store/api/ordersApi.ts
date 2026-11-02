@@ -42,11 +42,22 @@ export const ordersApi = apiSlice.injectEndpoints({
       providesTags: (_result, _err, id) => [{ type: 'Order', id }],
     }),
 
-    getOrderSummary: builder.query<{ success: boolean; data: any }, { from?: string; to?: string } | void>({
-      query: (params) => ({
-        url: '/orders/summary',
-        params: params || {},
-      }),
+    getOrderSummary: builder.query<
+      { success: boolean; data: any },
+      { dateFrom?: string; dateTo?: string; from?: string; to?: string; clientId?: string } | void
+    >({
+      query: (params) => {
+        const queryParams: any = {};
+        if (params) {
+          if (params.dateFrom || params.from) queryParams.dateFrom = params.dateFrom || params.from;
+          if (params.dateTo || params.to) queryParams.dateTo = params.dateTo || params.to;
+          if (params.clientId) queryParams.clientId = params.clientId;
+        }
+        return {
+          url: '/orders/summary',
+          params: queryParams,
+        };
+      },
       providesTags: [{ type: 'Order', id: 'SUMMARY' }],
     }),
 
@@ -109,6 +120,36 @@ export const ordersApi = apiSlice.injectEndpoints({
       ],
     }),
 
+    rejectQuotation: builder.mutation<
+      { success: boolean; data: any },
+      { id: string; reason?: string; notes?: string; idempotencyKey?: string }
+    >({
+      query: ({ id, reason, notes, idempotencyKey }) => {
+        const idempKey =
+          idempotencyKey ||
+          (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `idem-quote-rej-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
+        return {
+          url: `/orders/${id}/quotation/approve`,
+          method: 'POST',
+          body: {
+            action: 'reject',
+            reason: reason || notes || 'Quotation rejected by administrator',
+            notes,
+          },
+          headers: {
+            'Idempotency-Key': idempKey,
+          },
+        };
+      },
+      invalidatesTags: (_res, _err, { id }) => [
+        { type: 'Order', id },
+        { type: 'Order', id: 'LIST' },
+        { type: 'Order', id: 'SUMMARY' },
+      ],
+    }),
+
     advanceOrderStage: builder.mutation<
       { success: boolean; data: any },
       { id: string; stage: string; producedQty?: number; percentComplete?: number; notes?: string }
@@ -121,12 +162,14 @@ export const ordersApi = apiSlice.injectEndpoints({
       invalidatesTags: (_res, _err, { id }) => [
         { type: 'Order', id },
         { type: 'Order', id: 'LIST' },
-        { type: 'Order', id: 'SUPERVISOR' },
+        { type: 'Order', id: 'SUPERVISOR_LIST' },
+        { type: 'Order', id: 'CLIENT_LIST' },
         { type: 'Order', id: 'SUMMARY' },
+        { type: 'Production', id: 'BOARD' },
       ],
     }),
 
-    sendQuotation: builder.mutation<{ success: boolean; data: any }, string>({
+        sendQuotation: builder.mutation<{ success: boolean; data: any }, string>({
       query: (id) => ({
         url: `/orders/${id}/quotation/send`,
         method: 'POST',
@@ -134,10 +177,11 @@ export const ordersApi = apiSlice.injectEndpoints({
       invalidatesTags: (_res, _err, id) => [
         { type: 'Order', id },
         { type: 'Order', id: 'LIST' },
+        { type: 'Order', id: 'SUMMARY' },
       ],
     }),
 
-    assignSupervisors: builder.mutation<{ success: boolean; data: any }, { id: string; body: any }>({
+        assignSupervisors: builder.mutation<{ success: boolean; data: any }, { id: string; body: any }>({
       query: ({ id, body }) => ({
         url: `/orders/${id}/assign`,
         method: 'POST',
@@ -145,6 +189,9 @@ export const ordersApi = apiSlice.injectEndpoints({
       }),
       invalidatesTags: (_res, _err, { id }) => [
         { type: 'Order', id },
+        { type: 'Order', id: 'LIST' },
+        { type: 'Order', id: 'SUMMARY' },
+        { type: 'Order', id: 'SUPERVISOR' },
         { type: 'Production', id: 'BOARD' },
       ],
     }),
@@ -204,27 +251,57 @@ export const ordersApi = apiSlice.injectEndpoints({
       invalidatesTags: (_res, _err, { id }) => [{ type: 'Order', id }],
     }),
 
-    recordManualReceipt: builder.mutation<{ success: boolean; data: any }, { id: string; body: any }>({
-      query: ({ id, body }) => ({
-        url: `/orders/${id}/payments/manual-receipt`,
-        method: 'POST',
-        body,
-      }),
+    recordManualReceipt: builder.mutation<
+      { success: boolean; data: any },
+      { id: string; body: any; idempotencyKey?: string }
+    >({
+      query: ({ id, body, idempotencyKey }) => {
+        const idempKey =
+          idempotencyKey ||
+          (body?.ref ? `idem-pay-${id}-${body.milestoneIndex ?? 0}-${String(body.ref).trim()}` : undefined) ||
+          (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `idem-pay-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
+        return {
+          url: `/orders/${id}/payments/manual-receipt`,
+          method: 'POST',
+          body,
+          headers: {
+            'Idempotency-Key': idempKey,
+          },
+        };
+      },
       invalidatesTags: (_res, _err, { id }) => [
         { type: 'Order', id },
         { type: 'Order', id: 'LIST' },
+        { type: 'Order', id: 'SUMMARY' },
       ],
     }),
 
-    recordDelivery: builder.mutation<{ success: boolean; data: any }, { id: string; body: any }>({
-      query: ({ id, body }) => ({
-        url: `/orders/${id}/deliveries`,
-        method: 'POST',
-        body,
-      }),
+    recordDelivery: builder.mutation<
+      { success: boolean; data: any },
+      { id: string; body: any; idempotencyKey?: string }
+    >({
+      query: ({ id, body, idempotencyKey }) => {
+        const idempKey =
+          idempotencyKey ||
+          (body?.invoiceNo ? `idem-del-${id}-${String(body.invoiceNo).trim()}` : undefined) ||
+          (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `idem-del-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
+        return {
+          url: `/orders/${id}/deliveries`,
+          method: 'POST',
+          body,
+          headers: {
+            'Idempotency-Key': idempKey,
+          },
+        };
+      },
       invalidatesTags: (_res, _err, { id }) => [
         { type: 'Order', id },
         { type: 'Order', id: 'LIST' },
+        { type: 'Order', id: 'SUMMARY' },
       ],
     }),
 
@@ -362,10 +439,12 @@ export const {
   useGetOrdersQuery,
   useGetOrderByIdQuery,
   useGetOrderSummaryQuery,
+  useGetOrderSummaryQuery as useGetOrdersSummaryQuery,
   useCreateOrderMutation,
   useUpdateOrderMutation,
   useDecideOrderMutation,
   useApproveQuotationMutation,
+  useRejectQuotationMutation,
   useAdvanceOrderStageMutation,
   useSendQuotationMutation,
   useAssignSupervisorsMutation,

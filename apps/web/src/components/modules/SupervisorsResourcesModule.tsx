@@ -413,7 +413,7 @@ const INITIAL_AUDIT_LOGS: ResourceAuditEntry[] = [
 interface SupervisorsResourcesModuleProps {
   users?: AppUser[];
   orders?: Order[];
-  onAssignSupervisor?: (orderId: string, supervisorId: string, supervisorName: string) => void;
+  onAssignSupervisor?: (orderId: string, supervisorId: string, supervisorName: string) => Promise<void> | void;
   onApproveOvertime?: (shedName: string) => void;
 }
 
@@ -605,8 +605,8 @@ export const SupervisorsResourcesModule: React.FC<SupervisorsResourcesModuleProp
   // =========================================================================
 
   // Assign Order with Workload Guard (Section 3B)
-  const handleAssignOrderToSupervisor = () => {
-    if (!selectedSupervisor) return;
+  const handleAssignOrderToSupervisor = async () => {
+    if (!selectedSupervisor || !selectedOrderToAssign) return;
 
     // Workload limit guard
     if (selectedSupervisor.workloadPercent >= 100) {
@@ -619,43 +619,46 @@ export const SupervisorsResourcesModule: React.FC<SupervisorsResourcesModuleProp
       return;
     }
 
-    const timestamp = new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    try {
+      if (onAssignSupervisor) {
+        await onAssignSupervisor(selectedOrderToAssign, selectedSupervisor.id, selectedSupervisor.name);
+      }
 
-    // Update supervisor workload
-    setSupervisors((prev) =>
-      prev.map((s) => {
-        if (s.id === selectedSupervisor.id) {
-          const newCount = s.activeOrdersCount + 1;
-          const newWorkload = Math.round((newCount / s.maxOrderCapacity) * 100);
-          return {
-            ...s,
-            activeOrdersCount: newCount,
-            workloadPercent: newWorkload,
-            availabilityStatus: newWorkload >= 100 ? 'At Capacity' : 'Available'
-          };
-        }
-        return s;
-      })
-    );
+      const timestamp = new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-    // Append to audit log
-    const auditEntry: ResourceAuditEntry = {
-      id: `AUD-${Date.now()}`,
-      user: 'John Doe (Admin)',
-      action: 'ORDER_ASSIGNED',
-      entityType: 'Supervisor',
-      entityId: selectedSupervisor.id,
-      details: `Assigned Order ${selectedOrderToAssign} to ${selectedSupervisor.name} (${selectedSupervisor.assignedShedName}).`,
-      timestamp
-    };
-    setAuditLogs((prev) => [auditEntry, ...prev]);
+      // Update supervisor workload ONLY on confirmed success
+      setSupervisors((prev) =>
+        prev.map((s) => {
+          if (s.id === selectedSupervisor.id) {
+            const newCount = s.activeOrdersCount + 1;
+            const newWorkload = Math.round((newCount / s.maxOrderCapacity) * 100);
+            return {
+              ...s,
+              activeOrdersCount: newCount,
+              workloadPercent: newWorkload,
+              availabilityStatus: newWorkload >= 100 ? 'At Capacity' : 'Available'
+            };
+          }
+          return s;
+        })
+      );
 
-    // Parent callback if available
-    if (onAssignSupervisor) {
-      onAssignSupervisor(selectedOrderToAssign, selectedSupervisor.id, selectedSupervisor.name);
+      // Append to audit log
+      const auditEntry: ResourceAuditEntry = {
+        id: `AUD-${Date.now()}`,
+        user: 'John Doe (Admin)',
+        action: 'ORDER_ASSIGNED',
+        entityType: 'Supervisor',
+        entityId: selectedSupervisor.id,
+        details: `Assigned Order ${selectedOrderToAssign} to ${selectedSupervisor.name} (${selectedSupervisor.assignedShedName}).`,
+        timestamp
+      };
+      setAuditLogs((prev) => [auditEntry, ...prev]);
+
+      showToast(`Order ${selectedOrderToAssign} successfully assigned to ${selectedSupervisor.name}!`);
+    } catch (err: any) {
+      console.error('Supervisor assignment failed:', err);
     }
-
-    showToast(`Order ${selectedOrderToAssign} successfully assigned to ${selectedSupervisor.name}!`);
   };
 
   // Add Supervisor (Section 3B)

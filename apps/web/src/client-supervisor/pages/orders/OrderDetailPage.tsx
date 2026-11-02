@@ -18,7 +18,10 @@ import {
   FileText,
   MapPin,
   Clock,
+  RefreshCw,
 } from 'lucide-react';
+
+const isDemoEnabled = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
 
 export const OrderDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -37,7 +40,14 @@ export const OrderDetailPage: React.FC = () => {
     return map;
   }, [productsResponse]);
 
-  const { data: orderResponse } = useGetClientOrderByIdQuery(id || '', { skip: !id });
+  const {
+    data: orderResponse,
+    isLoading: isOrderLoading,
+    isError: isOrderError,
+    error: orderError,
+    refetch: refetchOrder,
+  } = useGetClientOrderByIdQuery(id || '', { skip: !id });
+
   const liveOrder = useMemo(() => {
     if (orderResponse?.data) {
       return mapApiClientOrder(orderResponse.data, productsMap);
@@ -45,7 +55,41 @@ export const OrderDetailPage: React.FC = () => {
     return null;
   }, [orderResponse, productsMap]);
 
-  const order = liveOrder || orders.find((o) => o.id === id);
+  // In normal mode, derive exclusively from live backend response; mock order fallback is restricted to demo mode
+  const order = liveOrder || (isDemoEnabled ? orders.find((o) => o.id === id) : null);
+
+  if (isOrderLoading) {
+    return (
+      <div className="py-24 flex flex-col items-center justify-center gap-3 text-xs text-muted">
+        <RefreshCw size={22} className="animate-spin text-vermilion" />
+        <span>Loading manufacturing order specifications...</span>
+      </div>
+    );
+  }
+
+  if (isOrderError && !order) {
+    const errMsg = (orderError as any)?.data?.message || (orderError as any)?.message || 'Failed to load order from server';
+    return (
+      <div className="py-16 text-center space-y-4 max-w-md mx-auto">
+        <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto">
+          <AlertCircle size={24} />
+        </div>
+        <h2 className="text-lg font-bold text-charcoal">Error Loading Order</h2>
+        <p className="text-xs text-muted">{errMsg}</p>
+        <div className="flex items-center justify-center gap-3 pt-2">
+          <button
+            onClick={() => refetchOrder()}
+            className="px-4 py-2 rounded-xl bg-vermilion text-white text-xs font-bold hover:bg-vermilion-hover transition-colors"
+          >
+            Retry
+          </button>
+          <Link to="/client/orders" className="text-xs font-bold text-muted hover:text-charcoal">
+            Back to My Orders
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   if (!order) {
     return (

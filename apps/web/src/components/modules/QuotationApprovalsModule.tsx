@@ -25,7 +25,14 @@ import {
   AlertCircle
 } from 'lucide-react';
 import type { Order } from '../../types';
-import { useGetOrdersQuery, useApproveQuotationMutation } from '../../store/api/ordersApi';
+import {
+  useGetOrdersQuery,
+  useApproveQuotationMutation,
+  useRejectQuotationMutation,
+  useSendQuotationMutation,
+} from '../../store/api/ordersApi';
+
+const isDemo = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
 
 // =========================================================================
 // DATA MODELS & TYPES
@@ -168,8 +175,8 @@ export interface QuotationRecord {
 interface QuotationApprovalsModuleProps {
   orders: Order[];
   onSelectOrder: (id: string) => void;
-  onApproveQuotation: (orderId: string, editedMargin?: number) => void;
-  onRejectQuotation: (orderId: string, reason: string) => void;
+  onApproveQuotation?: (orderId: string, editedMargin?: number) => Promise<void> | void;
+  onRejectQuotation?: (orderId: string, reason: string) => Promise<void> | void;
 }
 
 // =========================================================================
@@ -271,6 +278,8 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
   // Real RTK Query hooks for live quotation approval
   const { data: ordersResponse, refetch: refetchOrders } = useGetOrdersQuery(undefined);
   const [approveQuotationMutation, { isLoading: isApprovingQuotation }] = useApproveQuotationMutation();
+  const [rejectQuotationMutation, { isLoading: isRejectingQuotation }] = useRejectQuotationMutation();
+  const [sendQuotationMutation, { isLoading: isSendingQuotation }] = useSendQuotationMutation();
   const [approvalError, setApprovalError] = useState<string | null>(null);
 
   // Active selected client state (Defaults to 'CL-001' Fashion House)
@@ -1232,9 +1241,21 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
           const liveOrder = ordersResponse.data.find(
             (o: any) => String(o._id || o.id) === q.orderId || o.orderNumber === q.orderId
           );
-          if (liveOrder && (liveOrder.quotation?.status === 'approved' || liveOrder.status === 'quotation_approved')) {
-            if (q.status !== 'approved' && q.status !== 'client_accepted' && q.status !== 'finalized') {
-              return { ...q, status: 'approved' };
+          if (liveOrder) {
+            const quoteStatus = liveOrder.quotation?.status;
+            const orderStatus = liveOrder.status;
+            if (quoteStatus === 'approved' || orderStatus === 'quotation_approved') {
+              if (q.status !== 'approved' && q.status !== 'client_accepted' && q.status !== 'finalized') {
+                return { ...q, status: 'approved' };
+              }
+            } else if (quoteStatus === 'rejected' || orderStatus === 'rejected_by_admin') {
+              if (q.status !== 'rejected') {
+                return { ...q, status: 'rejected' };
+              }
+            } else if (quoteStatus === 'sent' || orderStatus === 'quotation_sent') {
+              if (q.status !== 'awaiting_client_response' && q.status !== 'client_accepted' && q.status !== 'finalized') {
+                return { ...q, status: 'awaiting_client_response' };
+              }
             }
           }
           return q;
@@ -1336,7 +1357,9 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
     const isLiveBackendOrder = orderIdToApprove && orderIdToApprove.length === 24;
 
     try {
-      if (isLiveBackendOrder) {
+      if (onApproveQuotation) {
+        await onApproveQuotation(target.orderId, fin.marginPercent);
+      } else if (isLiveBackendOrder) {
         await approveQuotationMutation({
           id: orderIdToApprove,
           body: {
@@ -1345,9 +1368,15 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
             notes: `Admin approved quotation with ${fin.marginPercent}% margin.`,
           },
         }).unwrap();
+        refetchOrders();
+      } else if (!isDemo) {
+        const errMsg = `Cannot approve quotation: Order '${target.orderId}' is not registered on the backend server.`;
+        setApprovalError(errMsg);
+        showToast(`Error: ${errMsg}`);
+        return;
       }
 
-      // ONLY on success update local UI state!
+      // ONLY on confirmed success update local UI state!
       setQuotations((prev) =>
         prev.map((q) => {
           if (q.id === quoteId) {
@@ -1373,16 +1402,8 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
         })
       );
 
-      if (onApproveQuotation) {
-        onApproveQuotation(target.orderId, fin.marginPercent);
-      }
-
       showToast(`Quotation ${quoteId} APPROVED by Admin. Client dispatch unlocked!`);
       setApprovalError(null);
-
-      if (isLiveBackendOrder) {
-        refetchOrders();
-      }
     } catch (err: any) {
       console.error('Quotation approval failed on server:', err);
       const errMsg =
@@ -1392,18 +1413,45 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
     }
   };
 
-  const handleSendToClient = (quoteId: string) => {
+  const handleSendToClient = async (quoteId: string) => {
     const target = quotations.find((q) => q.id === quoteId);
     if (!target) return;
     if (target.status !== 'approved') {
-      alert('Only an Admin-approved quotation can be sent to clients.');
+      showToast('Only an Admin-approved quotation can be sent to clients.');
       return;
     }
-    const timestamp = new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    setQuotations((prev) =>
-      prev.map((q) => (q.id === quoteId ? { ...q, status: 'awaiting_client_response', dispatchedAt: timestamp } : q))
-    );
-    showToast(`Quotation ${quoteId} successfully dispatched to ${target.clientName}!`);
+
+    let orderIdToSend = target.orderId;
+    if (orderIdToSend.length !== 24 && ordersResponse?.data) {
+      const matched = ordersResponse.data.find(
+        (o: any) => o.orderNumber === target.orderId || String(o._id || o.id) === target.orderId
+      );
+      if (matched) {
+        orderIdToSend = String(matched._id || matched.id);
+      }
+    }
+
+    const isLiveBackendOrder = orderIdToSend && orderIdToSend.length === 24;
+
+    try {
+      if (isLiveBackendOrder) {
+        await sendQuotationMutation(orderIdToSend).unwrap();
+        refetchOrders();
+      } else if (!isDemo) {
+        showToast(`Cannot dispatch: Order '${target.orderId}' is not registered on the backend server.`);
+        return;
+      }
+
+      const timestamp = new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      setQuotations((prev) =>
+        prev.map((q) => (q.id === quoteId ? { ...q, status: 'awaiting_client_response', dispatchedAt: timestamp } : q))
+      );
+      showToast(`Quotation ${quoteId} successfully dispatched to ${target.clientName}!`);
+    } catch (err: any) {
+      console.error('Failed to send quotation to client on server:', err);
+      const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to dispatch quotation on server.';
+      showToast(`Error: ${errMsg}`);
+    }
   };
 
   const handleRecordClientAcceptance = (quoteId: string) => {
@@ -1438,18 +1486,54 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
     showToast(`Revision requested for ${activeQuotationId}. Sent to Quotation Agent.`);
   };
 
-  const handleConfirmReject = () => {
+  const handleConfirmReject = async () => {
     if (!activeQuotationId || !rejectionReasonInput.trim()) return;
-    setQuotations((prev) =>
-      prev.map((q) => (q.id === activeQuotationId ? { ...q, status: 'rejected', rejectionReason: rejectionReasonInput.trim() } : q))
-    );
     const target = quotations.find((q) => q.id === activeQuotationId);
-    if (target) {
-      onRejectQuotation(target.orderId, rejectionReasonInput.trim());
+    if (!target) return;
+
+    let orderIdToReject = target.orderId;
+    if (orderIdToReject.length !== 24 && ordersResponse?.data) {
+      const matched = ordersResponse.data.find(
+        (o: any) => o.orderNumber === target.orderId || String(o._id || o.id) === target.orderId
+      );
+      if (matched) {
+        orderIdToReject = String(matched._id || matched.id);
+      }
     }
-    setShowRejectModal(false);
-    setRejectionReasonInput('');
-    showToast(`Quotation ${activeQuotationId} REJECTED.`);
+
+    const isLiveBackendOrder = orderIdToReject && orderIdToReject.length === 24;
+
+    try {
+      if (onRejectQuotation) {
+        await onRejectQuotation(target.orderId, rejectionReasonInput.trim());
+      } else if (isLiveBackendOrder) {
+        await rejectQuotationMutation({
+          id: orderIdToReject,
+          reason: rejectionReasonInput.trim(),
+          notes: `Admin rejected quotation: ${rejectionReasonInput.trim()}`,
+        }).unwrap();
+        refetchOrders();
+      } else if (!isDemo) {
+        const errMsg = `Cannot reject quotation: Order '${target.orderId}' is not registered on the backend server.`;
+        setApprovalError(errMsg);
+        showToast(`Error: ${errMsg}`);
+        return;
+      }
+
+      setQuotations((prev) =>
+        prev.map((q) => (q.id === activeQuotationId ? { ...q, status: 'rejected', rejectionReason: rejectionReasonInput.trim() } : q))
+      );
+      setShowRejectModal(false);
+      setRejectionReasonInput('');
+      setApprovalError(null);
+      showToast(`Quotation ${activeQuotationId} REJECTED.`);
+    } catch (err: any) {
+      console.error('Quotation rejection failed on server:', err);
+      const errMsg =
+        err?.data?.message || err?.error || err?.message || 'Failed to reject quotation on server. Status was not updated.';
+      setApprovalError(errMsg);
+      showToast(`Error: ${errMsg}`);
+    }
   };
 
   const handleConfirmConcession = () => {

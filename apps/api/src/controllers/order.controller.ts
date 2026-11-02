@@ -438,6 +438,7 @@ export class OrderController {
         qty: Number(req.body.qty),
         invoiceNo: req.body.invoiceNo,
         invoiceAmountPaise: Number(req.body.invoiceAmountPaise),
+        carrier: req.body.carrier,
         notes: req.body.notes,
         actor: {
           id: actor.subjectId,

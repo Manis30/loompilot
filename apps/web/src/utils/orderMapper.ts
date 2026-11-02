@@ -11,13 +11,171 @@ import type {
 } from '../client-supervisor/types';
 import type { SupervisorOrder } from '../client-supervisor/types/supervisor';
 
+export interface CanonicalProductionStage {
+  step: number; // 1 to 8, or 0 if unknown/unavailable
+  name: string; // e.g. "Quote Accepted" or "Unavailable"
+  numberedName: string; // e.g. "1. Quote Accepted" or "Unavailable"
+  key: string; // e.g. "quote_accepted" or "unavailable"
+  isKnown: boolean;
+}
+
+export const CANONICAL_PRODUCTION_STAGES: readonly CanonicalProductionStage[] = [
+  { step: 1, name: 'Quote Accepted', numberedName: '1. Quote Accepted', key: 'quote_accepted', isKnown: true },
+  { step: 2, name: 'Yarn Sourcing', numberedName: '2. Yarn Sourcing', key: 'yarn_sourcing', isKnown: true },
+  { step: 3, name: 'Warping & Sizing', numberedName: '3. Warping & Sizing', key: 'warping_sizing', isKnown: true },
+  { step: 4, name: 'Loom Weaving', numberedName: '4. Loom Weaving', key: 'loom_weaving', isKnown: true },
+  { step: 5, name: 'Dyeing & Finishing', numberedName: '5. Dyeing & Finishing', key: 'dyeing_finishing', isKnown: true },
+  { step: 6, name: 'Quality Check', numberedName: '6. Quality Check', key: 'quality_check', isKnown: true },
+  { step: 7, name: 'Packaging & Dispatch', numberedName: '7. Packaging & Dispatch', key: 'packaging_dispatch', isKnown: true },
+  { step: 8, name: 'Delivered', numberedName: '8. Delivered', key: 'delivered', isKnown: true },
+] as const;
+
+export const UNKNOWN_PRODUCTION_STAGE: CanonicalProductionStage = {
+  step: 0,
+  name: 'Unavailable',
+  numberedName: 'Unavailable',
+  key: 'unavailable',
+  isKnown: false,
+};
+
+/**
+ * Normalizes any production phase representation (numbered, unnumbered, or known unambiguous legacy alias)
+ * to the canonical 8-stage sequence.
+ *
+ * Rules:
+ * 1. An explicit confirmed delivered order status (completed/delivered) maps to Stage 8 (Delivered).
+ * 2. An explicit recognized canonical phase string is matched first (numbered, unnumbered, or prefixed).
+ * 3. Ambiguous legacy phases (cutting, stitching, standalone knitting, standalone finishing, ironing)
+ *    are explicitly rejected and return UNKNOWN_PRODUCTION_STAGE.
+ * 4. Legacy aliases are mapped ONLY when unambiguous and confirmed by codebase/backend contracts.
+ * 5. In the absence of an explicit percentage-to-stage contract, percentage is NEVER used to infer a stage;
+ *    unmapped orders return UNKNOWN_PRODUCTION_STAGE while preserving reported progress and order status.
+ */
+export function normalizeProductionStage(
+  phase?: string | null,
+  _percentComplete?: number,
+  orderStatus?: string
+): CanonicalProductionStage {
+  const rawStatus = String(orderStatus || '').toLowerCase().trim();
+  const isDeliveredByStatus = rawStatus === 'completed' || rawStatus === 'delivered';
+  if (isDeliveredByStatus) {
+    return CANONICAL_PRODUCTION_STAGES[7];
+  }
+
+  const rawPhase = String(phase || '').trim();
+  if (!rawPhase) {
+    return UNKNOWN_PRODUCTION_STAGE;
+  }
+
+  // 1. Direct match on numbered name (e.g. "1. Quote Accepted", "2. Yarn Sourcing")
+  const matchNumbered = CANONICAL_PRODUCTION_STAGES.find(
+    (s) => s.numberedName.toLowerCase() === rawPhase.toLowerCase()
+  );
+  if (matchNumbered) return matchNumbered;
+
+  // 2. Direct match on unnumbered name (e.g. "Quote Accepted", "Yarn Sourcing")
+  const matchName = CANONICAL_PRODUCTION_STAGES.find(
+    (s) => s.name.toLowerCase() === rawPhase.toLowerCase()
+  );
+  if (matchName) return matchName;
+
+  // 3. Match stripped numeric prefix (e.g. "2 - Yarn Sourcing", "2) Yarn Sourcing")
+  const stripped = rawPhase.replace(/^\d+[\.\-\)]\s*/, '').trim();
+  if (stripped) {
+    const matchStripped = CANONICAL_PRODUCTION_STAGES.find(
+      (s) => s.name.toLowerCase() === stripped.toLowerCase()
+    );
+    if (matchStripped) return matchStripped;
+  }
+
+  // 4. Reject ambiguous legacy manufacturing phases
+  const slug = rawPhase.toLowerCase().replace(/[-/&\s]+/g, '_').replace(/_{2,}/g, '_');
+  const ambiguousPhases = [
+    'cutting',
+    'stitching',
+    'knitting',
+    'finishing',
+    'ironing',
+    'ironing_finishing',
+  ];
+  if (ambiguousPhases.includes(slug)) {
+    return UNKNOWN_PRODUCTION_STAGE;
+  }
+
+  // 5. Match known unambiguous legacy backend aliases
+  switch (slug) {
+    // Stage 1: Quote Accepted
+    case 'quote_accepted':
+    case 'quote':
+      return CANONICAL_PRODUCTION_STAGES[0];
+
+    // Stage 2: Yarn Sourcing
+    case 'yarn_sourcing':
+    case 'yarn_procurement_stock':
+    case 'yarn_procurement':
+    case 'yarn_inward':
+    case 'yarn':
+      return CANONICAL_PRODUCTION_STAGES[1];
+
+    // Stage 3: Warping & Sizing
+    case 'warping_sizing':
+    case 'warping':
+    case 'sizing':
+      return CANONICAL_PRODUCTION_STAGES[2];
+
+    // Stage 4: Loom Weaving
+    case 'loom_weaving':
+    case 'weaving':
+    case 'knitting_weaving':
+      return CANONICAL_PRODUCTION_STAGES[3];
+
+    // Stage 5: Dyeing & Finishing
+    case 'dyeing_finishing':
+    case 'dyeing_fabric_processing':
+    case 'dyeing_processing':
+    case 'dyeing':
+    case 'washing':
+    case 'dyeing_washing':
+      return CANONICAL_PRODUCTION_STAGES[4];
+
+    // Stage 6: Quality Check
+    case 'quality_check':
+    case 'checking':
+    case 'checking_quality_control':
+    case 'inspection':
+    case 'finishing_inspection':
+    case 'checking_and_quality_control':
+    case 'quality_inspection':
+      return CANONICAL_PRODUCTION_STAGES[5];
+
+    // Stage 7: Packaging & Dispatch
+    case 'packaging_dispatch':
+    case 'packaging':
+    case 'packing':
+    case 'packing_dispatch':
+    case 'packaging_and_dispatch':
+    case 'dispatch':
+      return CANONICAL_PRODUCTION_STAGES[6];
+
+    // Stage 8: Delivered
+    case 'delivered':
+    case 'delivery':
+    case 'dispatch_delivery':
+      return CANONICAL_PRODUCTION_STAGES[7];
+
+    default:
+      return UNKNOWN_PRODUCTION_STAGE;
+  }
+}
+
 /**
  * Maps raw backend Order document to Admin Portal Order domain model.
  */
 export function mapApiOrderToAdminOrder(
   apiOrder: any,
   clientsMap?: Map<string, any>,
-  productsMap?: Map<string, any>
+  productsMap?: Map<string, any>,
+  usersMap?: Map<string, any>
 ): AdminOrder {
   const id = String(apiOrder.orderNumber || apiOrder.id || apiOrder._id || '');
   const clientId = String(apiOrder.clientId || '');
@@ -71,6 +229,13 @@ export function mapApiOrderToAdminOrder(
   const rawProcessPlan: any[] = apiOrder.production?.processPlan || [];
   const percentComplete = Number(apiOrder.production?.percentComplete) || (status === 'completed' ? 100 : 0);
 
+  const canonicalStage = normalizeProductionStage(
+    apiOrder.production?.phase,
+    percentComplete,
+    status
+  );
+  const isOrderDelivered = status === 'completed' || status === 'delivered';
+
   const stagesList: ProductionTimelineStage[] = rawProcessPlan.map((step: any, idx: number) => {
     const rawStageName = String(step.stage || `Stage ${idx + 1}`);
     const stageName = rawStageName.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
@@ -101,22 +266,32 @@ export function mapApiOrderToAdminOrder(
   });
 
   if (stagesList.length === 0) {
-    const defaultSteps = [
-      'Yarn Procurement & Stock',
-      'Knitting & Weaving',
-      'Dyeing & Finishing',
-      'Cutting',
-      'Stitching',
-      'Checking & Quality Control',
-      'Ironing & Finishing',
-      'Packing & Dispatch',
-    ];
-    defaultSteps.forEach((stName, idx) => {
+    CANONICAL_PRODUCTION_STAGES.forEach((cs) => {
+      let stepStatus: 'completed' | 'in_progress' | 'pending' = 'pending';
+      let dateOrDetails = 'Scheduled';
+
+      if (isOrderDelivered || (canonicalStage.isKnown && cs.step < canonicalStage.step)) {
+        stepStatus = 'completed';
+        dateOrDetails = 'Completed';
+      } else if (canonicalStage.isKnown && cs.step === canonicalStage.step) {
+        stepStatus = 'in_progress';
+        dateOrDetails = 'Current stage · Underway';
+      } else {
+        stepStatus = 'pending';
+        dateOrDetails = `Scheduled: ${deadlineDate}`;
+      }
+
       stagesList.push({
-        id: `stage-${idx + 1}`,
-        name: stName,
-        status: status === 'completed' || status === 'delivered' ? 'completed' : idx === 0 ? 'in_progress' : 'pending',
-        dateOrDetails: status === 'completed' || status === 'delivered' ? 'Completed' : 'Scheduled',
+        id: `stage-${cs.step}`,
+        name: cs.name,
+        status: stepStatus,
+        dateOrDetails,
+      });
+    });
+  }
+        name: cs.name,
+        status: stepStatus,
+        dateOrDetails,
       });
     });
   }
@@ -132,6 +307,48 @@ export function mapApiOrderToAdminOrder(
       timeline: stagesList,
     },
   ];
+
+    const rawSupervisorAssignment = apiOrder.production?.assignedSupervisors?.[0];
+  const assignedSupervisorId = rawSupervisorAssignment?.supervisorId
+    ? String(rawSupervisorAssignment.supervisorId)
+    : undefined;
+  const assignedSupervisorUser = assignedSupervisorId ? usersMap?.get(assignedSupervisorId) : undefined;
+  const assignedSupervisorName = assignedSupervisorUser?.name || undefined;
+  const handoverDate = apiOrder.production?.assignedAt
+    ? String(apiOrder.production.assignedAt).split('T')[0]
+    : undefined;
+
+  let quotationObj: any = undefined;
+  if (apiOrder.quotation) {
+    const q = apiOrder.quotation;
+    const materialCost = q.materialCostPaise ? q.materialCostPaise / 100 : 0;
+    const processingCost = q.processingCostPaise ? q.processingCostPaise / 100 : 0;
+    const overheadCost = q.overheadCostPaise ? q.overheadCostPaise / 100 : 0;
+    const priceRiskBuffer = q.riskBufferPaise ? q.riskBufferPaise / 100 : 0;
+    const unitPrice = q.unitPricePaise ? q.unitPricePaise / 100 : 0;
+    const totalPrice = q.totalPaise ? q.totalPaise / 100 : 0;
+
+    quotationObj = {
+      id: String(q._id || q.id || `qt-${id}`),
+      orderId: id,
+      version: Number(q.version) || 1,
+      materialCost,
+      wastagePercent: Number(q.wastagePercent) || 0,
+      processingCost,
+      overheadCost,
+      priceRiskBuffer,
+      marginPercent: Number(q.marginPercent) || 18,
+      pricePerUnit: unitPrice,
+      totalPrice,
+      validUntil: q.validUntil ? String(q.validUntil).split('T')[0] : deadlineDate,
+      etaBasis: q.etaDate ? String(q.etaDate).split('T')[0] : deadlineDate,
+      adminApproved: q.status === 'approved' || q.status === 'sent' || q.status === 'accepted',
+      status: q.status || 'pending_approval',
+      rejectionReason: q.rejectionReason,
+      bomItems: [],
+      explanation: q.explanation || 'Backend calculated quotation',
+    };
+  }
 
   return {
     id,
@@ -151,9 +368,9 @@ export function mapApiOrderToAdminOrder(
     producedMeters,
     submittedDate,
     deadlineDate,
-    currentPhase: apiOrder.production?.phase
-      ? String(apiOrder.production.phase).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-      : (status === 'completed' ? 'Delivered' : status === 'in_production' ? 'Knitting / Weaving' : 'Order Intake'),
+    currentPhase: canonicalStage.isKnown
+      ? canonicalStage.name
+      : (isOrderDelivered ? 'Delivered' : 'Unavailable'),
     status,
     riskStatus,
     riskReason: apiOrder.feasibility?.bottleneckProcess
@@ -161,26 +378,61 @@ export function mapApiOrderToAdminOrder(
       : undefined,
     items,
     deliveries: (apiOrder.deliveries || []).map((d: any, idx: number) => ({
-      id: String(d.id || d._id || `del-${idx + 1}`),
+      id: String(d.id || d._id || d.invoiceNo || `del-${idx + 1}`),
       orderId: id,
       date: d.deliveryDate ? String(d.deliveryDate).split('T')[0] : submittedDate,
-      quantityMeters: Number(d.qty || quantityMeters),
-      invoiceNumber: d.invoiceNo || `INV-2026-000${idx + 1}`,
-      carrier: 'Primary Freight Logistics',
-      deliveryType: 'full',
+      quantityMeters: Number(d.qty != null ? d.qty : 0),
+      invoiceNumber: d.invoiceNo || '',
+      carrier: d.carrier || d.notes || '-',
+      deliveryType: (d.qty && quantityMeters && d.qty >= quantityMeters) ? 'full' : 'partial',
       status: 'delivered',
+      invoiceAmount: d.invoiceAmountPaise ? d.invoiceAmountPaise / 100 : undefined,
     })),
-    payments: (apiOrder.financials?.milestones || []).map((m: any, idx: number) => ({
-      id: String(m.id || m._id || `pay-${idx + 1}`),
-      orderId: id,
-      invoiceNumber: `INV-2026-000${idx + 1}`,
-      amount: m.amountPaise ? m.amountPaise / 100 : 0,
-      date: m.dueDate || submittedDate,
-      type: idx === 0 ? 'advance_30' : idx === 1 ? 'mid_progress_40' : 'final_balance_30',
-      status: m.status === 'received' ? 'received' : 'pending',
-    })),
+    payments: (apiOrder.financials?.milestones || []).map((m: any, idx: number) => {
+      const totalAmount = m.amountPaise ? m.amountPaise / 100 : 0;
+      const receivedAmount = m.receivedPaise ? m.receivedPaise / 100 : 0;
+      const dueAmount = m.duePaise ? m.duePaise / 100 : Math.max(0, totalAmount - receivedAmount);
+      return {
+        id: String(m.id || m._id || `pay-${idx + 1}`),
+        orderId: id,
+        invoiceNumber: m.invoiceNo || m.receipts?.[0]?.ref || (m.milestone ? `${apiOrder.orderNumber || id}-${m.milestone}` : ''),
+        amount: m.status === 'received' ? (receivedAmount || totalAmount) : (receivedAmount > 0 ? receivedAmount : totalAmount),
+        dueAmount,
+        receivedAmount,
+        milestoneIndex: idx,
+        milestoneName: m.milestone || `Milestone ${idx + 1}`,
+        date: m.dueDate ? String(m.dueDate).split('T')[0] : submittedDate,
+        type: m.milestone || (idx === 0 ? 'advance_30' : idx === 1 ? 'mid_progress_40' : 'final_balance_30'),
+        status: m.status === 'received' ? 'received' : m.status === 'partial' ? 'partial' : 'pending',
+      };
+    }),
+    deliveredMeters: Number(apiOrder.production?.deliveredQty || 0),
+    financials: apiOrder.financials,
+        quotation: quotationObj,
+    assignedSupervisorId,
+    assignedSupervisorName,
+    handoverDate,
+    productionPlanConfirmed: !!(apiOrder.production?.assignedSupervisors?.length),
     dailyReports: [],
   };
+}
+
+/**
+ * Authoritative check for whether a financial milestone has been settled on the backend.
+ */
+export function isMilestoneSettled(milestone: any, txnRef?: string): boolean {
+  if (!milestone) return false;
+  if (milestone.status === 'received') return true;
+  const received = Number(milestone.receivedPaise) || 0;
+  const total = Number(milestone.amountPaise) || 0;
+  if (total > 0 && received >= total) return true;
+  if (txnRef) {
+    const hasReceipt = (milestone.receipts || []).some(
+      (r: any) => !r.reversedAt && (r.razorpayPaymentId === txnRef || r.ref === txnRef)
+    );
+    if (hasReceipt) return true;
+  }
+  return false;
 }
 
 /**
@@ -254,30 +506,51 @@ export function mapApiClientOrder(
     status = 'In Production';
   }
 
-  const currentStageNumber = status === 'Delivered'
-    ? 8
-    : Math.min(8, Math.max(1, Math.ceil((progressPercent / 100) * 8)));
+  const isDelivered = status === 'Delivered';
+  const canonicalStage = normalizeProductionStage(
+    apiOrder.production?.phase,
+    progressPercent,
+    rawStatus
+  );
 
-  const currentStageName = apiOrder.production?.phase
-    ? String(apiOrder.production.phase).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-    : (status === 'Delivered' ? 'Delivered & Handed Over' : 'Loom Weaving & Processing');
+  const currentStageNumber = isDelivered ? 8 : (canonicalStage.isKnown ? canonicalStage.step : 0);
+  const currentStageName = isDelivered ? 'Delivered' : (canonicalStage.isKnown ? canonicalStage.name : 'Unavailable');
 
-  const stages: ProductionStage[] = [
-    { step: 1, name: 'Yarn Inward', status: currentStageNumber >= 1 ? 'completed' : 'active', date: orderDate, notes: 'Sourced and tested' },
-    { step: 2, name: 'Warping & Sizing', status: currentStageNumber > 2 ? 'completed' : currentStageNumber === 2 ? 'active' : 'upcoming', date: orderDate, notes: 'Sizing completed' },
-    { step: 3, name: 'Loom Weaving', status: currentStageNumber > 3 ? 'completed' : currentStageNumber === 3 ? 'active' : 'upcoming', date: orderDate, notes: 'Looms operating at 800 RPM' },
-    { step: 4, name: 'Dyeing & Washing', status: currentStageNumber > 4 ? 'completed' : currentStageNumber === 4 ? 'active' : 'upcoming', date: orderDate, notes: 'Color-fastness verified' },
-    { step: 5, name: 'Finishing & Inspection', status: currentStageNumber > 5 ? 'completed' : currentStageNumber === 5 ? 'active' : 'upcoming', date: orderDate, notes: '4-point inspection' },
-    { step: 6, name: 'Cutting & Stitching', status: currentStageNumber > 6 ? 'completed' : currentStageNumber === 6 ? 'active' : 'upcoming', date: expectedDelivery, notes: 'Precision assembly' },
-    { step: 7, name: 'Packaging', status: currentStageNumber > 7 ? 'completed' : currentStageNumber === 7 ? 'active' : 'upcoming', date: expectedDelivery, notes: 'Barcoded packaging' },
-    { step: 8, name: 'Dispatch & Delivery', status: currentStageNumber === 8 ? 'completed' : 'upcoming', date: expectedDelivery, notes: 'Delivered to customer warehouse' },
-  ];
+  const defaultStageNotes: Record<number, string> = {
+    1: 'Commercial terms locked and advance deposit recorded',
+    2: 'Raw spinning lots procured and tensile tested',
+    3: 'Beam warping aligned and protective sizing starch applied',
+    4: 'Precision weaving underway on Airjet / Rapier loom sheds',
+    5: 'Continuous jet dyeing, scouring, and finishing treatment',
+    6: '4-point visual inspection, GSM, and lab colorfastness testing',
+    7: 'Inspection tagging, moisture-barrier wrapping, and palletizing',
+    8: 'Material delivered to client plant with receipt signed',
+  };
+
+  const stages: ProductionStage[] = CANONICAL_PRODUCTION_STAGES.map((cs) => {
+    let stageStatus: 'completed' | 'active' | 'upcoming';
+    if (isDelivered || (canonicalStage.isKnown && cs.step < currentStageNumber)) {
+      stageStatus = 'completed';
+    } else if (canonicalStage.isKnown && cs.step === currentStageNumber) {
+      stageStatus = 'active';
+    } else {
+      stageStatus = 'upcoming';
+    }
+
+    return {
+      step: cs.step,
+      name: cs.name,
+      status: stageStatus,
+      date: cs.step >= 7 ? expectedDelivery : orderDate,
+      notes: defaultStageNotes[cs.step] || 'Stage scheduled',
+    };
+  });
 
   const milestones: OrderMilestone[] = (apiOrder.quotation?.paymentSchedule || apiOrder.financials?.milestones || []).map((m: any, idx: number) => ({
     id: `ms-${idx + 1}`,
     phase: m.milestone || `Milestone ${idx + 1}`,
     amount: m.amountPaise ? m.amountPaise / 100 : 0,
-    status: m.status === 'received' ? 'paid' : idx === 0 ? 'paid' : 'pending',
+    status: isMilestoneSettled(m) ? 'paid' : 'pending',
     invoiceId: `INV-2026-000${idx + 1}`,
     dueDate: m.dueDate,
   }));
@@ -354,25 +627,13 @@ export function mapApiSupervisorOrder(
   const rawStatus = String(apiOrder.status || '').toLowerCase();
   const percentComplete = Number(apiOrder.production?.percentComplete) || (rawStatus === 'completed' ? 100 : 0);
 
-  // Map to 8 supervisor production stages
-  let currentStage = '4. Loom Weaving';
-  if (rawStatus === 'completed' || rawStatus === 'delivered' || percentComplete >= 100) {
-    currentStage = '8. Delivered';
-  } else if (apiOrder.production?.phase === 'packing' || percentComplete >= 88) {
-    currentStage = '7. Packaging & Dispatch';
-  } else if (apiOrder.production?.phase === 'checking' || percentComplete >= 75) {
-    currentStage = '6. Quality Check';
-  } else if (apiOrder.production?.phase === 'dyeing_fabric_processing' || percentComplete >= 60) {
-    currentStage = '5. Dyeing & Finishing';
-  } else if (apiOrder.production?.phase === 'knitting' || apiOrder.production?.phase === 'stitching' || percentComplete >= 40) {
-    currentStage = '4. Loom Weaving';
-  } else if (apiOrder.production?.phase === 'cutting' || percentComplete >= 25) {
-    currentStage = '3. Warping & Sizing';
-  } else if (apiOrder.production?.phase === 'yarn_procurement_stock' || percentComplete >= 10) {
-    currentStage = '2. Yarn Sourcing';
-  } else {
-    currentStage = '1. Quote Accepted';
-  }
+  // Map to 8 supervisor production stages using canonical stage normalizer
+  const canonicalStage = normalizeProductionStage(
+    apiOrder.production?.phase,
+    percentComplete,
+    rawStatus
+  );
+  const currentStage = canonicalStage.isKnown ? canonicalStage.numberedName : 'Unavailable';
 
   let status: 'In Progress' | 'Newly Assigned' | 'At Risk' | 'Completed' | 'Not Started' = 'In Progress';
   if (rawStatus === 'completed' || rawStatus === 'delivered') {

@@ -1,23 +1,41 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import { Bell, Check, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Bell, Check, ArrowRight, ShieldCheck, Info } from 'lucide-react';
+
+const isDemo = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
 
 export const NotificationsPage: React.FC = () => {
-  const { notifications, markNotificationRead, markAllNotificationsRead } = useApp();
+  const { notifications: localNotifs, markNotificationRead: localMarkRead, markAllNotificationsRead: localMarkAllRead } = useApp();
   const navigate = useNavigate();
+
+  // In normal mode, no client-scoped notification endpoint exists in the backend API.
+  // Respect requirement: do not fabricate notifications and do not expose supervisor/admin notifications.
+  const notifications = useMemo(() => {
+    return isDemo ? localNotifs : [];
+  }, [localNotifs]);
 
   const [activeTab, setActiveTab] = useState<'all' | 'quotation' | 'production' | 'payment'>('all');
 
-  const filteredNotifs = notifications.filter((n) => {
-    if (activeTab === 'all') return true;
-    return n.category === activeTab;
-  });
+  const filteredNotifs = useMemo(() => {
+    return notifications.filter((n) => {
+      if (activeTab === 'all') return true;
+      return n.category === activeTab;
+    });
+  }, [notifications, activeTab]);
 
   const handleNotificationClick = (item: (typeof notifications)[0]) => {
-    markNotificationRead(item.id);
+    if (isDemo) {
+      localMarkRead(item.id);
+    }
     if (item.targetRoute) {
       navigate(item.targetRoute);
+    }
+  };
+
+  const handleMarkAllRead = () => {
+    if (isDemo) {
+      localMarkAllRead();
     }
   };
 
@@ -34,14 +52,29 @@ export const NotificationsPage: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={markAllNotificationsRead}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-ivory text-charcoal border border-muted-border text-xs font-bold hover:bg-white transition-colors flex-shrink-0"
-        >
-          <Check size={16} />
-          <span>Mark All as Read</span>
-        </button>
+        {isDemo && notifications.length > 0 && (
+          <button
+            onClick={handleMarkAllRead}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-ivory text-charcoal border border-muted-border text-xs font-bold hover:bg-white transition-colors flex-shrink-0"
+          >
+            <Check size={16} />
+            <span>Mark All as Read</span>
+          </button>
+        )}
       </div>
+
+      {/* Normal Mode Notice: Feed status */}
+      {!isDemo && (
+        <div className="p-4 rounded-2xl bg-ivory border border-muted-border flex items-start gap-3 text-xs text-muted">
+          <Info size={16} className="text-muted flex-shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <strong className="text-charcoal block font-bold">Client Notification Feed Status</strong>
+            <p className="leading-relaxed">
+              Real-time push notifications are currently unavailable on the mill backend for client accounts. Operational stage milestones and commercial invoice statuses update directly in your Orders and Invoices tabs.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Filter Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
@@ -111,12 +144,21 @@ export const NotificationsPage: React.FC = () => {
         ))}
 
         {filteredNotifs.length === 0 && (
-          <div className="text-center py-16 text-muted text-xs">
-            No notifications found in this alert category.
+          <div className="text-center py-16 px-6 space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-ivory flex items-center justify-center text-muted mx-auto">
+              <Bell size={22} />
+            </div>
+            <h3 className="text-sm font-bold text-charcoal">
+              {!isDemo ? 'No Notifications to Display' : 'No alerts in this category'}
+            </h3>
+            <p className="text-xs text-muted max-w-md mx-auto leading-relaxed">
+              {!isDemo
+                ? 'There are no active notifications for your client account. Direct order progress and financial milestones are tracked in real-time across your active contracts.'
+                : 'All caught up! There are no alerts currently in this category.'}
+            </p>
           </div>
         )}
       </div>
     </div>
   );
 };
-

@@ -15,6 +15,38 @@ export const stockApi = apiSlice.injectEndpoints({
       providesTags: [{ type: 'Stock', id: 'SUMMARY' }],
     }),
 
+    getStockMovements: builder.query<
+      {
+        success: boolean;
+        data: any[];
+        meta?: {
+          page: number;
+          limit: number;
+          total: number;
+          totalPages: number;
+          hasNext: boolean;
+          hasPrev: boolean;
+        };
+      },
+      { materialId?: string; type?: string; orderId?: string; page?: number; limit?: number } | void
+    >({
+      query: (params) => ({
+        url: '/stock/movements',
+        params: params || {},
+      }),
+      transformResponse: (response: any) => {
+        if (Array.isArray(response)) {
+          return { success: true, data: response };
+        }
+        return {
+          success: true,
+          data: response?.data || [],
+          meta: response?.meta,
+        };
+      },
+      providesTags: [{ type: 'Stock', id: 'MOVEMENTS' }],
+    }),
+
     recordGoodsReceipt: builder.mutation<
       {
         success: boolean;
@@ -59,7 +91,10 @@ export const stockApi = apiSlice.injectEndpoints({
       invalidatesTags: [
         { type: 'Stock', id: 'BALANCES' },
         { type: 'Stock', id: 'SUMMARY' },
+        { type: 'Stock', id: 'MOVEMENTS' },
+        { type: 'Stock', id: 'PURCHASE_DECISIONS' },
         { type: 'Material', id: 'LIST' },
+        { type: 'Order', id: 'LIST' },
       ],
     }),
 
@@ -72,6 +107,7 @@ export const stockApi = apiSlice.injectEndpoints({
       invalidatesTags: [
         { type: 'Stock', id: 'BALANCES' },
         { type: 'Stock', id: 'SUMMARY' },
+        { type: 'Stock', id: 'MOVEMENTS' },
       ],
     }),
 
@@ -127,6 +163,7 @@ export const stockApi = apiSlice.injectEndpoints({
 export const {
   useGetStockBalancesQuery,
   useGetStockSummaryQuery,
+  useGetStockMovementsQuery,
   useRecordGoodsReceiptMutation,
   useAdjustStockMutation,
   useGetPurchaseDecisionsQuery,

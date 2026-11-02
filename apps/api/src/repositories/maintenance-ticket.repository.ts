@@ -74,4 +74,26 @@ export class MaintenanceTicketRepository extends BaseRepository<IMaintenanceTick
       .lean<IMaintenanceTicket>()
       .exec();
   }
+
+  async findUnresolvedTicketsForMachine(
+    tenantId: string,
+    machineId: string | Types.ObjectId,
+    excludeTicketId?: string | Types.ObjectId,
+    tx?: TxContext
+  ): Promise<IMaintenanceTicket[]> {
+    const session = this.getSession(tx);
+    const filter: Record<string, any> = {
+      tenantId,
+      machineId: typeof machineId === "string" ? new Types.ObjectId(machineId) : machineId,
+      status: { $in: ["open", "assigned"] },
+    };
+    if (excludeTicketId) {
+      filter._id = { $ne: typeof excludeTicketId === "string" ? new Types.ObjectId(excludeTicketId) : excludeTicketId };
+    }
+    return this.model
+      .find(filter)
+      .session(session ?? null)
+      .lean<IMaintenanceTicket[]>()
+      .exec();
+  }
 }

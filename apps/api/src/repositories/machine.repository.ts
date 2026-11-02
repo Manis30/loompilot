@@ -16,6 +16,22 @@ export class MachineRepository extends BaseRepository<IMachine> {
     return count > 0;
   }
 
+  async lockMachine(
+    tenantId: string,
+    machineId: string,
+    tx?: TxContext
+  ): Promise<IMachine | null> {
+    const session = this.getSession(tx);
+    return this.model
+      .findOneAndUpdate(
+        { tenantId, _id: machineId },
+        { $inc: { version: 1 } },
+        { new: true, session: session ?? null }
+      )
+      .lean<IMachine>()
+      .exec();
+  }
+
   async updateMachineStatus(
     tenantId: string,
     machineId: string,

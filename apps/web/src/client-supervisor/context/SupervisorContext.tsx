@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import {
   SupervisorProfile,
   SupervisorOrder,
@@ -22,6 +22,19 @@ import {
 } from '../data/supervisorMockData';
 import { useAppSelector } from '../../store/hooks';
 import { useGetMeQuery } from '../../store/api/authApi';
+import { useGetSupervisorOrdersQuery, useAdvanceOrderStageMutation } from '../../store/api/ordersApi';
+import { useGetClientsQuery, useGetMaterialsQuery, useGetMachinesQuery } from '../../store/api/catalogApi';
+import {
+  useGetSupervisorReportsQuery,
+  useSubmitSupervisorReportMutation,
+  useGetMaintenanceTicketsQuery,
+  useCreateMaintenanceTicketMutation,
+  useGetSupervisorNotificationsQuery,
+  useMarkNotificationReadMutation,
+} from '../../store/api/productionApi';
+import { mapApiSupervisorOrder } from '../../utils/orderMapper';
+import { mapApiMachineToSupervisorMachine } from '../pages/supervisor/machineMapper';
+import { mapApiMaterialToRawMaterial } from '../pages/supervisor/materialMapper';
 
 const isDemoEnabled = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
 
@@ -94,31 +107,26 @@ const getInitialSupervisorProfile = (): SupervisorProfile | null => {
 interface SupervisorContextType {
   profile: SupervisorProfile | null;
   orders: SupervisorOrder[];
+  isOrdersLoading: boolean;
+  ordersError: any;
+  refetchOrders: () => void;
   employees: Employee[];
   materials: RawMaterial[];
   machines: Machine[];
   productionLogs: ProductionLog[];
+  isReportsLoading: boolean;
   issues: IssueTicket[];
   notifications: SupervisorNotification[];
   unreadNotifCount: number;
   isDailyUpdateModalOpen: boolean;
   openDailyUpdateModal: () => void;
   closeDailyUpdateModal: () => void;
-  logShiftOutput: (orderId: string, produced: number, defective: number, notes: string) => void;
-  advanceOrderStage: (orderId: string) => void;
-  reportIssue: (issue: Omit<IssueTicket, 'id' | 'date' | 'time' | 'status'>) => void;
-  markNotificationAsRead: (id: string) => void;
+  logShiftOutput: (orderId: string, produced: number, defective: number, notes: string) => Promise<boolean>;
+  advanceOrderStage: (orderId: string) => Promise<void>;
+  reportIssue: (issue: Omit<IssueTicket, 'id' | 'date' | 'time' | 'status'>) => Promise<void>;
+  markNotificationAsRead: (id: string) => Promise<void>;
   resetSupervisorData: () => void;
 }
-
-const STORAGE_KEYS = {
-  ORDERS: 'loompilot_sup_orders',
-  MATERIALS: 'loompilot_sup_materials',
-  MACHINES: 'loompilot_sup_machines',
-  LOGS: 'loompilot_sup_logs',
-  ISSUES: 'loompilot_sup_issues',
-  NOTIFICATIONS: 'loompilot_sup_notifs',
-};
 
 const SupervisorContext = createContext<SupervisorContextType | undefined>(undefined);
 
@@ -163,200 +171,240 @@ export const SupervisorProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [profile]);
 
-  const [orders, setOrders] = useState<SupervisorOrder[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.ORDERS);
-      return saved ? JSON.parse(saved) : INITIAL_SUPERVISOR_ORDERS;
-    } catch {
-      return INITIAL_SUPERVISOR_ORDERS;
-    }
+  // 1. Orders from existing backend API
+  const {
+    data: supervisorOrdersRes,
+    isLoading: isOrdersLoading,
+    error: ordersError,
+    refetch: refetchOrders,
+  } = useGetSupervisorOrdersQuery(undefined, {
+    skip: !authToken || authRealm !== 'user',
   });
 
-  const [employees] = useState<Employee[]>(INITIAL_EMPLOYEES);
-
-  const [materials, setMaterials] = useState<RawMaterial[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.MATERIALS);
-      return saved ? JSON.parse(saved) : INITIAL_RAW_MATERIALS;
-    } catch {
-      return INITIAL_RAW_MATERIALS;
-    }
+  const { data: clientsRes } = useGetClientsQuery(undefined, {
+    skip: !authToken || authRealm !== 'user',
   });
 
-  const [machines, setMachines] = useState<Machine[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.MACHINES);
-      return saved ? JSON.parse(saved) : INITIAL_MACHINES;
-    } catch {
-      return INITIAL_MACHINES;
+  const clientsMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const raw = clientsRes?.data || [];
+    if (Array.isArray(raw)) {
+      raw.forEach((c: any) => {
+        if (c.id || c._id) map.set(String(c.id || c._id), c);
+      });
     }
+    return map;
+  }, [clientsRes]);
+
+  const orders: SupervisorOrder[] = useMemo(() => {
+    const raw = supervisorOrdersRes?.data || [];
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw.map((ord: any) => mapApiSupervisorOrder(ord, clientsMap));
+    }
+    // Remove mock orders as normal-mode fallback; allow mock data only in explicit demo mode
+    return isDemoEnabled ? INITIAL_SUPERVISOR_ORDERS : [];
+  }, [supervisorOrdersRes, clientsMap]);
+
+  // 2. Production Reports from existing backend API
+  const {
+    data: reportsRes,
+    isLoading: isReportsLoading,
+    refetch: refetchReports,
+  } = useGetSupervisorReportsQuery(undefined, {
+    skip: !authToken || authRealm !== 'user',
   });
 
-  const [productionLogs, setProductionLogs] = useState<ProductionLog[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.LOGS);
-      return saved ? JSON.parse(saved) : INITIAL_PRODUCTION_LOGS;
-    } catch {
-      return INITIAL_PRODUCTION_LOGS;
+  const [submitSupervisorReportMutation] = useSubmitSupervisorReportMutation();
+  const [advanceOrderStageMutation, { isLoading: isAdvancingContextStage }] = useAdvanceOrderStageMutation();
+
+  const productionLogs: ProductionLog[] = useMemo(() => {
+    const raw = reportsRes?.data || [];
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw.map((r: any, idx: number) => ({
+        id: String(r.id || r._id || `LOG-${idx + 1}`),
+        orderId: r.outputs?.[0]?.orderId || 'ORD-GENERAL',
+        fabricName: r.outputs?.[0]?.fabric || 'Production Greige Weave',
+        date: r.reportDate || (r.createdAt ? new Date(r.createdAt).toISOString().split('T')[0] : 'Today'),
+        process: r.outputs?.[0]?.stage || 'Knitting / Weaving',
+        dailyTarget: 700,
+        actualQty: r.outputs?.[0]?.produced || 0,
+        defectiveQty: r.outputs?.[0]?.defective || 0,
+        notes: r.notes || r.handoverNotes || '',
+        supervisor: r.supervisorName || profile?.name || 'Floor Supervisor',
+        timestamp: r.createdAt ? new Date(r.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '14:30',
+      }));
     }
+    return isDemoEnabled ? INITIAL_PRODUCTION_LOGS : [];
+  }, [reportsRes, profile]);
+
+  // 3. Machines & Materials from existing backend APIs
+  const { data: machinesRes, refetch: refetchMachines } = useGetMachinesQuery(undefined, {
+    skip: !authToken || authRealm !== 'user',
   });
 
-  const [issues, setIssues] = useState<IssueTicket[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.ISSUES);
-      return saved ? JSON.parse(saved) : INITIAL_ISSUES;
-    } catch {
-      return INITIAL_ISSUES;
+  const machines: Machine[] = useMemo(() => {
+    const raw = machinesRes?.data || [];
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw.map((m: any) => mapApiMachineToSupervisorMachine(m));
     }
+    return isDemoEnabled ? INITIAL_MACHINES : [];
+  }, [machinesRes]);
+
+  const { data: materialsRes, refetch: refetchMaterials } = useGetMaterialsQuery(undefined, {
+    skip: !authToken || authRealm !== 'user',
   });
 
-  const [notifications, setNotifications] = useState<SupervisorNotification[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
-      return saved ? JSON.parse(saved) : INITIAL_SUPERVISOR_NOTIFICATIONS;
-    } catch {
-      return INITIAL_SUPERVISOR_NOTIFICATIONS;
+  const materials: RawMaterial[] = useMemo(() => {
+    const raw = materialsRes?.data || [];
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw.map((m: any) => mapApiMaterialToRawMaterial(m));
     }
-  });
+    return isDemoEnabled ? INITIAL_RAW_MATERIALS : [];
+  }, [materialsRes]);
 
+  // Operator assignments / personnel (no backend endpoint available; empty in normal mode rather than fabricating data)
+  const employees: Employee[] = useMemo(() => {
+    return isDemoEnabled ? INITIAL_EMPLOYEES : [];
+  }, []);
+
+  // 4. Maintenance Tickets & Notifications from existing backend APIs
+  const { data: ticketsRes, refetch: refetchTickets } = useGetMaintenanceTicketsQuery(undefined, {
+    skip: !authToken || authRealm !== 'user',
+  });
+  const [createMaintenanceTicketMutation] = useCreateMaintenanceTicketMutation();
+
+  const issues: IssueTicket[] = useMemo(() => {
+    const raw = ticketsRes?.data || [];
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw.map((t: any) => ({
+        id: String(t.ticketNumber || t.id || t._id),
+        date: t.createdAt ? new Date(t.createdAt).toLocaleDateString() : 'Today',
+        time: t.createdAt ? new Date(t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now',
+        machineId: t.machineId || 'Loom-01',
+        shed: t.shed || 'Shed A',
+        issueType: t.issueType || 'Mechanical',
+        description: t.description || t.title || 'Maintenance check',
+        reportedBy: t.reportedBy || 'Floor Supervisor',
+        status: t.status === 'resolved' || t.status === 'closed' ? 'Resolved' : 'Pending',
+        priority: t.priority || 'Medium',
+      }));
+    }
+    return isDemoEnabled ? INITIAL_ISSUES : [];
+  }, [ticketsRes]);
+
+  const { data: notificationsRes, refetch: refetchNotifications } = useGetSupervisorNotificationsQuery(undefined, {
+    skip: !authToken || authRealm !== 'user',
+  });
+  const [markNotificationReadMutation] = useMarkNotificationReadMutation();
+
+  const notifications: SupervisorNotification[] = useMemo(() => {
+    const raw = notificationsRes?.data || [];
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw.map((n: any) => ({
+        id: String(n.id || n._id),
+        type: n.type || 'breakdown',
+        title: n.title || 'Floor Notification',
+        message: n.message || '',
+        timestamp: n.createdAt ? new Date(n.createdAt).toLocaleDateString() : 'Just now',
+        timeFormatted: n.createdAt ? new Date(n.createdAt).toLocaleString() : 'Today',
+        isRead: Boolean(n.read || n.isRead),
+        linkPage: n.linkPage || 'issues',
+        refId: n.refId || '',
+      }));
+    }
+    return isDemoEnabled ? INITIAL_SUPERVISOR_NOTIFICATIONS : [];
+  }, [notificationsRes]);
+
+  // Local UI dialog state
   const [isDailyUpdateModalOpen, setIsDailyUpdateModalOpen] = useState(false);
-
-  // Sync to local storage
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.ORDERS, JSON.stringify(orders));
-  }, [orders]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.MATERIALS, JSON.stringify(materials));
-  }, [materials]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.MACHINES, JSON.stringify(machines));
-  }, [machines]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(productionLogs));
-  }, [productionLogs]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(issues));
-  }, [issues]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(notifications));
-  }, [notifications]);
-
   const openDailyUpdateModal = () => setIsDailyUpdateModalOpen(true);
   const closeDailyUpdateModal = () => setIsDailyUpdateModalOpen(false);
 
-  // Log daily shift output for an order
-  const logShiftOutput = (orderId: string, produced: number, defective: number, notes: string) => {
+  // Save report strictly through existing mutation without optimistically showing as saved until confirmed
+  const logShiftOutput = async (orderId: string, produced: number, defective: number, notes: string): Promise<boolean> => {
     const targetOrder = orders.find((o) => o.id === orderId);
-    if (!targetOrder) return;
+    const stageName = targetOrder?.currentStage
+      ? targetOrder.currentStage.replace(/^\d+\.\s*/, '').toLowerCase().replace(/\s+/g, '_')
+      : 'weaving';
 
-    const newLog: ProductionLog = {
-      id: `PROD-LOG-${Date.now().toString().slice(-4)}`,
-      orderId,
-      fabricName: targetOrder.fabricName,
-      date: new Date().toISOString().split('T')[0],
-      process: targetOrder.currentStage,
-      dailyTarget: targetOrder.dailyTarget,
-      actualQty: produced,
-      defectiveQty: defective,
+    await submitSupervisorReportMutation({
+      reportDate: new Date().toISOString().split('T')[0],
+      employeesPresentTotal: employees.length || 12,
+      outputs: [
+        {
+          orderId: targetOrder?.id || orderId,
+          stage: stageName,
+          produced,
+          defective,
+        },
+      ],
       notes,
-      supervisor: profile?.name || 'Shift Supervisor',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
+    }).unwrap();
 
-    setProductionLogs((prev) => [newLog, ...prev]);
-
-    // Update order produced & remaining quantity
-    setOrders((prev) =>
-      prev.map((ord) => {
-        if (ord.id === orderId) {
-          const updatedProduced = Math.min(ord.totalQty, ord.producedQty + produced);
-          const updatedRemaining = Math.max(0, ord.totalQty - updatedProduced);
-          return {
-            ...ord,
-            producedQty: updatedProduced,
-            remainingQty: updatedRemaining,
-            status: updatedRemaining === 0 ? 'Completed' : ord.status,
-          };
-        }
-        return ord;
-      })
-    );
+    // Confirm persisted report from backend before updating list
+    await refetchReports();
+    return true;
   };
 
-  // Advance order to next production stage in the strict 8 stages
-  const advanceOrderStage = (orderId: string) => {
-    setOrders((prev) =>
-      prev.map((ord) => {
-        if (ord.id === orderId) {
-          const currentIndex = SUPERVISOR_PRODUCTION_STAGES.findIndex((s) => s === ord.currentStage);
-          if (currentIndex !== -1 && currentIndex < SUPERVISOR_PRODUCTION_STAGES.length - 1) {
-            const nextStage = SUPERVISOR_PRODUCTION_STAGES[currentIndex + 1];
-            return {
-              ...ord,
-              currentStage: nextStage,
-              status: nextStage.includes('Delivered') ? 'Completed' : 'In Progress',
-            };
-          }
-        }
-        return ord;
-      })
-    );
+  // Advance order stage via existing backend mutation
+  const advanceOrderStage = async (orderId: string) => {
+    if (isAdvancingContextStage) return;
+    const ord = orders.find((o) => o.id === orderId);
+    if (!ord) return;
+
+    const currentIndex = SUPERVISOR_PRODUCTION_STAGES.findIndex((s) => s === ord.currentStage);
+    if (currentIndex === -1 || currentIndex >= SUPERVISOR_PRODUCTION_STAGES.length - 1) return;
+    const nextStage = SUPERVISOR_PRODUCTION_STAGES[currentIndex + 1];
+
+    const rawList = supervisorOrdersRes?.data || [];
+    const rawOrder = Array.isArray(rawList)
+      ? rawList.find((o: any) => o._id === orderId || o.id === orderId || o.orderNumber === orderId)
+      : null;
+    const targetId = rawOrder?._id || rawOrder?.id || (orderId.length === 24 ? orderId : null) || ord.id;
+
+    if (!targetId) return;
+
+    const nextPercent = Math.min(100, Math.round(((currentIndex + 2) / SUPERVISOR_PRODUCTION_STAGES.length) * 100));
+
+    await advanceOrderStageMutation({
+      id: targetId,
+      stage: nextStage,
+      producedQty: ord.producedQty,
+      percentComplete: nextPercent,
+    }).unwrap();
+
+    await refetchOrders();
   };
 
-  // Report new issue
-  const reportIssue = (issueData: Omit<IssueTicket, 'id' | 'date' | 'time' | 'status'>) => {
-    const now = new Date();
-    const newIssue: IssueTicket = {
-      ...issueData,
-      id: `ISS-${Date.now().toString().slice(-4)}`,
-      date: now.toISOString().split('T')[0],
-      time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'Technician Assigned',
-      adminResponse: 'Logged by Shift Supervisor. Maintenance triage initiated.',
-    };
+  // Report issue via existing mutation
+  const reportIssue = async (issueData: Omit<IssueTicket, 'id' | 'date' | 'time' | 'status'>) => {
+    await createMaintenanceTicketMutation({
+      category: issueData.category,
+      machineId: issueData.machineId,
+      description: issueData.description,
+      priority: issueData.priority?.toLowerCase() || 'medium',
+    }).unwrap();
 
-    setIssues((prev) => [newIssue, ...prev]);
-
-    // Add alert notification
-    const newNotif: SupervisorNotification = {
-      id: `NOTIF-${Date.now().toString().slice(-4)}`,
-      type: 'breakdown',
-      title: `Issue Logged: ${issueData.category}`,
-      message: issueData.description,
-      timestamp: 'Just now',
-      timeFormatted: 'Today, ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      isRead: false,
-      linkPage: 'issues',
-      refId: newIssue.id,
-    };
-    setNotifications((prev) => [newNotif, ...prev]);
+    refetchTickets();
   };
 
-  const markNotificationAsRead = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
-    );
+  // Mark notification read via existing mutation
+  const markNotificationAsRead = async (id: string) => {
+    try {
+      await markNotificationReadMutation(id).unwrap();
+      refetchNotifications();
+    } catch (err) {
+      console.warn('Failed to mark notification as read:', err);
+    }
   };
 
   const resetSupervisorData = () => {
-    localStorage.removeItem(STORAGE_KEYS.ORDERS);
-    localStorage.removeItem(STORAGE_KEYS.MATERIALS);
-    localStorage.removeItem(STORAGE_KEYS.MACHINES);
-    localStorage.removeItem(STORAGE_KEYS.LOGS);
-    localStorage.removeItem(STORAGE_KEYS.ISSUES);
-    localStorage.removeItem(STORAGE_KEYS.NOTIFICATIONS);
-
-    setOrders(INITIAL_SUPERVISOR_ORDERS);
-    setMaterials(INITIAL_RAW_MATERIALS);
-    setMachines(INITIAL_MACHINES);
-    setProductionLogs(INITIAL_PRODUCTION_LOGS);
-    setIssues(INITIAL_ISSUES);
-    setNotifications(INITIAL_SUPERVISOR_NOTIFICATIONS);
+    refetchOrders();
+    refetchReports();
+    refetchMachines();
+    refetchMaterials();
+    refetchTickets();
+    refetchNotifications();
   };
 
   const unreadNotifCount = notifications.filter((n) => !n.isRead).length;
@@ -370,10 +418,14 @@ export const SupervisorProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       value={{
         profile,
         orders,
+        isOrdersLoading,
+        ordersError,
+        refetchOrders,
         employees,
         materials,
         machines,
         productionLogs,
+        isReportsLoading,
         issues,
         notifications,
         unreadNotifCount,

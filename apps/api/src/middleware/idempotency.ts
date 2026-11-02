@@ -132,11 +132,12 @@ export async function idempotencyMiddleware(
     res.on("finish", async () => {
       const statusCode = res.statusCode;
 
-      if (statusCode >= 500) {
-        // Release key on server fault so caller can safely retry
+      if (statusCode >= 400) {
+        // Release key on error (both 4xx client errors and 5xx server faults)
+        // so a failed transaction never leaves a cached record that blocks legitimate retries
         try {
           await idempotencyRepo.releaseKey({ tenantId, key, route });
-          logger.warn({ key, route, statusCode }, "Released idempotency key due to 5xx error");
+          logger.warn({ key, route, statusCode }, "Released idempotency key due to error status");
         } catch (releaseErr: any) {
           logger.error({ err: releaseErr.message, key }, "Failed to release idempotency key on error");
         }

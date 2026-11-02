@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Package,
   Search,
@@ -15,14 +15,16 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useSupervisor } from '../../context/SupervisorContext';
-import { SUPERVISOR_PRODUCTION_STAGES } from '../../data/supervisorMockData';
+import { SUPERVISOR_PRODUCTION_STAGES, INITIAL_SUPERVISOR_ORDERS } from '../../data/supervisorMockData';
 import { useGetSupervisorOrdersQuery, useAdvanceOrderStageMutation } from '../../../store/api/ordersApi';
 import { useGetClientsQuery } from '../../../store/api/catalogApi';
 import { mapApiSupervisorOrder } from '../../../utils/orderMapper';
 import type { SupervisorOrder } from '../../types/supervisor';
 
+const isDemoEnabled = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
+
 export const SupervisorOrdersPage: React.FC = () => {
-  const { advanceOrderStage, openDailyUpdateModal } = useSupervisor();
+  const { openDailyUpdateModal } = useSupervisor();
 
   const { data: supervisorOrdersRes, isLoading, isError, error, refetch } = useGetSupervisorOrdersQuery();
   const { data: clientsRes } = useGetClientsQuery(undefined);
@@ -38,19 +40,17 @@ export const SupervisorOrdersPage: React.FC = () => {
     return map;
   }, [clientsRes]);
 
+  // Load orders strictly from API without mock fallback in normal mode
   const liveOrders: SupervisorOrder[] = useMemo(() => {
     const raw = supervisorOrdersRes?.data || [];
     if (!Array.isArray(raw)) return [];
     return raw.map((ord: any) => mapApiSupervisorOrder(ord, clientsMap));
   }, [supervisorOrdersRes, clientsMap]);
 
-  const [orders, setOrders] = useState<SupervisorOrder[]>([]);
-
-  useEffect(() => {
-    if (supervisorOrdersRes && Array.isArray(supervisorOrdersRes.data)) {
-      setOrders(liveOrders);
-    }
-  }, [supervisorOrdersRes, liveOrders]);
+  const orders = useMemo(() => {
+    if (liveOrders.length > 0) return liveOrders;
+    return isDemoEnabled ? INITIAL_SUPERVISOR_ORDERS : [];
+  }, [liveOrders]);
 
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,7 +70,15 @@ export const SupervisorOrdersPage: React.FC = () => {
       return;
     }
 
+    const isStageUnavailable = !ord.currentStage || ord.currentStage === 'Unavailable';
     const currentIndex = SUPERVISOR_PRODUCTION_STAGES.findIndex((s) => s === ord.currentStage);
+
+    if (isStageUnavailable || currentIndex === -1) {
+      setStageError(`Cannot advance stage: Production stage for order ${orderId} is Unavailable. The backend production phase must be resolved first.`);
+      setAdvancingOrderId(null);
+      return;
+    }
+
     if (currentIndex >= SUPERVISOR_PRODUCTION_STAGES.length - 1) {
       setAdvancingOrderId(null);
       return;
@@ -84,50 +92,27 @@ export const SupervisorOrdersPage: React.FC = () => {
       : null;
     const realOrderId = rawOrder?._id || rawOrder?.id || (orderId.length === 24 ? orderId : null);
 
-    if (realOrderId) {
-      try {
-        const nextPercent = Math.min(100, Math.round(((currentIndex + 2) / SUPERVISOR_PRODUCTION_STAGES.length) * 100));
-        await advanceOrderStageMutation({
-          id: realOrderId,
-          stage: nextStage,
-          producedQty: ord.producedQty,
-          percentComplete: nextPercent,
-        }).unwrap();
+    if (!realOrderId) {
+      setStageError(`Cannot advance stage: order ID ${orderId} does not map to a recognized backend order record.`);
+      setAdvancingOrderId(null);
+      return;
+    }
 
-        setOrders((prev) =>
-          prev.map((o) => {
-            if (o.id === orderId) {
-              return {
-                ...o,
-                currentStage: nextStage,
-                status: nextStage === '8. Delivered' ? 'Completed' : 'In Progress',
-              };
-            }
-            return o;
-          })
-        );
-        advanceOrderStage(orderId);
-        refetch();
-      } catch (err: any) {
-        const errMsg = err?.data?.message || err?.message || 'Failed to advance stage on server';
-        setStageError(`Error advancing stage for order ${orderId}: ${errMsg}`);
-      } finally {
-        setAdvancingOrderId(null);
-      }
-    } else {
-      setOrders((prev) =>
-        prev.map((o) => {
-          if (o.id === orderId) {
-            return {
-              ...o,
-              currentStage: nextStage,
-              status: nextStage === '8. Delivered' ? 'Completed' : 'In Progress',
-            };
-          }
-          return o;
-        })
-      );
-      advanceOrderStage(orderId);
+    try {
+      const nextPercent = Math.min(100, Math.round(((currentIndex + 2) / SUPERVISOR_PRODUCTION_STAGES.length) * 100));
+      await advanceOrderStageMutation({
+        id: realOrderId,
+        stage: nextStage,
+        producedQty: ord.producedQty,
+        percentComplete: nextPercent,
+      }).unwrap();
+
+      // Refresh authoritative data after successful backend mutation
+      await refetch();
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.message || 'Failed to advance stage on server';
+      setStageError(`Error advancing stage for order ${orderId}: ${errMsg}`);
+    } finally {
       setAdvancingOrderId(null);
     }
   };
@@ -245,8 +230,10 @@ export const SupervisorOrdersPage: React.FC = () => {
       {/* Orders Grid */}
       <div className="grid grid-cols-1 gap-4">
         {filteredOrders.map((ord) => {
-          const percent = Math.min(100, Math.round((ord.producedQty / ord.totalQty) * 100));
+          const percent = Math.min(100, Math.round((ord.producedQty / (ord.totalQty || 1)) * 100));
           const currentStageIndex = SUPERVISOR_PRODUCTION_STAGES.findIndex((s) => s === ord.currentStage);
+          const isStageUnavailable = !ord.currentStage || ord.currentStage === 'Unavailable' || currentStageIndex === -1;
+          const isDelivered = ord.currentStage === '8. Delivered' || ord.status === 'Completed';
 
           return (
             <div
@@ -290,8 +277,15 @@ export const SupervisorOrdersPage: React.FC = () => {
                   </button>
                   <button
                     onClick={() => handleAdvanceStage(ord.id)}
-                    disabled={isAdvancingStage && advancingOrderId === ord.id}
+                    disabled={(isAdvancingStage && advancingOrderId === ord.id) || isStageUnavailable || isDelivered}
                     className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-[#E65338] hover:bg-[#D24227] disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all flex items-center gap-1"
+                    title={
+                      isStageUnavailable
+                        ? 'Stage advancement disabled: Backend production phase must be resolved first.'
+                        : isDelivered
+                        ? 'Order is already delivered'
+                        : 'Advance order to next lifecycle stage'
+                    }
                   >
                     {isAdvancingStage && advancingOrderId === ord.id ? (
                       <>
@@ -310,8 +304,19 @@ export const SupervisorOrdersPage: React.FC = () => {
 
               {/* 8-Stage Progress Stepper */}
               <div className="py-4">
-                <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">
-                  Current Lifecycle: <span className="text-[#E65338]">{ord.currentStage}</span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2">
+                  <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                    Current Lifecycle:{' '}
+                    <span className={isStageUnavailable ? 'text-amber-700 font-extrabold' : 'text-[#E65338]'}>
+                      {ord.currentStage}
+                    </span>
+                  </div>
+                  {isStageUnavailable && (
+                    <span className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md flex items-center gap-1 w-fit">
+                      <AlertTriangle size={12} className="text-amber-600 flex-shrink-0" />
+                      Backend production phase must be resolved before advancing.
+                    </span>
+                  )}
                 </div>
                 <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
                   {SUPERVISOR_PRODUCTION_STAGES.map((st, idx) => {
@@ -366,9 +371,13 @@ export const SupervisorOrdersPage: React.FC = () => {
             </div>
           );
         })}
-        {filteredOrders.length === 0 && !isLoading && (
+
+        {/* Empty States */}
+        {filteredOrders.length === 0 && !isLoading && !isError && (
           <div className="bg-white rounded-2xl border border-[#EAE2D9] p-12 text-center text-xs text-gray-500">
-            No mill manufacturing orders match the selected filter or search term.
+            {orders.length === 0
+              ? 'No mill manufacturing orders currently assigned to this supervisor station.'
+              : 'No mill manufacturing orders match the selected filter or search term.'}
           </div>
         )}
       </div>
@@ -393,33 +402,33 @@ export const SupervisorOrdersPage: React.FC = () => {
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="p-3 bg-[#FBF6F0] rounded-xl border border-[#EAE2D9]">
                 <div className="text-[10px] text-gray-500 font-bold uppercase">Composition</div>
-                <div className="font-bold text-[#252622] mt-0.5">{selectedOrderSpecs.specs.composition}</div>
+                <div className="font-bold text-[#252622] mt-0.5">{selectedOrderSpecs.specs?.composition}</div>
               </div>
               <div className="p-3 bg-[#FBF6F0] rounded-xl border border-[#EAE2D9]">
                 <div className="text-[10px] text-gray-500 font-bold uppercase">Weave Structure</div>
-                <div className="font-bold text-[#252622] mt-0.5">{selectedOrderSpecs.specs.weavePattern}</div>
+                <div className="font-bold text-[#252622] mt-0.5">{selectedOrderSpecs.specs?.weavePattern}</div>
               </div>
               <div className="p-3 bg-[#FBF6F0] rounded-xl border border-[#EAE2D9]">
                 <div className="text-[10px] text-gray-500 font-bold uppercase">GSM &amp; Weight</div>
-                <div className="font-bold text-[#252622] mt-0.5">{selectedOrderSpecs.specs.gsm}</div>
+                <div className="font-bold text-[#252622] mt-0.5">{selectedOrderSpecs.specs?.gsm}</div>
               </div>
               <div className="p-3 bg-[#FBF6F0] rounded-xl border border-[#EAE2D9]">
                 <div className="text-[10px] text-gray-500 font-bold uppercase">Reed Space</div>
-                <div className="font-bold text-[#252622] mt-0.5">{selectedOrderSpecs.specs.reedSpace}</div>
+                <div className="font-bold text-[#252622] mt-0.5">{selectedOrderSpecs.specs?.reedSpace}</div>
               </div>
               <div className="p-3 bg-[#FBF6F0] rounded-xl border border-[#EAE2D9]">
                 <div className="text-[10px] text-gray-500 font-bold uppercase">Warp Yarn Count</div>
-                <div className="font-bold text-[#252622] mt-0.5">{selectedOrderSpecs.specs.warpYarn}</div>
+                <div className="font-bold text-[#252622] mt-0.5">{selectedOrderSpecs.specs?.warpYarn}</div>
               </div>
               <div className="p-3 bg-[#FBF6F0] rounded-xl border border-[#EAE2D9]">
                 <div className="text-[10px] text-gray-500 font-bold uppercase">Weft Yarn Count</div>
-                <div className="font-bold text-[#252622] mt-0.5">{selectedOrderSpecs.specs.weftYarn}</div>
+                <div className="font-bold text-[#252622] mt-0.5">{selectedOrderSpecs.specs?.weftYarn}</div>
               </div>
             </div>
 
             <div className="p-3 bg-white rounded-xl border border-[#EAE2D9] text-xs">
               <span className="font-bold text-gray-600">Assigned Looms / Station: </span>
-              <strong className="text-[#252622]">{selectedOrderSpecs.specs.assignedLooms}</strong>
+              <strong className="text-[#252622]">{selectedOrderSpecs.specs?.assignedLooms}</strong>
             </div>
 
             <div className="text-right pt-2">
@@ -436,4 +445,3 @@ export const SupervisorOrdersPage: React.FC = () => {
     </div>
   );
 };
-

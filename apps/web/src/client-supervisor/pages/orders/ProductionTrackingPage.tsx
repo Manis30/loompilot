@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
-import { useGetClientOrderByIdQuery } from '../../../store/api/ordersApi';
+import { useGetClientOrderByIdQuery, useGetClientOrdersQuery } from '../../../store/api/ordersApi';
 import { useGetClientProductsQuery } from '../../../store/api/catalogApi';
 import { mapApiClientOrder } from '../../../utils/orderMapper';
 import { PRODUCTION_STAGES_MASTER } from '../../data/mockData';
@@ -16,7 +16,11 @@ import {
   Clock,
   Sparkles,
   Award,
+  RefreshCw,
+  AlertCircle,
 } from 'lucide-react';
+
+const isDemoEnabled = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
 import {
   ResponsiveContainer,
   BarChart,
@@ -44,7 +48,22 @@ export const ProductionTrackingPage: React.FC = () => {
     return map;
   }, [productsResponse]);
 
-  const { data: orderResponse } = useGetClientOrderByIdQuery(id || '', { skip: !id });
+  const {
+    data: orderResponse,
+    isLoading: isOrderLoading,
+    isError: isOrderError,
+    error: orderError,
+    refetch: refetchOrder,
+  } = useGetClientOrderByIdQuery(id || '', { skip: !id });
+
+  const { data: clientOrdersRes } = useGetClientOrdersQuery(undefined);
+
+  const liveOrders = useMemo(() => {
+    const rawList = clientOrdersRes?.data || [];
+    if (!Array.isArray(rawList)) return [];
+    return rawList.map((ord: any) => mapApiClientOrder(ord, productsMap));
+  }, [clientOrdersRes, productsMap]);
+
   const liveOrder = useMemo(() => {
     if (orderResponse?.data) {
       return mapApiClientOrder(orderResponse.data, productsMap);
@@ -52,19 +71,58 @@ export const ProductionTrackingPage: React.FC = () => {
     return null;
   }, [orderResponse, productsMap]);
 
-  // Find order or default to first in production
-  const activeOrder = liveOrder || orders.find((o) => o.id === id) || orders.find((o) => o.status === 'In Production') || orders[0];
+  // In normal mode, derive exclusively from live query; fallback is restricted to demo mode
+  const activeOrder = liveOrder || (isDemoEnabled ? orders.find((o) => o.id === id) || orders.find((o) => o.status === 'In Production') || orders[0] : null);
+
+  const availableContracts = liveOrders.length > 0
+    ? liveOrders
+    : (isDemoEnabled ? orders : (activeOrder ? [activeOrder] : []));
 
   const [selectedStageStep, setSelectedStageStep] = useState<number>(
     activeOrder?.currentStageNumber || 4
   );
 
+  if (isOrderLoading) {
+    return (
+      <div className="py-24 flex flex-col items-center justify-center gap-3 text-xs text-muted">
+        <RefreshCw size={22} className="animate-spin text-vermilion" />
+        <span>Loading production tracking telemetry...</span>
+      </div>
+    );
+  }
+
+  if (isOrderError && !activeOrder) {
+    const errMsg = (orderError as any)?.data?.message || (orderError as any)?.message || 'Failed to load tracking data from server';
+    return (
+      <div className="py-16 text-center space-y-4 max-w-md mx-auto">
+        <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto">
+          <AlertCircle size={24} />
+        </div>
+        <h2 className="text-lg font-bold text-charcoal">Error Loading Tracking</h2>
+        <p className="text-xs text-muted">{errMsg}</p>
+        <div className="flex items-center justify-center gap-3 pt-2">
+          <button
+            onClick={() => refetchOrder()}
+            className="px-4 py-2 rounded-xl bg-vermilion text-white text-xs font-bold hover:bg-vermilion-hover transition-colors"
+          >
+            Retry
+          </button>
+          <Link to="/client/orders" className="text-xs font-bold text-muted hover:text-charcoal">
+            Back to My Orders
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   if (!activeOrder) {
     return (
       <div className="text-center py-16 space-y-4">
         <h2 className="text-xl font-bold text-charcoal">No Manufacturing Orders Available</h2>
-        <Link to="/client/orders" className="text-xs font-bold text-vermilion">
-          Return to My Orders
+        <p className="text-sm text-muted">The requested contract tracking data could not be located.</p>
+        <Link to="/client/orders" className="inline-flex items-center gap-2 text-sm font-bold text-vermilion">
+          <ArrowLeft size={16} />
+          <span>Return to My Orders</span>
         </Link>
       </div>
     );
@@ -112,7 +170,7 @@ export const ProductionTrackingPage: React.FC = () => {
             onChange={(e) => navigate(`/client/orders/${e.target.value}/tracking`)}
             className="py-1.5 px-3 text-xs font-mono font-bold rounded-xl border border-muted-border bg-white text-charcoal shadow-sm focus:outline-none"
           >
-            {orders.map((o) => (
+            {availableContracts.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.id} — {o.productName} ({o.status})
               </option>

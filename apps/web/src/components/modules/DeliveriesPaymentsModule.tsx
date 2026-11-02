@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Truck,
   DollarSign,
@@ -16,9 +16,11 @@ import type { Order, DeliveryRecord, PaymentRecord } from '../../types';
 interface DeliveriesPaymentsModuleProps {
   orders: Order[];
   onSelectOrder: (id: string) => void;
-  onRecordDelivery: (orderId: string, delivery: Omit<DeliveryRecord, 'id'>) => void;
-  onRecordPayment: (orderId: string, payment: Omit<PaymentRecord, 'id'>) => void;
+  onRecordDelivery: (orderId: string, delivery: Omit<DeliveryRecord, 'id'> & { invoiceAmount?: number }) => Promise<void>;
+  onRecordPayment: (orderId: string, payment: Omit<PaymentRecord, 'id'> & { milestoneIndex?: number; ref?: string; method?: string }) => Promise<void>;
 }
+
+const isDemo = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
 
 export const DeliveriesPaymentsModule: React.FC<DeliveriesPaymentsModuleProps> = ({
   orders,
@@ -28,18 +30,126 @@ export const DeliveriesPaymentsModule: React.FC<DeliveriesPaymentsModuleProps> =
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'deliveries' | 'payments'>('deliveries');
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
-  const [targetOrderId, setTargetOrderId] = useState<string>(orders[0]?.id || 'TX-1024');
+  const [targetOrderId, setTargetOrderId] = useState<string>(orders[0]?.id || (isDemo ? 'TX-1024' : ''));
   const [filterText, setFilterText] = useState<string>('');
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
 
-  // Form states
-  const [delQty, setDelQty] = useState<number>(3000);
-  const [delInvoice, setDelInvoice] = useState<string>('INV-2026-8901');
-  const [delCarrier, setDelCarrier] = useState<string>('VRL Logistics Freight');
+  // Form states - Delivery (no fabricated defaults in normal mode)
+  const [delQty, setDelQty] = useState<number | ''>(isDemo ? 3000 : '');
+  const [delInvoice, setDelInvoice] = useState<string>(isDemo ? 'INV-2026-8901' : '');
+  const [delCarrier, setDelCarrier] = useState<string>(isDemo ? 'VRL Logistics Freight' : '');
+  const [delInvoiceAmount, setDelInvoiceAmount] = useState<number | ''>(isDemo ? 67500 : '');
 
-  const [payAmount, setPayAmount] = useState<number>(14500);
-  const [payType, setPayType] = useState<'advance_30' | 'mid_progress_40' | 'final_balance_30'>('advance_30');
-  const [payStatus] = useState<'pending' | 'received'>('received');
+  // Form states - Payment (no fabricated defaults in normal mode)
+  const [selectedMilestoneIndex, setSelectedMilestoneIndex] = useState<number>(0);
+  const [payAmount, setPayAmount] = useState<number | ''>(isDemo ? 14500 : '');
+  const [payRef, setPayRef] = useState<string>(isDemo ? 'PAY-2026-8901' : '');
+  const [payMethod, setPayMethod] = useState<'neft' | 'rtgs' | 'upi' | 'cheque' | 'cash' | 'razorpay'>('neft');
+
+  // Form submission feedback
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // Synchronize targetOrderId with loaded orders
+  useEffect(() => {
+    if (orders.length > 0 && (!targetOrderId || !orders.some((o) => o.id === targetOrderId))) {
+      setTargetOrderId(orders[0].id);
+    }
+  }, [orders, targetOrderId]);
+
+  const selectedOrder = useMemo(
+    () => orders.find((o) => o.id === targetOrderId),
+    [orders, targetOrderId]
+  );
+
+  const deliveredMetersSoFar = useMemo(() => {
+    if (!selectedOrder) return 0;
+    if (selectedOrder.deliveredMeters != null && selectedOrder.deliveredMeters > 0) {
+      return selectedOrder.deliveredMeters;
+    }
+    return selectedOrder.deliveries.reduce((sum, d) => sum + d.quantityMeters, 0);
+  }, [selectedOrder]);
+
+  const remainingDeliveryMeters = useMemo(() => {
+    if (!selectedOrder) return 0;
+    return Math.max(0, selectedOrder.quantityMeters - deliveredMetersSoFar);
+  }, [selectedOrder, deliveredMetersSoFar]);
+
+  const previousInvoicedAmount = useMemo(() => {
+    if (!selectedOrder) return 0;
+    return selectedOrder.deliveries.reduce((sum, d) => sum + (d.invoiceAmount || 0), 0);
+  }, [selectedOrder]);
+
+  const remainingInvoicedAmount = useMemo(() => {
+    if (!selectedOrder || !selectedOrder.quotation?.totalPrice) return 0;
+    return Math.max(0, selectedOrder.quotation.totalPrice - previousInvoicedAmount);
+  }, [selectedOrder, previousInvoicedAmount]);
+
+  // Derived milestones list for payment
+  const milestonesList = useMemo(() => {
+    if (!selectedOrder) return [];
+    if (selectedOrder.financials?.milestones && selectedOrder.financials.milestones.length > 0) {
+      return selectedOrder.financials.milestones.map((m, idx) => {
+        const total = m.amountPaise ? m.amountPaise / 100 : 0;
+        const received = m.receivedPaise ? m.receivedPaise / 100 : 0;
+        const due = m.duePaise ? m.duePaise / 100 : Math.max(0, total - received);
+        return {
+          index: idx,
+          name: m.milestone || `Milestone ${idx + 1}`,
+          trigger: m.trigger,
+          totalAmount: total,
+          receivedAmount: received,
+          dueAmount: due,
+          status: m.status,
+        };
+      });
+    }
+    if (selectedOrder.payments && selectedOrder.payments.length > 0) {
+      return selectedOrder.payments.map((p, idx) => ({
+        index: p.milestoneIndex ?? idx,
+        name: p.milestoneName || p.type.replace(/_/g, ' ').toUpperCase(),
+        trigger: 'stage',
+        totalAmount: p.amount,
+        receivedAmount: p.receivedAmount ?? (p.status === 'received' ? p.amount : 0),
+        dueAmount: p.dueAmount ?? (p.status === 'received' ? 0 : p.amount),
+        status: p.status,
+      }));
+    }
+    return [];
+  }, [selectedOrder]);
+
+  // When selected order changes, select first milestone with remaining due balance
+  useEffect(() => {
+    if (milestonesList.length > 0) {
+      const firstUnpaid = milestonesList.find((m) => m.dueAmount > 0 && m.status !== 'received');
+      const targetIndex = firstUnpaid ? firstUnpaid.index : 0;
+      setSelectedMilestoneIndex(targetIndex);
+      const targetMilestone = milestonesList.find((m) => m.index === targetIndex) || milestonesList[0];
+      if (targetMilestone && !isDemo) {
+        setPayAmount(targetMilestone.dueAmount > 0 ? targetMilestone.dueAmount : '');
+      }
+    }
+  }, [milestonesList]);
+
+  const selectedMilestone = useMemo(
+    () => milestonesList.find((m) => m.index === selectedMilestoneIndex) || milestonesList[0],
+    [milestonesList, selectedMilestoneIndex]
+  );
+
+  const handleMilestoneChange = (index: number) => {
+    setSelectedMilestoneIndex(index);
+    const ms = milestonesList.find((m) => m.index === index);
+    if (ms && ms.dueAmount > 0) {
+      setPayAmount(ms.dueAmount);
+    }
+  };
+
+  const handleQtyChange = (val: number | '') => {
+    setDelQty(val);
+    if (val !== '' && val > 0 && selectedOrder?.quotation?.pricePerUnit) {
+      setDelInvoiceAmount(+(val * selectedOrder.quotation.pricePerUnit).toFixed(2));
+    }
+  };
 
   const allDeliveries: { order: Order; delivery: DeliveryRecord }[] = [];
   const allPayments: { order: Order; payment: PaymentRecord }[] = [];
@@ -49,36 +159,191 @@ export const DeliveriesPaymentsModule: React.FC<DeliveriesPaymentsModuleProps> =
     o.payments.forEach((p) => allPayments.push({ order: o, payment: p }));
   });
 
-  const handleCreateDelivery = (e: React.FormEvent) => {
+  const handleCreateDelivery = async (e: React.FormEvent) => {
     e.preventDefault();
-    onRecordDelivery(targetOrderId, {
-      orderId: targetOrderId,
-      date: new Date().toISOString().split('T')[0],
-      quantityMeters: delQty,
-      invoiceNumber: delInvoice,
-      carrier: delCarrier,
-      deliveryType: 'partial',
-      status: 'delivered'
-    });
-    setShowAddModal(false);
+    setFormError(null);
+
+    const qty = typeof delQty === 'number' ? delQty : Number(delQty);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      setFormError('Please enter a valid, positive dispatch quantity (greater than zero).');
+      return;
+    }
+
+    const invoiceNo = delInvoice.trim();
+    if (!invoiceNo) {
+      setFormError('Please enter an invoice / gate pass number.');
+      return;
+    }
+
+    if (remainingDeliveryMeters > 0 && qty > remainingDeliveryMeters) {
+      setFormError(
+        `Dispatch quantity (${qty.toLocaleString()}m) exceeds remaining unfulfilled volume (${remainingDeliveryMeters.toLocaleString()}m).`
+      );
+      return;
+    }
+
+    if (
+      selectedOrder?.deliveries.some(
+        (d) => d.invoiceNumber.trim().toLowerCase() === invoiceNo.toLowerCase()
+      )
+    ) {
+      setFormError(`Invoice #${invoiceNo} has already been recorded for this order.`);
+      return;
+    }
+
+    let finalInvoiceAmount: number | undefined;
+    if (delInvoiceAmount !== '') {
+      const enteredAmount =
+        typeof delInvoiceAmount === 'number' ? delInvoiceAmount : Number(delInvoiceAmount);
+      if (!Number.isFinite(enteredAmount) || enteredAmount <= 0) {
+        setFormError('Please enter a valid, positive invoice amount (greater than zero).');
+        return;
+      }
+      finalInvoiceAmount = enteredAmount;
+    } else {
+      const derived = selectedOrder?.quotation?.pricePerUnit
+        ? +(qty * selectedOrder.quotation.pricePerUnit).toFixed(2)
+        : undefined;
+      if (!derived || !Number.isFinite(derived) || derived <= 0) {
+        setFormError(
+          'Please enter a positive invoice amount or ensure order quotation rate is available.'
+        );
+        return;
+      }
+      finalInvoiceAmount = derived;
+    }
+
+    const orderTotal = selectedOrder?.quotation?.totalPrice || 0;
+    if (orderTotal > 0 && previousInvoicedAmount + finalInvoiceAmount > orderTotal) {
+      const remainingVal = Math.max(0, orderTotal - previousInvoicedAmount);
+      setFormError(
+        `Invoice amount (₹${finalInvoiceAmount.toLocaleString()}) exceeds remaining order value (₹${remainingVal.toLocaleString()}).`
+      );
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await onRecordDelivery(targetOrderId, {
+        orderId: targetOrderId,
+        date: new Date().toISOString().split('T')[0],
+        quantityMeters: qty,
+        invoiceNumber: invoiceNo,
+        carrier: delCarrier.trim() || 'Standard Carrier',
+        deliveryType:
+          selectedOrder && qty >= selectedOrder.quantityMeters ? 'full' : 'partial',
+        status: 'delivered',
+        invoiceAmount: finalInvoiceAmount,
+      });
+
+      setShowAddModal(false);
+      if (!isDemo) {
+        setDelQty('');
+        setDelInvoice('');
+        setDelCarrier('');
+        setDelInvoiceAmount('');
+      }
+    } catch (err: any) {
+      const msg =
+        err?.data?.error?.message ||
+        err?.data?.message ||
+        err?.message ||
+        'Server error recording delivery.';
+      setFormError(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleCreatePayment = (e: React.FormEvent) => {
+  const handleCreatePayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    onRecordPayment(targetOrderId, {
-      orderId: targetOrderId,
-      invoiceNumber: delInvoice,
-      amount: payAmount,
-      date: new Date().toISOString().split('T')[0],
-      type: payType,
-      status: payStatus
-    });
-    setShowAddModal(false);
+    setFormError(null);
+
+    const amount = Number(payAmount);
+    if (!amount || amount <= 0) {
+      setFormError('Please enter a positive payment amount.');
+      return;
+    }
+
+    const ref = payRef.trim();
+    if (!ref) {
+      setFormError('Please enter a payment reference / UTR number.');
+      return;
+    }
+
+    if (selectedMilestone && selectedMilestone.dueAmount !== undefined) {
+      if (selectedMilestone.dueAmount <= 0) {
+        setFormError(`Milestone '${selectedMilestone.name}' is already fully paid.`);
+        return;
+      }
+      if (amount > selectedMilestone.dueAmount) {
+        setFormError(
+          `Payment amount ($${amount.toLocaleString()}) exceeds outstanding balance of $${selectedMilestone.dueAmount.toLocaleString()} for '${selectedMilestone.name}'.`
+        );
+        return;
+      }
+    }
+
+    try {
+      setIsSubmitting(true);
+      await onRecordPayment(targetOrderId, {
+        orderId: targetOrderId,
+        invoiceNumber: ref,
+        amount,
+        date: new Date().toISOString().split('T')[0],
+        type:
+          (selectedMilestone?.name?.toLowerCase().replace(/[^a-z0-9]+/g, '_') as any) ||
+          'advance_30',
+        status: 'received',
+        milestoneIndex: selectedMilestone?.index ?? selectedMilestoneIndex,
+        ref,
+        method: payMethod,
+      });
+
+      setShowAddModal(false);
+      if (!isDemo) {
+        setPayAmount('');
+        setPayRef('');
+      }
+    } catch (err: any) {
+      const msg =
+        err?.data?.error?.message ||
+        err?.data?.message ||
+        err?.message ||
+        'Server error recording payment receipt.';
+      setFormError(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const totalDeliveredMeters = allDeliveries.reduce((s, d) => s + d.delivery.quantityMeters, 0);
-  const totalPaidRevenue = allPayments.filter((p) => p.payment.status === 'received').reduce((s, p) => s + p.payment.amount, 0);
-  const totalPendingBalance = allPayments.filter((p) => p.payment.status === 'pending').reduce((s, p) => s + p.payment.amount, 0);
+
+  const totalPaidRevenue = useMemo(() => {
+    let sum = 0;
+    for (const o of orders) {
+      if (o.financials?.totalPaidPaise != null) {
+        sum += o.financials.totalPaidPaise / 100;
+      } else {
+        sum += o.payments.filter((p) => p.status === 'received').reduce((acc, p) => acc + p.amount, 0);
+      }
+    }
+    return sum;
+  }, [orders]);
+
+  const totalPendingBalance = useMemo(() => {
+    let sum = 0;
+    for (const o of orders) {
+      if (o.financials?.amountDuePaise != null) {
+        sum += o.financials.amountDuePaise / 100;
+      } else {
+        sum += o.payments
+          .filter((p) => p.status !== 'received')
+          .reduce((acc, p) => acc + (p.dueAmount ?? p.amount), 0);
+      }
+    }
+    return sum;
+  }, [orders]);
 
   const filteredDeliveries = useMemo(() => {
     if (!filterText.trim()) return allDeliveries;
@@ -312,7 +577,7 @@ export const DeliveriesPaymentsModule: React.FC<DeliveriesPaymentsModuleProps> =
                           />
                         </td>
                         <td style={{ fontWeight: 800, color: '#18191B' }}>
-                          #{delivery.invoiceNumber}
+                          {delivery.invoiceNumber ? `#${delivery.invoiceNumber}` : '-'}
                         </td>
                         <td>
                           <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -423,7 +688,7 @@ export const DeliveriesPaymentsModule: React.FC<DeliveriesPaymentsModuleProps> =
                           />
                         </td>
                         <td style={{ fontWeight: 800, color: '#18191B' }}>
-                          #{payment.invoiceNumber}
+                          {payment.invoiceNumber ? `#${payment.invoiceNumber}` : '-'}
                         </td>
                         <td>
                           <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -436,7 +701,7 @@ export const DeliveriesPaymentsModule: React.FC<DeliveriesPaymentsModuleProps> =
                           </div>
                         </td>
                         <td>
-                          <span className={`status-dot-pill ${isReceived ? 'fulfilled' : 'pending'}`}>
+                          <span className={`status-dot-pill ${isReceived ? 'fulfilled' : payment.status === 'partial' ? 'warning' : 'pending'}`}>
                             {payment.status.toUpperCase()}
                           </span>
                         </td>
@@ -444,7 +709,7 @@ export const DeliveriesPaymentsModule: React.FC<DeliveriesPaymentsModuleProps> =
                           ${payment.amount.toLocaleString()}
                         </td>
                         <td style={{ color: '#475569' }}>
-                          {payment.type.replace('_', ' ').toUpperCase()}
+                          {payment.type.replace(/_/g, ' ').toUpperCase()}
                         </td>
                         <td style={{ color: '#64748b', fontSize: 11.5, whiteSpace: 'nowrap' }}>
                           {payment.date}
@@ -512,6 +777,22 @@ export const DeliveriesPaymentsModule: React.FC<DeliveriesPaymentsModuleProps> =
                 </button>
               </div>
 
+              {formError && (
+                <div
+                  style={{
+                    padding: '8px 12px',
+                    background: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    borderRadius: 6,
+                    color: '#b91c1c',
+                    fontSize: 11.5,
+                    marginBottom: 12,
+                  }}
+                >
+                  {formError}
+                </div>
+              )}
+
               {activeSubTab === 'deliveries' ? (
                 <form onSubmit={handleCreateDelivery} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div>
@@ -523,19 +804,66 @@ export const DeliveriesPaymentsModule: React.FC<DeliveriesPaymentsModuleProps> =
                     </select>
                   </div>
                   <div>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: '#0a0d10', display: 'block', marginBottom: 4 }}>Dispatched Meters</label>
-                    <input type="number" className="admin-form-input" value={delQty} onChange={(e) => setDelQty(+e.target.value)} required />
+                    <label style={{ fontSize: 11, fontWeight: 700, color: '#0a0d10', display: 'block', marginBottom: 4 }}>
+                      Dispatched Meters {remainingDeliveryMeters > 0 && <span style={{ color: '#64748b', fontWeight: 500 }}>(Remaining: {remainingDeliveryMeters.toLocaleString()} m)</span>}
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max={remainingDeliveryMeters > 0 ? remainingDeliveryMeters : undefined}
+                      className="admin-form-input"
+                      value={delQty}
+                      onChange={(e) => handleQtyChange(e.target.value === '' ? '' : +e.target.value)}
+                      placeholder="e.g. 500"
+                      required
+                    />
                   </div>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 700, color: '#0a0d10', display: 'block', marginBottom: 4 }}>Invoice / Gate Pass #</label>
-                    <input type="text" className="admin-form-input" value={delInvoice} onChange={(e) => setDelInvoice(e.target.value)} required />
+                    <input
+                      type="text"
+                      className="admin-form-input"
+                      value={delInvoice}
+                      onChange={(e) => setDelInvoice(e.target.value)}
+                      placeholder="e.g. INV-2026-0042"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: '#0a0d10', display: 'block', marginBottom: 4 }}>
+                      Invoice Amount (₹) {selectedOrder?.quotation?.pricePerUnit ? (
+                        <span style={{ color: '#64748b', fontWeight: 500 }}>
+                          (Rate: ₹{selectedOrder.quotation.pricePerUnit}/m {remainingInvoicedAmount > 0 ? `• Max: ₹${remainingInvoicedAmount.toLocaleString()}` : ''})
+                        </span>
+                      ) : null}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      max={remainingInvoicedAmount > 0 ? remainingInvoicedAmount : undefined}
+                      className="admin-form-input"
+                      value={delInvoiceAmount}
+                      onChange={(e) => setDelInvoiceAmount(e.target.value === '' ? '' : +e.target.value)}
+                      placeholder="e.g. 15000"
+                      required
+                    />
                   </div>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 700, color: '#0a0d10', display: 'block', marginBottom: 4 }}>Carrier & Tracking Details</label>
-                    <input type="text" className="admin-form-input" value={delCarrier} onChange={(e) => setDelCarrier(e.target.value)} required />
+                    <input
+                      type="text"
+                      className="admin-form-input"
+                      value={delCarrier}
+                      onChange={(e) => setDelCarrier(e.target.value)}
+                      placeholder="e.g. VRL Logistics Freight"
+                      required
+                    />
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                    <button type="submit" className="admin-btn-primary">Record Dispatch</button>
+                    <button type="submit" className="admin-btn-primary" disabled={isSubmitting}>
+                      {isSubmitting ? 'Recording...' : 'Record Dispatch'}
+                    </button>
                     <button
                       type="button"
                       style={{
@@ -549,6 +877,7 @@ export const DeliveriesPaymentsModule: React.FC<DeliveriesPaymentsModuleProps> =
                         cursor: 'pointer'
                       }}
                       onClick={() => setShowAddModal(false)}
+                      disabled={isSubmitting}
                     >
                       Cancel
                     </button>
@@ -565,19 +894,73 @@ export const DeliveriesPaymentsModule: React.FC<DeliveriesPaymentsModuleProps> =
                     </select>
                   </div>
                   <div>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: '#0a0d10', display: 'block', marginBottom: 4 }}>Received Amount ($)</label>
-                    <input type="number" className="admin-form-input" value={payAmount} onChange={(e) => setPayAmount(+e.target.value)} required />
+                    <label style={{ fontSize: 11, fontWeight: 700, color: '#0a0d10', display: 'block', marginBottom: 4 }}>Payment Milestone</label>
+                    <select
+                      className="admin-form-input"
+                      value={selectedMilestoneIndex}
+                      onChange={(e) => handleMilestoneChange(+e.target.value)}
+                    >
+                      {milestonesList.length === 0 ? (
+                        <option value={0}>No milestones found</option>
+                      ) : (
+                        milestonesList.map((m) => (
+                          <option key={m.index} value={m.index}>
+                            {m.name} - Outstanding: ${m.dueAmount.toLocaleString()} ({m.status.toUpperCase()})
+                          </option>
+                        ))
+                      )}
+                    </select>
                   </div>
                   <div>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: '#0a0d10', display: 'block', marginBottom: 4 }}>Milestone Type</label>
-                    <select className="admin-form-input" value={payType} onChange={(e: any) => setPayType(e.target.value)}>
-                      <option value="advance_30">Advance 30% Deposit</option>
-                      <option value="mid_progress_40">Mid-Production 40%</option>
-                      <option value="final_balance_30">Final Balance 30% (Post-Delivery)</option>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: '#0a0d10', display: 'block', marginBottom: 4 }}>
+                      Received Amount ($) {selectedMilestone ? (
+                        <span style={{ color: '#64748b', fontWeight: 500 }}>
+                          (Outstanding: ${selectedMilestone.dueAmount.toLocaleString()})
+                        </span>
+                      ) : null}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      max={selectedMilestone?.dueAmount && selectedMilestone.dueAmount > 0 ? selectedMilestone.dueAmount : undefined}
+                      className="admin-form-input"
+                      value={payAmount}
+                      onChange={(e) => setPayAmount(e.target.value === '' ? '' : +e.target.value)}
+                      placeholder="e.g. 5000"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: '#0a0d10', display: 'block', marginBottom: 4 }}>Payment Reference / UTR #</label>
+                    <input
+                      type="text"
+                      className="admin-form-input"
+                      value={payRef}
+                      onChange={(e) => setPayRef(e.target.value)}
+                      placeholder="e.g. UTR-9823471029"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: '#0a0d10', display: 'block', marginBottom: 4 }}>Payment Method</label>
+                    <select
+                      className="admin-form-input"
+                      value={payMethod}
+                      onChange={(e: any) => setPayMethod(e.target.value)}
+                    >
+                      <option value="neft">NEFT / Bank Transfer</option>
+                      <option value="rtgs">RTGS</option>
+                      <option value="upi">UPI</option>
+                      <option value="cheque">Cheque</option>
+                      <option value="cash">Cash</option>
+                      <option value="razorpay">Razorpay</option>
                     </select>
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                    <button type="submit" className="admin-btn-primary">Record Payment Receipt</button>
+                    <button type="submit" className="admin-btn-primary" disabled={isSubmitting}>
+                      {isSubmitting ? 'Recording...' : 'Record Payment Receipt'}
+                    </button>
                     <button
                       type="button"
                       style={{
@@ -591,6 +974,7 @@ export const DeliveriesPaymentsModule: React.FC<DeliveriesPaymentsModuleProps> =
                         cursor: 'pointer'
                       }}
                       onClick={() => setShowAddModal(false)}
+                      disabled={isSubmitting}
                     >
                       Cancel
                     </button>
