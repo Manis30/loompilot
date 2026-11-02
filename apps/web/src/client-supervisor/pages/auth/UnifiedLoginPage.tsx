@@ -14,6 +14,9 @@ import {
   ArrowUpRight,
   User,
   AlertCircle,
+  Eye,
+  EyeOff,
+  KeyRound,
 } from 'lucide-react';
 import { useLoginStaffMutation, useLoginClientMutation } from '../../../store/api/authApi';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
@@ -47,6 +50,28 @@ export const UnifiedLoginPage: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [showSupervisorPassword, setShowSupervisorPassword] = useState(false);
+  const [showClientPassword, setShowClientPassword] = useState(false);
+
+  const fillAdminCredentials = () => {
+    setAdminEmail('admin@mill.loompilot.local');
+    setAdminPassword('AdminSecret123!');
+    setFormError(null);
+  };
+
+  const fillSupervisorCredentials = () => {
+    setSupervisorId('supervisor@mill.loompilot.local');
+    setSupervisorPassword('SupervisorSecret123!');
+    setFormError(null);
+  };
+
+  const fillClientCredentials = () => {
+    setClientEmail('client@acme.com');
+    setClientPassword('ClientPass123!');
+    setFormError(null);
+  };
 
   // If user is already authenticated with a valid role, route directly to their portal
   useEffect(() => {
@@ -133,13 +158,13 @@ export const UnifiedLoginPage: React.FC = () => {
 
     if (activeRole === 'admin') {
       try {
-        if (!adminEmail.trim() || !adminPassword) {
+        if (!adminEmail.trim() || !adminPassword.trim()) {
           throw new Error('Please enter both administrator email and password.');
         }
 
         const res = await loginStaff({
           email: adminEmail.trim(),
-          password: adminPassword,
+          password: adminPassword.trim(),
           ...(configuredTenantId ? { tenantId: configuredTenantId } : {}),
         }).unwrap();
 
@@ -179,13 +204,13 @@ export const UnifiedLoginPage: React.FC = () => {
       }
     } else if (activeRole === 'supervisor') {
       try {
-        if (!supervisorId.trim() || !supervisorPassword) {
+        if (!supervisorId.trim() || !supervisorPassword.trim()) {
           throw new Error('Please enter both supervisor ID/email and password.');
         }
 
         const res = await loginStaff({
           email: supervisorId.trim(),
-          password: supervisorPassword,
+          password: supervisorPassword.trim(),
           ...(configuredTenantId ? { tenantId: configuredTenantId } : {}),
         }).unwrap();
 
@@ -226,13 +251,13 @@ export const UnifiedLoginPage: React.FC = () => {
     } else {
       // activeRole === 'client'
       try {
-        if (!clientEmail.trim() || !clientPassword) {
+        if (!clientEmail.trim() || !clientPassword.trim()) {
           throw new Error('Please enter both client work email and password.');
         }
 
         const res = await loginClient({
           email: clientEmail.trim(),
-          password: clientPassword,
+          password: clientPassword.trim(),
           ...(configuredTenantId ? { tenantId: configuredTenantId } : {}),
         }).unwrap();
 
@@ -478,6 +503,20 @@ export const UnifiedLoginPage: React.FC = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             {activeRole === 'admin' && (
               <>
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-blue-50/80 border border-blue-200/70 text-xs">
+                  <div>
+                    <div className="text-[10px] font-extrabold text-blue-600 uppercase tracking-wider">Demo Admin Account</div>
+                    <div className="font-mono text-xs text-blue-950 font-semibold">admin@mill.loompilot.local</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={fillAdminCredentials}
+                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-[#1E3A8A] text-white hover:bg-[#152B6B] transition-colors shadow-xs"
+                  >
+                    Use Demo Admin
+                  </button>
+                </div>
+
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-[#252622] mb-1.5">
                     Administrator Email
@@ -502,13 +541,22 @@ export const UnifiedLoginPage: React.FC = () => {
                   <div className="relative">
                     <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
-                      type="password"
+                      type={showAdminPassword ? "text" : "password"}
                       value={adminPassword}
                       onChange={(e) => setAdminPassword(e.target.value)}
-                      placeholder="••••••••••••"
+                      placeholder="AdminSecret123!"
                       required
-                      className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] focus:bg-white focus:border-[#1E3A8A] focus:ring-2 focus:ring-[#1E3A8A]/10 focus:outline-none transition-all font-medium text-[#252622]"
+                      className="w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] focus:bg-white focus:border-[#1E3A8A] focus:ring-2 focus:ring-[#1E3A8A]/10 focus:outline-none transition-all font-medium text-[#252622]"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminPassword(!showAdminPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 transition-colors p-1"
+                      tabIndex={-1}
+                      title={showAdminPassword ? "Hide password" : "Show password"}
+                    >
+                      {showAdminPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                   </div>
                 </div>
 
@@ -525,6 +573,20 @@ export const UnifiedLoginPage: React.FC = () => {
 
             {activeRole === 'supervisor' && (
               <>
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-orange-50/80 border border-orange-200/70 text-xs">
+                  <div>
+                    <div className="text-[10px] font-extrabold text-[#E65338] uppercase tracking-wider">Demo Supervisor Account</div>
+                    <div className="font-mono text-xs text-orange-950 font-semibold">supervisor@mill.loompilot.local</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={fillSupervisorCredentials}
+                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-[#E65338] text-white hover:bg-[#D24227] transition-colors shadow-xs"
+                  >
+                    Use Demo Supervisor
+                  </button>
+                </div>
+
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-[#252622] mb-1.5">
                     Supervisor / Staff ID or Email
@@ -549,13 +611,22 @@ export const UnifiedLoginPage: React.FC = () => {
                   <div className="relative">
                     <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
-                      type="password"
+                      type={showSupervisorPassword ? "text" : "password"}
                       value={supervisorPassword}
                       onChange={(e) => setSupervisorPassword(e.target.value)}
-                      placeholder="••••••••••••"
+                      placeholder="SupervisorSecret123!"
                       required
-                      className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] focus:bg-white focus:border-[#E65338] focus:ring-2 focus:ring-[#E65338]/10 focus:outline-none transition-all font-medium text-[#252622]"
+                      className="w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] focus:bg-white focus:border-[#E65338] focus:ring-2 focus:ring-[#E65338]/10 focus:outline-none transition-all font-medium text-[#252622]"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowSupervisorPassword(!showSupervisorPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 transition-colors p-1"
+                      tabIndex={-1}
+                      title={showSupervisorPassword ? "Hide password" : "Show password"}
+                    >
+                      {showSupervisorPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                   </div>
                 </div>
 
@@ -572,6 +643,20 @@ export const UnifiedLoginPage: React.FC = () => {
 
             {activeRole === 'client' && (
               <>
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-stone-100 border border-stone-200 text-xs">
+                  <div>
+                    <div className="text-[10px] font-extrabold text-stone-600 uppercase tracking-wider">Demo Client Account</div>
+                    <div className="font-mono text-xs text-stone-900 font-semibold">client@acme.com</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={fillClientCredentials}
+                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-[#252622] text-white hover:bg-black transition-colors shadow-xs"
+                  >
+                    Use Demo Client
+                  </button>
+                </div>
+
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-[#252622] mb-1.5">
                     Authorized Business Email
@@ -582,7 +667,7 @@ export const UnifiedLoginPage: React.FC = () => {
                       type="email"
                       value={clientEmail}
                       onChange={(e) => setClientEmail(e.target.value)}
-                      placeholder="name@company.com"
+                      placeholder="client@acme.com"
                       required
                       className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] focus:bg-white focus:border-[#252622] focus:ring-2 focus:ring-[#252622]/10 focus:outline-none transition-all font-medium text-[#252622]"
                     />
@@ -596,13 +681,22 @@ export const UnifiedLoginPage: React.FC = () => {
                   <div className="relative">
                     <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
-                      type="password"
+                      type={showClientPassword ? "text" : "password"}
                       value={clientPassword}
                       onChange={(e) => setClientPassword(e.target.value)}
-                      placeholder="••••••••••••"
+                      placeholder="ClientPass123!"
                       required
-                      className="w-full pl-10 pr-3.5 py-2.5 text-sm rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] focus:bg-white focus:border-[#252622] focus:ring-2 focus:ring-[#252622]/10 focus:outline-none transition-all font-medium text-[#252622]"
+                      className="w-full pl-10 pr-10 py-2.5 text-sm rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] focus:bg-white focus:border-[#252622] focus:ring-2 focus:ring-[#252622]/10 focus:outline-none transition-all font-medium text-[#252622]"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowClientPassword(!showClientPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 transition-colors p-1"
+                      tabIndex={-1}
+                      title={showClientPassword ? "Hide password" : "Show password"}
+                    >
+                      {showClientPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                   </div>
                 </div>
 
