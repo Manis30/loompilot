@@ -1,8 +1,27 @@
 import { Request, Response } from "express";
 import { ConversationService } from "../services/conversation.service.js";
+import { IAgentsClient } from "../interfaces/agents-client.interface.js";
 
 export class ConversationController {
-  constructor(private readonly convService = new ConversationService()) {}
+  private readonly convService: ConversationService;
+
+  constructor(serviceOrClient?: ConversationService | IAgentsClient) {
+    if (serviceOrClient && "runAgent" in serviceOrClient) {
+      this.convService = new ConversationService(undefined, undefined, undefined, serviceOrClient as IAgentsClient);
+    } else if (serviceOrClient instanceof ConversationService) {
+      this.convService = serviceOrClient;
+    } else {
+      this.convService = new ConversationService();
+    }
+  }
+
+  // Aliases for route compatibility
+  getClientOrderChat = (req: Request, res: Response): Promise<void> => this.getClientMessages(req, res);
+  sendClientOrderMessage = (req: Request, res: Response): Promise<void> => this.postClientChat(req, res);
+  getAdminConversations = (req: Request, res: Response): Promise<void> => this.getAdminMessages(req, res);
+  getConversationById = (req: Request, res: Response): Promise<void> => this.getAdminMessages(req, res);
+  sendAdminMessage = (req: Request, res: Response): Promise<void> => this.postAdminChat(req, res);
+  resolveAdminEscalation = (req: Request, res: Response): Promise<void> => this.resolveEscalation(req, res);
 
   getClientMessages = async (req: Request, res: Response): Promise<void> => {
     const actor = req.actor!;
@@ -92,4 +111,3 @@ export class ConversationController {
     });
   };
 }
-
