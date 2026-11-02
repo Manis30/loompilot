@@ -289,12 +289,6 @@ export function mapApiOrderToAdminOrder(
       });
     });
   }
-        name: cs.name,
-        status: stepStatus,
-        dateOrDetails,
-      });
-    });
-  }
 
   const items: OrderItemProduct[] = [
     {

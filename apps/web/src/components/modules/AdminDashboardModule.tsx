@@ -674,20 +674,20 @@ export const AdminDashboardModule: React.FC<AdminDashboardModuleProps> = (props)
 
   // Performance calculations: Backend ordersSummary.performance measures active in-flight orders (onTrack vs delayed)
   // Denominator strictly includes active evaluated orders, excluding draft, completed, delivered, or cancelled orders
-  const onTrackCount = ordersSummary?.performance?.onTrackCount;
+  const perfOnTrackCount = ordersSummary?.performance?.onTrackCount;
   const delayedCount = ordersSummary?.performance?.delayedCount;
   const hasPerformanceData =
-    typeof onTrackCount === 'number' && typeof delayedCount === 'number';
-  const totalActiveEvaluatedOrders = hasPerformanceData ? onTrackCount + delayedCount : 0;
+    typeof perfOnTrackCount === 'number' && typeof delayedCount === 'number';
+  const totalActiveEvaluatedOrders = hasPerformanceData ? perfOnTrackCount + delayedCount : 0;
 
   const onTrackRateDisplay = totalActiveEvaluatedOrders > 0
-    ? `${((onTrackCount / totalActiveEvaluatedOrders) * 100).toFixed(1)}%`
+    ? `${((perfOnTrackCount / totalActiveEvaluatedOrders) * 100).toFixed(1)}%`
     : isDemo
     ? '94.6%'
     : 'Unavailable';
 
   const onTrackPillText = totalActiveEvaluatedOrders > 0
-    ? `${onTrackCount}/${totalActiveEvaluatedOrders} on track`
+    ? `${perfOnTrackCount}/${totalActiveEvaluatedOrders} on track`
     : isDemo
     ? '46/48 on track'
     : 'On-Track: Unavailable';

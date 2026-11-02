@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink, Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, Link, Outlet, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Package,
@@ -47,6 +47,17 @@ export const SupervisorLayout: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+
+  // If not authenticated, redirect to login
+  if (!profile) {
+    return <Navigate to="/login" replace />;
+  }
+
+  const avatar = profile?.avatar || 'SP';
+  const name = profile?.name || 'Shift Supervisor';
+  const empId = profile?.empId || 'LP-SUP-STAFF';
+  const email = profile?.email || '';
+  const facility = profile?.facility || 'Loom Shed Division';
 
   // Daily Shift Update Modal state
   const [selectedOrderId, setSelectedOrderId] = useState<string>(orders[0]?.id || '');
@@ -206,16 +217,16 @@ export const SupervisorLayout: React.FC = () => {
               )}
             >
               <div className="w-8 h-8 rounded-lg bg-[#E65338] flex items-center justify-center font-bold text-xs text-white flex-shrink-0">
-                {profile.avatar}
+                {avatar}
               </div>
               {!collapsed && (
                 <div className="overflow-hidden flex-1">
                   <div className="text-xs font-semibold text-white truncate">
-                    {profile.name}
+                    {name}
                   </div>
                   <div className="text-[10px] font-mono text-gray-400 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#20845A]"></span>
-                    Shift A &bull; {profile.empId}
+                    Shift A &bull; {empId}
                   </div>
                 </div>
               )}
@@ -287,14 +298,14 @@ export const SupervisorLayout: React.FC = () => {
                   className="flex items-center gap-2 p-1.5 pl-2.5 rounded-lg border border-[#EAE2D9] hover:bg-[#FBF6F0] transition-all"
                 >
                   <div className="w-8 h-8 rounded-lg bg-[#252622] text-white flex items-center justify-center font-bold text-xs">
-                    {profile.avatar}
+                    {avatar}
                   </div>
                   <div className="hidden sm:block text-left leading-tight">
                     <div className="text-xs font-bold text-[#252622] truncate max-w-[120px]">
-                      {profile.name}
+                      {name}
                     </div>
                     <div className="text-[10px] text-gray-500 font-mono">
-                      {profile.empId}
+                      {empId}
                     </div>
                   </div>
                 </button>
@@ -305,10 +316,10 @@ export const SupervisorLayout: React.FC = () => {
                     onClick={() => setProfileDropdownOpen(false)}
                   >
                     <div className="px-4 py-2 border-b border-[#EAE2D9]/60">
-                      <div className="text-xs font-bold text-[#252622]">{profile.name}</div>
-                      <div className="text-[11px] text-gray-500">{profile.email}</div>
+                      <div className="text-xs font-bold text-[#252622]">{name}</div>
+                      <div className="text-[11px] text-gray-500">{email}</div>
                       <div className="text-[10px] font-mono text-[#20845A] mt-0.5">
-                        &bull; {profile.facility}
+                        &bull; {facility}
                       </div>
                     </div>
 

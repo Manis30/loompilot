@@ -5,6 +5,14 @@ import { useSupervisor } from '../../context/SupervisorContext';
 export const SupervisorProfilePage: React.FC = () => {
   const { profile } = useSupervisor();
 
+  if (!profile) {
+    return (
+      <div className="max-w-4xl mx-auto p-8 text-center bg-white rounded-2xl border border-[#EAE2D9] text-gray-500 text-sm">
+        Supervisor profile is unavailable. Please sign in to view shift records.
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Profile Header Card */}

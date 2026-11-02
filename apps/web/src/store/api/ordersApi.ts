@@ -439,7 +439,6 @@ export const {
   useGetOrdersQuery,
   useGetOrderByIdQuery,
   useGetOrderSummaryQuery,
-  useGetOrderSummaryQuery as useGetOrdersSummaryQuery,
   useCreateOrderMutation,
   useUpdateOrderMutation,
   useDecideOrderMutation,
@@ -464,4 +463,6 @@ export const {
   useClientPayMilestoneMutation,
   useClientCreatePaymentOrderMutation,
 } = ordersApi;
+
+export const useGetOrdersSummaryQuery = useGetOrderSummaryQuery;
 
