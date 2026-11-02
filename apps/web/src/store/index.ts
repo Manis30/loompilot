@@ -11,4 +11,9 @@ export * from './api/catalogApi';
 export * from './api/dashboardApi';
 export * from './api/settingsApi';
 export * from './api/copilotApi';
-export * from './api/marketApi';
+export {
+  marketApi,
+  useGetSurgeAlertsQuery,
+  useTriggerRequoteMutation,
+} from './api/marketApi';
+export type { SurgeAlertItem } from './api/marketApi';

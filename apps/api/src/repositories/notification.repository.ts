@@ -97,104 +97,12 @@ export class NotificationRepository extends BaseRepository<INotification> {
   async findForClient(
     tenantId: string,
     clientId?: string,
-    filter: { unreadOnly?: boolean; kind?: string } = {},
-    pagination: Partial<PaginationQuery> = {}
-  ): Promise<PaginatedResult<INotification>> {
-    const queryFilter: Record<string, any> = {
-      tenantId,
-      "recipient.clientId": clientId ? new Types.ObjectId(clientId) : { $exists: true },
-    };
-
-    if (filter.unreadOnly) {
-      queryFilter.readAt = null;
-    }
-    if (filter.kind) {
-      queryFilter.kind = filter.kind;
-    }
-
-    const page = Math.max(1, pagination.page || 1);
-    const limit = Math.min(100, Math.max(1, pagination.limit || 20));
-    const skip = (page - 1) * limit;
-
-    const [items, totalItems] = await Promise.all([
-      this.model
-        .find(queryFilter)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean<INotification[]>()
-        .exec(),
-      this.model.countDocuments(queryFilter).exec(),
-    ]);
-
-    const totalPages = Math.ceil(totalItems / limit) || 1;
-
-    return {
-      data: items,
-      meta: {
-        page,
-        limit,
-        total: totalItems,
-        totalPages,
-        hasNext: page < totalPages,
-        hasPrev: page > 1,
-      },
-    };
-  }
-
-  async markAsReadForClient(
-    tenantId: string,
-    notificationId: string,
-    clientId: string
-  ): Promise<INotification | null> {
-    return this.model
-      .findOneAndUpdate(
-        {
-          tenantId,
-          _id: notificationId,
-          "recipient.clientId": new Types.ObjectId(clientId),
-        },
-        {
-          $set: { readAt: new Date() },
-          $inc: { version: 1 },
-        },
-        { new: true }
-      )
-      .lean<INotification>()
-      .exec();
-  }
-
-  async markAsRead(
-    tenantId: string,
-    notificationId: string,
-    userId: string
-  ): Promise<INotification | null> {
-    return this.model
-      .findOneAndUpdate(
-        {
-          tenantId,
-          _id: notificationId,
-          "recipient.userId": new Types.ObjectId(userId),
-        },
-        {
-          $set: { readAt: new Date() },
-          $inc: { version: 1 },
-        },
-        { new: true }
-      )
-      .lean<INotification>()
-      .exec();
-  }
-
-  async findForClient(
-    tenantId: string,
-    clientId: string,
     filter: { unreadOnly?: boolean; kind?: string; category?: string } = {},
     pagination: Partial<PaginationQuery> = {}
   ): Promise<PaginatedResult<INotification>> {
     const queryFilter: Record<string, any> = {
       tenantId,
-      "recipient.clientId": new Types.ObjectId(clientId),
+      "recipient.clientId": clientId ? new Types.ObjectId(clientId) : { $exists: true },
     };
 
     if (filter.unreadOnly) {
@@ -283,5 +191,27 @@ export class NotificationRepository extends BaseRepository<INotification> {
       )
       .exec();
     return res.modifiedCount;
+  }
+
+  async markAsRead(
+    tenantId: string,
+    notificationId: string,
+    userId: string
+  ): Promise<INotification | null> {
+    return this.model
+      .findOneAndUpdate(
+        {
+          tenantId,
+          _id: notificationId,
+          "recipient.userId": new Types.ObjectId(userId),
+        },
+        {
+          $set: { readAt: new Date() },
+          $inc: { version: 1 },
+        },
+        { new: true }
+      )
+      .lean<INotification>()
+      .exec();
   }
 }

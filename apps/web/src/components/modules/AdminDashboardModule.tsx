@@ -147,7 +147,7 @@ export const AdminDashboardModule: React.FC<AdminDashboardModuleProps> = (props)
     isLoading: isFetchedOrdersSummaryLoading,
     error: fetchedOrdersSummaryError,
     refetch: refetchFetchedOrdersSummary
-  } = useGetOrderSummaryQuery(undefined, { skip: props.ordersSummary !== undefined });
+  } = useGetOrdersSummaryQuery(undefined, { skip: props.ordersSummary !== undefined });
 
   const {
     data: fetchedProductionBoardData,
@@ -635,7 +635,7 @@ export const AdminDashboardModule: React.FC<AdminDashboardModuleProps> = (props)
   }, [machines]);
 
   const loomsTelemetryText = activeLoomsCount !== undefined
-    ?  OF  LOOMS ACTIVE
+    ? `${activeLoomsCount} OF ${machines?.length ?? 0} LOOMS ACTIVE`
     : isDemo
     ? '48 LOOMS ACTIVE'
     : 'Looms: Unavailable';

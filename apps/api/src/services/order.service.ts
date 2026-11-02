@@ -1999,27 +1999,6 @@ export class OrderService {
     return toAdminOrderDto(refreshed);
   }
 
-  async listClientNotifications(
-    tenantId: string,
-    clientId?: string,
-    filter: { unreadOnly?: boolean; kind?: string } = {},
-    pagination: Partial<PaginationQuery> = {}
-  ): Promise<PaginatedResult<any>> {
-    return this.notificationRepo.findForClient(tenantId, clientId, filter, pagination);
-  }
-
-  async markClientNotificationAsRead(
-    tenantId: string,
-    notificationId: string,
-    clientId: string
-  ): Promise<any> {
-    const updated = await this.notificationRepo.markAsReadForClient(tenantId, notificationId, clientId);
-    if (!updated) {
-      throw new AppError(ErrorCode.NOT_FOUND, "Notification not found", 404);
-    }
-    return updated;
-  }
-
   async checkAndExpireQuotations(tenantId: string): Promise<number> {
     const todayStr = getTodayBusinessDate();
     const sentOrders = await this.ordersRepo.findPaginated(
@@ -3707,7 +3686,7 @@ export class OrderService {
 
   async listClientNotifications(
     tenantId: string,
-    clientId: string,
+    clientId?: string,
     filter: { unreadOnly?: boolean; kind?: string; category?: string } = {},
     pagination: Partial<PaginationQuery> = {}
   ): Promise<PaginatedResult<any>> {
