@@ -1073,7 +1073,7 @@ export class OrdersRepository {
 
     if (!updated) {
       throw new AppError(
-        ErrorCode.CONFLICT,
+        ErrorCode.VERSION_CONFLICT,
         "Concurrent update detected on purchase decision receipt. Please retry.",
         409
       );
