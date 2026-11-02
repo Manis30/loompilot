@@ -2351,21 +2351,19 @@ export class OrderService {
       if (activeRes.length === 0) {
         const materialReqs: Array<{ materialId: string; qty: number }> = [];
 
-        if (
-          order.feasibility?.materialRequirements &&
-          order.feasibility.materialRequirements.length > 0
-        ) {
-          for (const req of order.feasibility.materialRequirements) {
-            materialReqs.push({ materialId: String(req.materialId), qty: req.req });
-          }
-        } else if (order.productId) {
+        if (order.productId) {
           const product = await this.productRepo.findById(params.tenantId, String(order.productId));
-          if (product?.bom) {
+          if (product?.bom && product.bom.length > 0) {
             for (const item of product.bom) {
               const wastageMult = 1 + (item.wastage || 0) / 100;
               const reqQty = Math.ceil(item.qtyPerUnit * order.quantity * wastageMult);
               materialReqs.push({ materialId: String(item.materialId), qty: reqQty });
             }
+          }
+        }
+        if (materialReqs.length === 0 && order.feasibility?.materialRequirements && order.feasibility.materialRequirements.length > 0) {
+          for (const req of order.feasibility.materialRequirements) {
+            materialReqs.push({ materialId: String(req.materialId), qty: req.req });
           }
         }
 

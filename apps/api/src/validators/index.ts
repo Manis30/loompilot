@@ -527,7 +527,10 @@ export const OrderApproveQuotationSchema = z.object({
 export const ClientAcceptQuotationSchema = z
   .object({
     revisionNo: z.number().int().positive().optional(),
+    deliveryAddress: z.string().optional(),
+    notes: z.string().optional(),
   })
+  .passthrough()
   .optional();
 
 export const ClientDeclineQuotationSchema = z.object({

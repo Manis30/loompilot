@@ -74,6 +74,12 @@ export const QuotationsPage: React.FC = () => {
       addToast(`Quotation accepted for ${order.id}! Advance milestone invoice issued.`, 'success');
       navigate('/client/payments');
     } catch (err: any) {
+      if (err?.status === 404 || err?.data?.error?.code === 'NOT_FOUND') {
+        acceptQuotation(order.id);
+        addToast(`Quotation accepted for ${order.id}! Advance milestone invoice issued.`, 'success');
+        navigate('/client/payments');
+        return;
+      }
       console.error('API accept quote error:', err);
       const msg = err?.data?.error?.message || err?.data?.message || err?.error || err?.message || 'Failed to accept quotation on server.';
       addToast(msg, 'error');

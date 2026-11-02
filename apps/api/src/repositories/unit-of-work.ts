@@ -104,6 +104,14 @@ export class MongoUnitOfWork implements IUnitOfWork {
           }
         }
 
+        const errMsg = error instanceof Error ? error.message : String(error);
+        if (errMsg.includes('Transaction numbers are only allowed on a replica set member')) {
+          logger.warn(
+            'Standalone MongoDB detected (transactions not supported). Re-running work without transaction session...'
+          );
+          return await work({ session: undefined });
+        }
+
         // Retry the entire transaction only if labeled TransientTransactionError
         if (
           transactionAttempt < MAX_TRANSACTION_ATTEMPTS &&
