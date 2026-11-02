@@ -29,6 +29,7 @@ import { stockRouter } from "./routes/stock.routes.js";
 import { importRouter } from "./routes/import.routes.js";
 import { auditRouter } from "./routes/audit.routes.js";
 import { clientOrderRouter } from "./routes/client-order.routes.js";
+import { clientNotificationRouter } from "./routes/client-notification.routes.js";
 import { orderRouter } from "./routes/order.routes.js";
 import { internalGatewayRouter } from "./routes/internal-gateway.routes.js";
 import { webhookRouter } from "./routes/webhook.routes.js";
@@ -37,6 +38,9 @@ import { supervisorAdminRouter } from "./routes/supervisor-admin.routes.js";
 import { maintenanceTicketRouter } from "./routes/maintenance-ticket.routes.js";
 import { productionRouter } from "./routes/production.routes.js";
 import { procurementRouter } from "./routes/procurement.routes.js";
+import { createConversationRouter } from "./routes/conversation.routes.js";
+import { createAdminAssistantRouter } from "./routes/admin-assistant.routes.js";
+import { createMarketPriceRouter } from "./routes/market-price.routes.js";
 import { AppContainer, getContainer, setContainer } from "./container.js";
 
 export function createApp(container: AppContainer = getContainer()): Express {
@@ -147,6 +151,7 @@ export function createApp(container: AppContainer = getContainer()): Express {
 
   // Phase C: Orders, Feasibility & Quotations
   app.use("/api/v1/client/orders", clientOrderRouter);
+  app.use("/api/v1/client/notifications", clientNotificationRouter);
   app.use("/api/v1/orders", orderRouter);
   app.use("/internal/v1", internalGatewayRouter);
 
@@ -161,6 +166,15 @@ export function createApp(container: AppContainer = getContainer()): Express {
 
   // Phase 7: Inventory & Procurement
   app.use("/api/v1/purchase-decisions", procurementRouter);
+
+  // Phase 8: Client Negotiation Chat, Admin AI Copilot & Market Prices
+  const conversationRouter = createConversationRouter(container);
+  const adminAssistantRouter = createAdminAssistantRouter(container);
+  const marketPriceRouter = createMarketPriceRouter(container);
+
+  app.use(conversationRouter);
+  app.use(adminAssistantRouter);
+  app.use(marketPriceRouter);
 
   // 10. Unmatched routes -> 404
   app.use((req) => {

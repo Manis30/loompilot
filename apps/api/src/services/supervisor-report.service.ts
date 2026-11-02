@@ -202,7 +202,7 @@ export class SupervisorReportService {
               if (m.status === "available") {
                 const unresolved = await this.ticketRepo.findUnresolvedTicketsForMachine(
                   tenantId,
-                  lockedMachine._id,
+                  String((lockedMachine as any)._id),
                   undefined,
                   tx
                 );

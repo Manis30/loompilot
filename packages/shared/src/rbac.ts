@@ -712,6 +712,32 @@ export const ROUTE_PERMISSION_MATRIX: Record<string, RoutePermission> = {
     idempotent: true,
   },
 
+  // Client Notifications (Doc §12)
+  "GET /api/v1/client/notifications": {
+    routeKey: "GET /api/v1/client/notifications",
+    method: "GET",
+    path: "/api/v1/client/notifications",
+    description: "Get notifications for authenticated client",
+    allowedRealms: ["client"],
+    idempotent: false,
+  },
+  "PATCH /api/v1/client/notifications/:id/read": {
+    routeKey: "PATCH /api/v1/client/notifications/:id/read",
+    method: "PATCH",
+    path: "/api/v1/client/notifications/:id/read",
+    description: "Mark client notification as read",
+    allowedRealms: ["client"],
+    idempotent: false,
+  },
+  "POST /api/v1/client/notifications/read-all": {
+    routeKey: "POST /api/v1/client/notifications/read-all",
+    method: "POST",
+    path: "/api/v1/client/notifications/read-all",
+    description: "Mark all client notifications as read",
+    allowedRealms: ["client"],
+    idempotent: true,
+  },
+
   // Admin Orders Management (Phase C)
   "GET /api/v1/orders": {
     routeKey: "GET /api/v1/orders",
@@ -1135,6 +1161,101 @@ export const ROUTE_PERMISSION_MATRIX: Record<string, RoutePermission> = {
     description: "Mark a notification or alert as read",
     allowedRealms: ["user"],
     allowedRoles: ["admin", "supervisor"],
+    idempotent: false,
+  },
+  // Client Chat & Negotiation
+  "GET /api/v1/client/orders/:id/chat": {
+    routeKey: "GET /api/v1/client/orders/:id/chat",
+    method: "GET",
+    path: "/api/v1/client/orders/:id/chat",
+    description: "Fetch chat history and quotation negotiation thread for an order",
+    allowedRealms: ["client"],
+    idempotent: false,
+  },
+  "POST /api/v1/client/orders/:id/chat": {
+    routeKey: "POST /api/v1/client/orders/:id/chat",
+    method: "POST",
+    path: "/api/v1/client/orders/:id/chat",
+    description: "Send negotiation message or discount inquiry for an order",
+    allowedRealms: ["client"],
+    idempotent: false,
+  },
+
+  // Admin Conversations & Escalations
+  "GET /api/v1/conversations": {
+    routeKey: "GET /api/v1/conversations",
+    method: "GET",
+    path: "/api/v1/conversations",
+    description: "List active and escalated client conversations for staff",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin", "supervisor"],
+    idempotent: false,
+  },
+  "GET /api/v1/conversations/:id": {
+    routeKey: "GET /api/v1/conversations/:id",
+    method: "GET",
+    path: "/api/v1/conversations/:id",
+    description: "Get full message thread for a conversation",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin", "supervisor"],
+    idempotent: false,
+  },
+  "POST /api/v1/conversations/:id/messages": {
+    routeKey: "POST /api/v1/conversations/:id/messages",
+    method: "POST",
+    path: "/api/v1/conversations/:id/messages",
+    description: "Send admin message in client conversation thread",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin", "supervisor"],
+    idempotent: false,
+  },
+  "POST /api/v1/conversations/:id/escalations/resolve": {
+    routeKey: "POST /api/v1/conversations/:id/escalations/resolve",
+    method: "POST",
+    path: "/api/v1/conversations/:id/escalations/resolve",
+    description: "Resolve discount or concession escalation for an order",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin"],
+    idempotent: false,
+  },
+
+  // Admin Copilot / Assistant
+  "POST /api/v1/admin/assistant/ask": {
+    routeKey: "POST /api/v1/admin/assistant/ask",
+    method: "POST",
+    path: "/api/v1/admin/assistant/ask",
+    description: "Ask natural language question to mill operations AI copilot",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin", "supervisor"],
+    idempotent: false,
+  },
+
+  // Market Prices & Surge Re-Quotation
+  "GET /api/v1/market-prices": {
+    routeKey: "GET /api/v1/market-prices",
+    method: "GET",
+    path: "/api/v1/market-prices",
+    description: "List raw material market price trends, volatility, and surge alerts",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin", "supervisor"],
+    idempotent: false,
+  },
+  "GET /api/v1/market-prices/alerts": {
+    routeKey: "GET /api/v1/market-prices/alerts",
+    method: "GET",
+    path: "/api/v1/market-prices/alerts",
+    description: "Get active raw material price surge alerts and affected orders",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin", "supervisor"],
+    idempotent: false,
+  },
+  "POST /api/v1/market-prices/trigger-requote": {
+    routeKey: "POST /api/v1/market-prices/trigger-requote",
+    method: "POST",
+    path: "/api/v1/market-prices/trigger-requote",
+    description: "Trigger quotation recalculation for order in material stage excluding locked materials",
+    allowedRealms: ["user"],
+    allowedRoles: ["admin"],
     idempotent: false,
   },
 };

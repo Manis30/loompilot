@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useGetSettingsQuery, useUpdateSettingsMutation } from '../../store/api/settingsApi';
+import { Loader2, Save } from 'lucide-react';
 import {
   ShieldCheck,
   Search,
@@ -18,11 +20,50 @@ export const SettingsAuditModule: React.FC<SettingsAuditModuleProps> = ({ auditL
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [actorFilter, setActorFilter] = useState<'all' | 'Admin' | 'Supervisor' | 'AI Agent'>('all');
 
+  // Business Settings Query & Mutation
+  const { data: settingsData, isLoading: isSettingsLoading } = useGetSettingsQuery();
+  const [updateSettingsMutation, { isLoading: isSavingSettings }] = useUpdateSettingsMutation();
+  const [saveStatus, setSaveStatus] = useState<string | null>(null);
+
   // Business Settings State
   const [minProfitMargin, setMinProfitMargin] = useState<number>(15.0);
   const [priceSurgeThreshold, setPriceSurgeThreshold] = useState<number>(5.0);
+  const [advancePercentage, setAdvancePercentage] = useState<number>(30.0);
   const [autoEscalateDiscount, setAutoEscalateDiscount] = useState<boolean>(true);
   const dailyMonitoringTime = '06:00 AM';
+
+  // Synchronize state with backend settings
+  useEffect(() => {
+    if (settingsData?.data) {
+      const s = settingsData.data;
+      if (typeof s.minMarginPct === 'number') setMinProfitMargin(s.minMarginPct);
+      if (s.priceThresholds && typeof s.priceThresholds.daily === 'number') {
+        setPriceSurgeThreshold(s.priceThresholds.daily);
+      }
+      if (typeof s.advancePct === 'number') setAdvancePercentage(s.advancePct);
+    }
+  }, [settingsData]);
+
+  const handleSaveSettings = async () => {
+    try {
+      setSaveStatus(null);
+      await updateSettingsMutation({
+        minMarginPct: Number(minProfitMargin),
+        advancePct: Number(advancePercentage),
+        priceThresholds: {
+          daily: Number(priceSurgeThreshold),
+          sevenday: Number(priceSurgeThreshold) * 2,
+          vol: Number(priceSurgeThreshold) * 3,
+        },
+        version: settingsData?.data?.version,
+      }).unwrap();
+      setSaveStatus('Settings successfully saved to backend.');
+      setTimeout(() => setSaveStatus(null), 4000);
+    } catch (err: any) {
+      const msg = err?.data?.message || err?.message || 'Failed to save settings.';
+      setSaveStatus(`Error: ${msg}`);
+    }
+  };
 
   const filteredLogs = auditLogs.filter((log) => {
     const matchesActor =
@@ -386,6 +427,24 @@ export const SettingsAuditModule: React.FC<SettingsAuditModuleProps> = ({ auditL
                 />
               </div>
 
+              <div style={{ background: '#f8fafc', padding: 12, borderRadius: 16, border: '1px solid #e5e9ee' }}>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#0a0d10', display: 'block' }}>
+                  Default Advance Percentage (%) [Doc §5.1, §7, §11]
+                </label>
+                <p style={{ fontSize: 10.5, color: '#64748b', margin: '4px 0 8px' }}>
+                  Textile commercial policy: Raw materials are bought and production starts ONLY after this advance milestone is received.
+                </p>
+                <input
+                  type="number"
+                  value={advancePercentage}
+                  onChange={(e) => setAdvancePercentage(+e.target.value)}
+                  className="admin-form-input"
+                  style={{ width: 120 }}
+                  min={0}
+                  max={100}
+                />
+              </div>
+
               <div style={{ background: '#f8fafc', padding: 12, borderRadius: 16, border: '1px solid #e5e9ee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                   <div style={{ fontSize: 11.5, fontWeight: 700, color: '#0a0d10' }}>Auto-Escalate Discount Requests</div>
@@ -398,6 +457,40 @@ export const SettingsAuditModule: React.FC<SettingsAuditModuleProps> = ({ auditL
                   style={{ width: 18, height: 18, accentColor: '#111315', cursor: 'pointer' }}
                 />
               </div>
+
+              {saveStatus && (
+                <div style={{
+                  padding: '8px 12px',
+                  borderRadius: 12,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  background: saveStatus.startsWith('Error') ? '#fef2f2' : '#f0fdf4',
+                  color: saveStatus.startsWith('Error') ? '#b91c1c' : '#15803d',
+                  border: saveStatus.startsWith('Error') ? '1px solid #fecaca' : '1px solid #bbf7d0',
+                }}>
+                  {saveStatus}
+                </div>
+              )}
+
+              <button
+                onClick={handleSaveSettings}
+                disabled={isSavingSettings}
+                className="admin-btn-primary"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  padding: '10px 16px',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  opacity: isSavingSettings ? 0.7 : 1,
+                  cursor: isSavingSettings ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {isSavingSettings ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                <span>{isSavingSettings ? 'Saving to Backend...' : 'Save Policy Settings to Server'}</span>
+              </button>
             </div>
           </div>
 

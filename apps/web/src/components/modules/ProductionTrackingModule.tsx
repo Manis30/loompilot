@@ -242,7 +242,7 @@ export const mapOrderToProductionOrder = (ord: Order): ProductionOrderWithProduc
 
   const products: ProductProductionItem[] = (ord.items && ord.items.length > 0)
     ? ord.items.map((item, idx) => {
-        const itemQty = item.quantity || prodQty;
+        const itemQty = (item as any).quantity || (item as any).quantityPieces || prodQty;
         const itemComp = Math.round(itemQty * (progressPct / 100));
         return {
           id: `${ord.id}-${String.fromCharCode(65 + idx)}`,
@@ -1417,8 +1417,8 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
               setShiftForm((prev) => ({
                 ...prev,
                 orderId: currentOrder.id,
-                productId: currentProduct.id,
-                stageName: currentActiveStage.name
+                productId: currentProduct?.id || "",
+                stageName: currentActiveStage?.name || ""
               }));
               setShowShiftUpdateModal(true);
             }}
@@ -1766,7 +1766,7 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
                     className="admin-btn-primary"
                     style={{ padding: '8px 16px', fontSize: 12, fontWeight: 600, color: '#18191B' }}
                   >
-                    <span>Inspect 6-Stage Timeline ({currentProduct.designCode})</span>
+                    <span>Inspect 6-Stage Timeline ({currentProduct?.designCode || "Variant"})</span>
                     <ChevronRight size={14} />
                   </button>
                 </div>
@@ -1880,7 +1880,7 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
                     </h3>
                   </div>
                   <span style={{ fontSize: 11, color: '#64748b' }}>
-                    Stage: {currentActiveStage.name}
+                    Stage: {currentActiveStage?.name || "Active"}
                   </span>
                 </div>
 
@@ -1925,9 +1925,9 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
                     </strong>
                   </span>
                   <span>
-                    Rejected: <strong style={{ color: '#dc2626' }}>{currentActiveStage.rejectedQuantity} pcs</strong>
+                    Rejected: <strong style={{ color: '#dc2626' }}>{currentActiveStage?.rejectedQuantity ?? 0} pcs</strong>
                   </span>
-                  <span>Machine: {currentActiveStage.assignedMachine.split(' ')[0]}</span>
+                  <span>Machine: {currentActiveStage?.assignedMachine ? currentActiveStage.assignedMachine.split(' ')[0] : "Assigned"}</span>
                 </div>
               </div>
 
@@ -2009,7 +2009,7 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
       {/* =========================================================================
           DETAIL MODAL 1: SIX-STAGE PRODUCTION TIMELINE WORKSPACE (Section 5 & 9)
           ========================================================================= */}
-      {showTimelineModal && (
+      {showTimelineModal && currentProduct && (
         <div className="modal-overlay">
           <div className="modal-card" style={{ maxWidth: 880, borderRadius: 28, padding: 24, maxHeight: '90vh', overflowY: 'auto' }}>
             <div className="modal-header">
@@ -2132,7 +2132,7 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
                             canonical.step === 0 ||
                             canonical.step >= 8 ||
                             currentOrder.status === 'completed' ||
-                            currentOrder.status === 'delivered';
+                            (currentOrder.status as any) === 'delivered';
 
                           return (
                             <button
@@ -2141,7 +2141,7 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
                               title={
                                 !canonical.isKnown || canonical.step === 0
                                   ? 'Stage unavailable or unrecognized'
-                                  : canonical.step >= 8 || currentOrder.status === 'completed' || currentOrder.status === 'delivered'
+                                  : canonical.step >= 8 || currentOrder.status === 'completed' || (currentOrder.status as any) === 'delivered'
                                   ? 'Order is already delivered'
                                   : isAdvancingStage
                                   ? 'Advancing stage...'

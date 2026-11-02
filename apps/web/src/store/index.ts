@@ -9,4 +9,7 @@ export * from './api/productionApi';
 export * from './api/stockApi';
 export * from './api/catalogApi';
 export * from './api/dashboardApi';
-
+export * from './api/settingsApi';
+export * from './api/chatApi';
+export * from './api/copilotApi';
+export * from './api/marketApi';

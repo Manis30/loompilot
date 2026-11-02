@@ -13,7 +13,7 @@ export interface ClientProfile {
   company: string;
   brand: string;
   clientCode: string;
-  gstin: string;
+  gstin?: string;
   contactPerson: string;
   designation: string;
   email: string;
@@ -21,9 +21,14 @@ export interface ClientProfile {
   billingAddress: string;
   shippingPlant: string;
   accountTier: string;
-  creditLimit: string;
-  availableCredit: string;
-  relationshipManager: string;
+  creditLimit?: string;
+  availableCredit?: string;
+  relationshipManager?: string;
+  accountManager?: {
+    name: string;
+    email: string;
+    phone: string;
+  } | string;
 }
 
 export interface Product {

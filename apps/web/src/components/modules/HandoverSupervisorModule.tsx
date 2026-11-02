@@ -6,7 +6,7 @@ import { useGetUsersQuery } from '../../store/api/catalogApi';
 interface HandoverSupervisorModuleProps {
   orders: Order[];
   onSelectOrder: (id: string) => void;
-  onConfirmHandover: (orderId: string, supervisorId: string, supervisorName: string) => Promise<void> | void;
+  onConfirmHandover: (orderId: string, supervisorId: string, supervisorName: string, overrideReason?: string) => Promise<void> | void;
 }
 
 export const HandoverSupervisorModule: React.FC<HandoverSupervisorModuleProps> = ({
@@ -46,6 +46,7 @@ export const HandoverSupervisorModule: React.FC<HandoverSupervisorModuleProps> =
 
   const [submittingOrderId, setSubmittingOrderId] = useState<string | null>(null);
   const [handoverErrors, setHandoverErrors] = useState<Record<string, string>>({});
+  const [overrideReasons, setOverrideReasons] = useState<Record<string, string>>({});
 
   const acceptedOrders = orders.filter((o) => ['client_accepted', 'assigned', 'in_production'].includes(o.status));
 
@@ -78,6 +79,28 @@ export const HandoverSupervisorModule: React.FC<HandoverSupervisorModuleProps> =
           const isAssigned = !!order.assignedSupervisorId;
           const isSubmitting = submittingOrderId === order.id;
           const currentError = handoverErrors[order.id];
+
+          // Advance Gate Calculation (Doc §3.7, §11: Raw materials bought & production starts ONLY after advance received)
+          const advanceMilestones = (order.financials?.milestones || []).filter(
+            (m: any) => m.trigger === 'advance' || (m.milestone && m.milestone.toLowerCase().includes('advance'))
+          );
+          let requiredAdvancePaise = 0;
+          if (advanceMilestones.length > 0) {
+            requiredAdvancePaise = advanceMilestones.reduce((sum: number, m: any) => sum + (m.amountPaise || 0), 0);
+          } else if (order.quotation?.totalPrice) {
+            requiredAdvancePaise = Math.round(order.quotation.totalPrice * 0.3 * 100);
+          } else if (order.financials?.totalAmountPaise) {
+            requiredAdvancePaise = Math.round(order.financials.totalAmountPaise * 0.3);
+          }
+
+          const advanceReceivedPaise = order.financials?.advanceReceivedPaise ??
+            (order.payments || [])
+              .filter((p) => p.status === 'received' && (p.type?.includes('advance') || p.milestoneIndex === 0))
+              .reduce((sum, p) => sum + (p.amount * 100), 0);
+
+          const isAdvanceCleared =
+            (advanceReceivedPaise >= requiredAdvancePaise && requiredAdvancePaise > 0) ||
+            order.status === 'in_production';
 
           return (
             <div
@@ -120,9 +143,27 @@ export const HandoverSupervisorModule: React.FC<HandoverSupervisorModuleProps> =
                   flexDirection: 'column',
                   gap: 5
                 }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    color: isAdvanceCleared ? '#16a34a' : '#ea580c',
+                    fontWeight: 700,
+                    background: isAdvanceCleared ? 'rgba(22, 163, 74, 0.08)' : 'rgba(234, 88, 12, 0.1)',
+                    padding: '4px 8px',
+                    borderRadius: 8
+                  }}>
+                    {isAdvanceCleared ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+                    <span>
+                      Advance Payment Gate (Doc §3.7, §11):{' '}
+                      {isAdvanceCleared
+                        ? `CLEARED (₹${(advanceReceivedPaise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })} received)`
+                        : `LOCKED (Req: ₹${(requiredAdvancePaise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}, Rec: ₹${(advanceReceivedPaise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })})`}
+                    </span>
+                  </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#16a34a', fontWeight: 600 }}>
                     <ShieldCheck size={14} />
-                    <span>Raw Material Stock Reserved in Ledger (Cotton & Dyes)</span>
+                    <span>Raw Material Procurement Locked to Advance Gate</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#16a34a', fontWeight: 600 }}>
                     <Calendar size={14} />
@@ -156,6 +197,23 @@ export const HandoverSupervisorModule: React.FC<HandoverSupervisorModuleProps> =
                     ))}
                   </select>
 
+                  {!isAdvanceCleared && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <label style={{ fontSize: 10, fontWeight: 700, color: '#c2410c' }}>
+                        Advance Gate Override Reason (Required to bypass locked gate):
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Director credit approval / Bank instrument in clearing"
+                        value={overrideReasons[order.id] || ''}
+                        onChange={(e) => setOverrideReasons((prev) => ({ ...prev, [order.id]: e.target.value }))}
+                        className="admin-form-input"
+                        style={{ fontSize: 10.5, padding: '5px 8px', borderColor: '#fed7aa', background: '#fffaf5' }}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                  )}
+
                   {currentError && (
                     <div style={{
                       display: 'flex',
@@ -176,14 +234,31 @@ export const HandoverSupervisorModule: React.FC<HandoverSupervisorModuleProps> =
 
                   <button
                     className="admin-btn-primary"
-                    style={{ padding: '8px', fontSize: 11, opacity: isSubmitting ? 0.7 : 1 }}
-                    disabled={isSubmitting}
+                    style={{
+                      padding: '8px',
+                      fontSize: 11,
+                      opacity: isSubmitting || (!isAdvanceCleared && !overrideReasons[order.id]?.trim()) ? 0.7 : 1,
+                      background: !isAdvanceCleared && !overrideReasons[order.id]?.trim() ? '#94a3b8' : undefined
+                    }}
+                    disabled={isSubmitting || (!isAdvanceCleared && !overrideReasons[order.id]?.trim())}
                     onClick={async (e) => {
                       e.stopPropagation();
+                      if (!isAdvanceCleared && !overrideReasons[order.id]?.trim()) {
+                        setHandoverErrors((prev) => ({
+                          ...prev,
+                          [order.id]: 'Advance payment gate is locked. Provide an admin override reason or record advance receipt first.'
+                        }));
+                        return;
+                      }
                       setHandoverErrors((prev) => ({ ...prev, [order.id]: '' }));
                       setSubmittingOrderId(order.id);
                       try {
-                        await onConfirmHandover(order.id, selectedSupervisor.id, selectedSupervisor.name);
+                        await onConfirmHandover(
+                          order.id,
+                          selectedSupervisor.id,
+                          selectedSupervisor.name,
+                          overrideReasons[order.id]
+                        );
                       } catch (err: any) {
                         const errMsg = err?.data?.message || err?.error || err?.message || 'Handover failed on server.';
                         setHandoverErrors((prev) => ({ ...prev, [order.id]: errMsg }));
@@ -193,7 +268,13 @@ export const HandoverSupervisorModule: React.FC<HandoverSupervisorModuleProps> =
                     }}
                   >
                     {isSubmitting ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-                    <span>{isSubmitting ? 'Confirming with Server...' : 'Execute Handover & Authorize Floor Start'}</span>
+                    <span>
+                      {isSubmitting
+                        ? 'Confirming with Server...'
+                        : !isAdvanceCleared && !overrideReasons[order.id]?.trim()
+                        ? 'Advance Gate Locked (Requires Override)'
+                        : 'Execute Handover & Authorize Floor Start'}
+                    </span>
                   </button>
                 </div>
               ) : (

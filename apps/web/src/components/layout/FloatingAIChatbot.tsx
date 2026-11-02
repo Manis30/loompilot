@@ -9,6 +9,7 @@ import {
   ArrowRight
 } from 'lucide-react';
 import type { Order, AdminNavTab } from '../../types';
+import { useAskAdminAssistantMutation } from '../../store/api/copilotApi';
 
 export interface FloatingAIChatbotProps {
   orders: Order[];
@@ -40,6 +41,7 @@ export const FloatingAIChatbot: React.FC<FloatingAIChatbotProps> = ({
   const [isChatbotMinimized, setIsChatbotMinimized] = useState<boolean>(false);
   const [chatbotInput, setChatbotInput] = useState<string>('');
   const [isAITyping, setIsAITyping] = useState<boolean>(false);
+  const [askAdminAssistantMutation] = useAskAdminAssistantMutation();
   const chatbotMessagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const [chatbotMessages, setChatbotMessages] = useState<AIChatbotMessage[]>([
@@ -62,7 +64,7 @@ export const FloatingAIChatbot: React.FC<FloatingAIChatbotProps> = ({
     }
   }, [chatbotMessages.length, isChatbotOpen, isChatbotMinimized, isAITyping]);
 
-  const handleSendChatbotMessage = (queryText: string) => {
+  const handleSendChatbotMessage = async (queryText: string) => {
     const text = queryText.trim();
     if (!text) return;
 
@@ -76,6 +78,24 @@ export const FloatingAIChatbot: React.FC<FloatingAIChatbotProps> = ({
     setChatbotMessages((prev) => [...prev, userMsg]);
     setChatbotInput('');
     setIsAITyping(true);
+
+    try {
+      const res = await askAdminAssistantMutation({ query: text }).unwrap();
+      const replyData = res.data;
+      const aiReply: AIChatbotMessage = {
+        id: `ai_${Date.now()}`,
+        sender: 'ai',
+        text: replyData.answer,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        highlightData: replyData.highlightData,
+        actionButton: replyData.actionButton as any,
+      };
+      setChatbotMessages((prev) => [...prev, aiReply]);
+      setIsAITyping(false);
+      return;
+    } catch (_err) {
+      // Offline fallback below
+    }
 
     setTimeout(() => {
       setIsAITyping(false);

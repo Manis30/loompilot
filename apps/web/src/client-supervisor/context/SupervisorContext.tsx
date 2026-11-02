@@ -280,12 +280,17 @@ export const SupervisorProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         id: String(t.ticketNumber || t.id || t._id),
         date: t.createdAt ? new Date(t.createdAt).toLocaleDateString() : 'Today',
         time: t.createdAt ? new Date(t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now',
+        category: t.category || t.issueType || 'Maintenance',
+        relatedOrder: t.relatedOrder || t.orderId || 'ORD-GEN',
         machineId: t.machineId || 'Loom-01',
         shed: t.shed || 'Shed A',
         issueType: t.issueType || 'Mechanical',
         description: t.description || t.title || 'Maintenance check',
         reportedBy: t.reportedBy || 'Floor Supervisor',
+        severity: (t.severity || t.priority || 'Medium') as any,
+        impact: t.impact || 'Normal Operations',
         status: t.status === 'resolved' || t.status === 'closed' ? 'Resolved' : 'Pending',
+        rawStatus: t.status,
         priority: t.priority || 'Medium',
       }));
     }

@@ -1,7 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import { Bell, Check, ArrowRight, ShieldCheck, Info } from 'lucide-react';
+import { Bell, Check, ArrowRight, ShieldCheck, Info, Loader2 } from 'lucide-react';
+import {
+  useGetClientNotificationsQuery,
+  useMarkClientNotificationReadMutation,
+  useMarkAllClientNotificationsReadMutation,
+} from '../../../store/api/ordersApi';
 
 const isDemo = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
 
@@ -9,33 +14,52 @@ export const NotificationsPage: React.FC = () => {
   const { notifications: localNotifs, markNotificationRead: localMarkRead, markAllNotificationsRead: localMarkAllRead } = useApp();
   const navigate = useNavigate();
 
-  // In normal mode, no client-scoped notification endpoint exists in the backend API.
-  // Respect requirement: do not fabricate notifications and do not expose supervisor/admin notifications.
+  const { data: remoteNotifsData, isLoading: isRemoteLoading } = useGetClientNotificationsQuery(undefined);
+  const [markReadMutation] = useMarkClientNotificationReadMutation();
+  const [markAllReadMutation] = useMarkAllClientNotificationsReadMutation();
+
+  // Combine backend client-scoped notifications with demo fallback when in demo mode
   const notifications = useMemo(() => {
-    return isDemo ? localNotifs : [];
-  }, [localNotifs]);
+    const remoteList = remoteNotifsData?.data || [];
+    if (remoteList.length > 0) {
+      return remoteList;
+    }
+    return isDemo ? localNotifs : remoteList;
+  }, [remoteNotifsData, localNotifs]);
 
   const [activeTab, setActiveTab] = useState<'all' | 'quotation' | 'production' | 'payment'>('all');
 
   const filteredNotifs = useMemo(() => {
-    return notifications.filter((n) => {
+    return notifications.filter((n: any) => {
       if (activeTab === 'all') return true;
       return n.category === activeTab;
     });
   }, [notifications, activeTab]);
 
-  const handleNotificationClick = (item: (typeof notifications)[0]) => {
+  const handleNotificationClick = async (item: any) => {
     if (isDemo) {
       localMarkRead(item.id);
     }
+    try {
+      await markReadMutation(item.id).unwrap();
+    } catch {
+      // non-fatal if offline
+    }
     if (item.targetRoute) {
       navigate(item.targetRoute);
+    } else if (item.entity?.collection === 'orders') {
+      navigate('/portal/orders');
     }
   };
 
-  const handleMarkAllRead = () => {
+  const handleMarkAllRead = async () => {
     if (isDemo) {
       localMarkAllRead();
+    }
+    try {
+      await markAllReadMutation().unwrap();
+    } catch {
+      // non-fatal if offline
     }
   };
 
@@ -52,7 +76,7 @@ export const NotificationsPage: React.FC = () => {
           </p>
         </div>
 
-        {isDemo && notifications.length > 0 && (
+        {notifications.length > 0 && (
           <button
             onClick={handleMarkAllRead}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-ivory text-charcoal border border-muted-border text-xs font-bold hover:bg-white transition-colors flex-shrink-0"
@@ -62,19 +86,6 @@ export const NotificationsPage: React.FC = () => {
           </button>
         )}
       </div>
-
-      {/* Normal Mode Notice: Feed status */}
-      {!isDemo && (
-        <div className="p-4 rounded-2xl bg-ivory border border-muted-border flex items-start gap-3 text-xs text-muted">
-          <Info size={16} className="text-muted flex-shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <strong className="text-charcoal block font-bold">Client Notification Feed Status</strong>
-            <p className="leading-relaxed">
-              Real-time push notifications are currently unavailable on the mill backend for client accounts. Operational stage milestones and commercial invoice statuses update directly in your Orders and Invoices tabs.
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* Filter Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
@@ -100,61 +111,66 @@ export const NotificationsPage: React.FC = () => {
 
       {/* Notifications List Card */}
       <div className="bg-white rounded-2xl border border-muted-border shadow-card divide-y divide-muted-border/60 overflow-hidden">
-        {filteredNotifs.map((item) => (
-          <div
-            key={item.id}
-            onClick={() => handleNotificationClick(item)}
-            className={`p-5 flex items-start justify-between gap-4 cursor-pointer hover:bg-ivory/60 transition-colors ${
-              !item.read ? 'bg-vermilion/[0.02]' : ''
-            }`}
-          >
-            <div className="flex items-start gap-3.5">
-              <div
-                className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${
-                  !item.read ? 'bg-vermilion ring-4 ring-vermilion/10' : 'bg-transparent'
-                }`}
-              />
-
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-extrabold text-charcoal">{item.title}</h4>
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                      item.category === 'quotation'
-                        ? 'bg-warning-bg text-warning'
-                        : item.category === 'production'
-                        ? 'bg-vermilion/10 text-vermilion'
-                        : 'bg-success-bg text-success'
-                    }`}
-                  >
-                    {item.category}
-                  </span>
-                </div>
-
-                <p className="text-xs text-muted leading-relaxed max-w-2xl">{item.message}</p>
-                <div className="text-[11px] text-muted-light">{item.time}</div>
-              </div>
-            </div>
-
-            <button className="flex items-center gap-1 text-xs font-bold text-muted hover:text-vermilion transition-colors flex-shrink-0">
-              <span>Open</span>
-              <ArrowRight size={14} />
-            </button>
+        {isRemoteLoading && notifications.length === 0 ? (
+          <div className="p-12 flex flex-col items-center justify-center gap-3 text-muted text-xs">
+            <Loader2 size={24} className="animate-spin text-vermilion" />
+            <span>Fetching live client notifications...</span>
           </div>
-        ))}
+        ) : (
+          filteredNotifs.map((item: any) => (
+            <div
+              key={item.id}
+              onClick={() => handleNotificationClick(item)}
+              className={`p-5 flex items-start justify-between gap-4 cursor-pointer hover:bg-ivory/60 transition-colors ${
+                !item.read ? 'bg-vermilion/[0.02]' : ''
+              }`}
+            >
+              <div className="flex items-start gap-3.5">
+                <div
+                  className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${
+                    !item.read ? 'bg-vermilion ring-4 ring-vermilion/10' : 'bg-transparent'
+                  }`}
+                />
 
-        {filteredNotifs.length === 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-extrabold text-charcoal">{item.title}</h4>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        item.category === 'quotation'
+                          ? 'bg-warning-bg text-warning'
+                          : item.category === 'production'
+                          ? 'bg-vermilion/10 text-vermilion'
+                          : 'bg-success-bg text-success'
+                      }`}
+                    >
+                      {item.category}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-muted leading-relaxed max-w-2xl">{item.message || item.body}</p>
+                  <div className="text-[11px] text-muted-light">{item.time || item.createdAt}</div>
+                </div>
+              </div>
+
+              <button className="flex items-center gap-1 text-xs font-bold text-muted hover:text-vermilion transition-colors flex-shrink-0">
+                <span>Open</span>
+                <ArrowRight size={14} />
+              </button>
+            </div>
+          ))
+        )}
+
+        {!isRemoteLoading && filteredNotifs.length === 0 && (
           <div className="text-center py-16 px-6 space-y-3">
             <div className="w-12 h-12 rounded-2xl bg-ivory flex items-center justify-center text-muted mx-auto">
               <Bell size={22} />
             </div>
             <h3 className="text-sm font-bold text-charcoal">
-              {!isDemo ? 'No Notifications to Display' : 'No alerts in this category'}
+              No Notifications in this Category
             </h3>
             <p className="text-xs text-muted max-w-md mx-auto leading-relaxed">
-              {!isDemo
-                ? 'There are no active notifications for your client account. Direct order progress and financial milestones are tracked in real-time across your active contracts.'
-                : 'All caught up! There are no alerts currently in this category.'}
+              All caught up! Direct manufacturing progress and payment milestone alerts will appear here as orders progress through the mill.
             </p>
           </div>
         )}

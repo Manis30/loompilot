@@ -432,6 +432,60 @@ export const ordersApi = apiSlice.injectEndpoints({
         { type: 'Order', id: 'CLIENT_LIST' },
       ],
     }),
+
+    createOrderPurchaseDecision: builder.mutation<
+      { success: boolean; data: any },
+      { id: string; body: any }
+    >({
+      query: ({ id, body }) => ({
+        url: `/orders/${id}/purchase-decisions`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: (_res, _err, { id }) => [
+        { type: 'Order', id },
+        { type: 'Order', id: 'LIST' },
+        { type: 'Stock', id: 'PURCHASE_DECISIONS' },
+      ],
+    }),
+
+    getClientNotifications: builder.query<
+      { success: boolean; data: any[]; pagination?: any; meta?: any },
+      { unreadOnly?: boolean; category?: string } | void
+    >({
+      query: (params) => ({
+        url: '/client/notifications',
+        params: params || {},
+      }),
+      transformResponse: (response: any) => {
+        if (Array.isArray(response)) {
+          return { success: true, data: response, pagination: undefined, meta: undefined };
+        }
+        return {
+          success: true,
+          data: response?.data || response?.items || [],
+          pagination: response?.meta || response?.pagination,
+          meta: response?.meta || response?.pagination,
+        };
+      },
+      providesTags: [{ type: 'Order', id: 'CLIENT_NOTIFICATIONS' }],
+    }),
+
+    markClientNotificationRead: builder.mutation<{ success: boolean; data: any }, string>({
+      query: (id) => ({
+        url: `/client/notifications/${id}/read`,
+        method: 'PATCH',
+      }),
+      invalidatesTags: [{ type: 'Order', id: 'CLIENT_NOTIFICATIONS' }],
+    }),
+
+    markAllClientNotificationsRead: builder.mutation<{ success: boolean; data: any }, void>({
+      query: () => ({
+        url: '/client/notifications/read-all',
+        method: 'POST',
+      }),
+      invalidatesTags: [{ type: 'Order', id: 'CLIENT_NOTIFICATIONS' }],
+    }),
   }),
 });
 
@@ -462,7 +516,9 @@ export const {
   useClientDeclineQuotationMutation,
   useClientPayMilestoneMutation,
   useClientCreatePaymentOrderMutation,
+  useCreateOrderPurchaseDecisionMutation,
+  useGetClientNotificationsQuery,
+  useMarkClientNotificationReadMutation,
+  useMarkAllClientNotificationsReadMutation,
 } = ordersApi;
-
-export const useGetOrdersSummaryQuery = useGetOrderSummaryQuery;
 

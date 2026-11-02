@@ -1843,6 +1843,109 @@ export class OrderService {
         });
 
         remindersSent++;
+      } else if (order.quotation?.validUntil) {
+        const validUntilMs = new Date(order.quotation.validUntil).getTime();
+        const diffDays = Math.ceil((validUntilMs - now) / (24 * 60 * 60 * 1000));
+        if (diffDays === 1) {
+          const dedupeKey = `quote_reminder_${order._id}_prev_day_${new Date().toISOString().split("T")[0]}`;
+          await this.notificationRepo.createNotification(tenantId, {
+            recipient: { clientId: String(order.clientId) },
+            kind: "notification",
+            type: "quotation_reminder",
+            channel: "in_app",
+            title: `Quotation Expiring Tomorrow - Order ${order.orderNumber}`,
+            body: `Reminder: Your quotation for ${order.orderNumber} expires tomorrow (${order.quotation.validUntil}). Please review and accept.`,
+            entity: { collection: "orders", id: String(order._id) },
+            dedupeKey,
+          });
+
+          await this.outboxRepo.createMessage(tenantId, {
+            recipient: { clientId: String(order.clientId) },
+            channel: "email",
+            payload: {
+              subject: `Reminder: Quotation for ${order.orderNumber} expires tomorrow`,
+              orderNumber: order.orderNumber,
+              totalPaise: order.quotation?.totalPaise,
+              validUntil: order.quotation.validUntil,
+            },
+          });
+          remindersSent++;
+        }
+      }
+    }
+
+    return remindersSent;
+  }
+
+  async runPaymentReminders(tenantId: string): Promise<number> {
+    const settings = await this.settingsRepo.getSettings(tenantId);
+    const leadDays = settings?.paymentReminderLeadDays ?? 1;
+
+    const activeOrders = await this.ordersRepo.findPaginated(
+      tenantId,
+      {
+        status: {
+          $in: [
+            OrderStatus.CLIENT_ACCEPTED,
+            OrderStatus.ASSIGNED,
+            OrderStatus.IN_PRODUCTION,
+            OrderStatus.READY_FOR_DELIVERY,
+            OrderStatus.PARTIALLY_DELIVERED,
+          ],
+        },
+      },
+      { page: 1, limit: 100, sortOrder: "desc" }
+    );
+
+    let remindersSent = 0;
+    const now = new Date();
+
+    for (const order of activeOrders.data) {
+      const milestones = order.financials?.milestones || [];
+      for (let idx = 0; idx < milestones.length; idx++) {
+        const m = milestones[idx];
+        if (!m) continue;
+        if (m.status === "pending" || m.status === "partial") {
+          let isDueSoon = false;
+          if (m.dueDate) {
+            const dueDate = new Date(m.dueDate);
+            const diffDays = Math.ceil((dueDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+            if (diffDays <= leadDays && diffDays >= 0) {
+              isDueSoon = true;
+            }
+          } else if (m.trigger === "advance" && order.status === OrderStatus.CLIENT_ACCEPTED) {
+            isDueSoon = true;
+          }
+
+          if (isDueSoon) {
+            const dateStr = now.toISOString().split("T")[0];
+            const dedupeKey = `pay_rem_${order._id}_ms_${idx}_${dateStr}`;
+            await this.notificationRepo.createNotification(tenantId, {
+              recipient: { clientId: String(order.clientId) },
+              kind: "notification",
+              type: "payment_milestone_reminder",
+              channel: "in_app",
+              title: `Payment Milestone Due - Order ${order.orderNumber}`,
+              body: `Payment reminder: Milestone '${m.milestone || `Milestone ${idx + 1}`}' (₹${((m.amountPaise || 0) / 100).toFixed(2)}) is due soon for order ${order.orderNumber}.`,
+              entity: { collection: "orders", id: String(order._id) },
+              dedupeKey,
+            });
+
+            await this.outboxRepo.createMessage(tenantId, {
+              recipient: { clientId: String(order.clientId) },
+              channel: "email",
+              payload: {
+                subject: `Payment Reminder: ${m.milestone || `Milestone ${idx + 1}`} for Order ${order.orderNumber}`,
+                orderNumber: order.orderNumber,
+                milestone: m.milestone || `Milestone ${idx + 1}`,
+                amountPaise: m.amountPaise,
+                dueDate: m.dueDate,
+              },
+            });
+
+            remindersSent++;
+          }
+        }
       }
     }
 
@@ -3325,6 +3428,57 @@ export class OrderService {
       throw new AppError(ErrorCode.NOT_FOUND, "Notification not found", 404);
     }
     return toNotificationDto(updated);
+  }
+
+  async listClientNotifications(
+    tenantId: string,
+    clientId: string,
+    filter: { unreadOnly?: boolean; kind?: string; category?: string } = {},
+    pagination: Partial<PaginationQuery> = {}
+  ): Promise<PaginatedResult<any>> {
+    const paginated = await this.notificationRepo.findForClient(tenantId, clientId, filter, pagination);
+    return {
+      data: paginated.data.map((item: any) => {
+        const dto = toNotificationDto(item);
+        let category: "quotation" | "production" | "payment" = "quotation";
+        const typeStr = String(item.type || "").toLowerCase();
+        if (typeStr.includes("prod") || typeStr.includes("stage") || typeStr.includes("handover") || typeStr.includes("daily")) {
+          category = "production";
+        } else if (typeStr.includes("pay") || typeStr.includes("milestone") || typeStr.includes("receipt") || typeStr.includes("invoice")) {
+          category = "payment";
+        } else if (typeStr.includes("quote") || typeStr.includes("price") || typeStr.includes("bargain")) {
+          category = "quotation";
+        }
+        return {
+          ...dto,
+          message: dto.body,
+          category,
+          read: !!dto.readAt,
+          time: dto.createdAt ? new Date(dto.createdAt).toLocaleDateString("en-IN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Recent",
+        };
+      }),
+      meta: paginated.meta,
+    };
+  }
+
+  async markClientNotificationAsRead(
+    tenantId: string,
+    notificationId: string,
+    clientId: string
+  ): Promise<any> {
+    const updated = await this.notificationRepo.markAsReadForClient(tenantId, notificationId, clientId);
+    if (!updated) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Notification not found", 404);
+    }
+    return toNotificationDto(updated);
+  }
+
+  async markAllClientNotificationsAsRead(
+    tenantId: string,
+    clientId: string
+  ): Promise<{ modifiedCount: number }> {
+    const count = await this.notificationRepo.markAllAsReadForClient(tenantId, clientId);
+    return { modifiedCount: count };
   }
 
   async getOrderDashboardSummary(

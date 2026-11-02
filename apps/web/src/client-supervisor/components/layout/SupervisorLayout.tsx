@@ -36,6 +36,8 @@ export const SupervisorLayout: React.FC = () => {
     openDailyUpdateModal,
     closeDailyUpdateModal,
     orders,
+    materials: supervisorMaterials,
+    machines: supervisorMachines,
     logShiftOutput,
     resetSupervisorData,
   } = useSupervisor();
@@ -59,8 +61,32 @@ export const SupervisorLayout: React.FC = () => {
   const email = profile?.email || '';
   const facility = profile?.facility || 'Loom Shed Division';
 
-  // Daily Shift Update Modal state
+  // Daily Shift Operations Report state (Doc §14)
+  const [activeReportTab, setActiveReportTab] = useState<'headcount' | 'materials' | 'machines' | 'output'>('output');
+  
+  // 1. Worker Headcount state (scales process capacity)
+  const [totalHeadcount, setTotalHeadcount] = useState<number>(14);
+  const [weavingHeadcount, setWeavingHeadcount] = useState<number>(6);
+  const [prepHeadcount, setPrepHeadcount] = useState<number>(3);
+  const [finishingHeadcount, setFinishingHeadcount] = useState<number>(3);
+  const [qcHeadcount, setQcHeadcount] = useState<number>(2);
+
+  // 2. Raw Material Stock tallies state
+  const [cottonYarnStock, setCottonYarnStock] = useState<number>(4200);
+  const [warpBeamStock, setWarpBeamStock] = useState<number>(1850);
+  const [polyStock, setPolyStock] = useState<number>(920);
+
+  // 3. Machine availability/breakdown status (auto-generates maintenance tickets)
+  const [machineChecks, setMachineChecks] = useState<Array<{ id: string; name: string; status: 'available' | 'breakdown' | 'maint'; remarks: string }>>([
+    { id: 'LOOM-A01', name: 'Tsudakoma Airjet 01', status: 'available', remarks: 'Operating normally' },
+    { id: 'LOOM-A02', name: 'Tsudakoma Airjet 02', status: 'available', remarks: 'Operating normally' },
+    { id: 'LOOM-A03', name: 'Picanol OmniPlus-i', status: 'available', remarks: 'Operating normally' },
+    { id: 'WARP-S01', name: 'Karl Mayer Warper', status: 'available', remarks: 'Operating normally' },
+  ]);
+
+  // 4. Produced and defective units per order and stage
   const [selectedOrderId, setSelectedOrderId] = useState<string>(orders[0]?.id || '');
+  const [selectedStage, setSelectedStage] = useState<string>('weaving');
   const [producedMeters, setProducedMeters] = useState<number>(650);
   const [defectiveMeters, setDefectiveMeters] = useState<number>(12);
   const [shiftNotes, setShiftNotes] = useState('Shift A airjet velocity steady. Warp tension calibrated.');
@@ -83,11 +109,29 @@ export const SupervisorLayout: React.FC = () => {
     try {
       await submitSupervisorReportMutation({
         reportDate: new Date().toISOString().split('T')[0],
-        employeesPresentTotal: 12,
+        processAreas: ['weaving', 'preparation', 'finishing', 'checking'],
+        employeesPresentTotal: totalHeadcount,
+        workforce: [
+          { area: 'weaving', count: weavingHeadcount },
+          { area: 'preparation', count: prepHeadcount },
+          { area: 'finishing', count: finishingHeadcount },
+          { area: 'checking', count: qcHeadcount },
+        ],
+        stockCounts: [
+          { materialId: '65f000000000000000000001', qty: cottonYarnStock },
+          { materialId: '65f000000000000000000002', qty: warpBeamStock },
+          { materialId: '65f000000000000000000003', qty: polyStock },
+        ],
+        machines: machineChecks.map((m) => ({
+          machineId: m.id,
+          status: m.status,
+          hours: m.status === 'breakdown' ? 4 : 8,
+          remarks: m.remarks,
+        })),
         outputs: [
           {
             orderId: selectedOrderId || 'ORD-CURRENT',
-            stage: 'weaving',
+            stage: selectedStage,
             produced: producedMeters,
             defective: defectiveMeters,
           },
@@ -98,7 +142,7 @@ export const SupervisorLayout: React.FC = () => {
       console.warn('Backend daily report submit warning:', err);
     }
     logShiftOutput(selectedOrderId, producedMeters, defectiveMeters, shiftNotes);
-    addToast(`Logged ${producedMeters}m for order ${selectedOrderId}. Shift records updated.`, 'success');
+    addToast(`Daily report submitted: ${totalHeadcount} headcount, stock counts, machine checks & ${producedMeters}m logged.`, 'success');
     closeDailyUpdateModal();
   };
 
@@ -369,10 +413,10 @@ export const SupervisorLayout: React.FC = () => {
         </div>
       </div>
 
-      {/* DAILY SHIFT OPERATIONS UPDATE MODAL */}
+      {/* DAILY SHIFT OPERATIONS UPDATE MODAL (Doc §14) */}
       {isDailyUpdateModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#252622]/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-white w-full max-w-lg rounded-2xl border border-[#EAE2D9] shadow-2xl p-6 relative">
+          <div className="bg-white w-full max-w-xl rounded-2xl border border-[#EAE2D9] shadow-2xl p-6 relative max-h-[90vh] flex flex-col">
             <button
               onClick={closeDailyUpdateModal}
               className="absolute top-4 right-4 p-1.5 rounded-lg text-gray-400 hover:text-[#252622] hover:bg-[#FBF6F0] transition-colors"
@@ -380,93 +424,380 @@ export const SupervisorLayout: React.FC = () => {
               <X size={18} />
             </button>
 
-            <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-xl bg-[#E65338]/10 text-[#E65338] flex items-center justify-center font-bold">
                 <Activity size={22} />
               </div>
               <div>
                 <h3 className="text-base font-extrabold text-[#252622]">
-                  Daily Shift Operations Update
+                  Daily Shift Operations Report (Section 14)
                 </h3>
                 <p className="text-xs text-gray-500">
-                  Log Shift A personnel, produced meters &amp; loom performance
+                  Worker headcount, raw material balances, machine breakdown check &amp; production output
                 </p>
               </div>
             </div>
 
-            <form onSubmit={handleDailyUpdateSubmit} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
-                  Active Manufacturing Order
-                </label>
-                <select
-                  value={selectedOrderId}
-                  onChange={(e) => setSelectedOrderId(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-semibold text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
-                >
-                  {orders.map((ord) => (
-                    <option key={ord.id} value={ord.id}>
-                      {ord.id} — {ord.fabricName} ({ord.currentStage})
-                    </option>
-                  ))}
-                </select>
-              </div>
+            {/* 4 Report Section Navigation Tabs */}
+            <div className="flex border-b border-[#EAE2D9] mb-4 gap-1 shrink-0 overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setActiveReportTab('output')}
+                className={`px-3 py-2 text-xs font-bold transition-all border-b-2 shrink-0 ${
+                  activeReportTab === 'output'
+                    ? 'border-[#E65338] text-[#E65338]'
+                    : 'border-transparent text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                1. Order Output
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveReportTab('headcount')}
+                className={`px-3 py-2 text-xs font-bold transition-all border-b-2 shrink-0 ${
+                  activeReportTab === 'headcount'
+                    ? 'border-[#E65338] text-[#E65338]'
+                    : 'border-transparent text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                2. Headcount ({totalHeadcount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveReportTab('materials')}
+                className={`px-3 py-2 text-xs font-bold transition-all border-b-2 shrink-0 ${
+                  activeReportTab === 'materials'
+                    ? 'border-[#E65338] text-[#E65338]'
+                    : 'border-transparent text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                3. Raw Materials
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveReportTab('machines')}
+                className={`px-3 py-2 text-xs font-bold transition-all border-b-2 shrink-0 ${
+                  activeReportTab === 'machines'
+                    ? 'border-[#E65338] text-[#E65338]'
+                    : 'border-transparent text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                4. Machine Checks
+              </button>
+            </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
-                    Produced Metres Today
-                  </label>
-                  <input
-                    type="number"
-                    value={producedMeters}
-                    onChange={(e) => setProducedMeters(Number(e.target.value))}
-                    min={0}
-                    required
-                    className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-bold text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
-                  />
+            <form onSubmit={handleDailyUpdateSubmit} className="flex-1 overflow-y-auto space-y-4 text-xs pr-1">
+              {/* TAB 1: ORDER OUTPUT & QUALITY */}
+              {activeReportTab === 'output' && (
+                <div className="space-y-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
+                        Active Manufacturing Order
+                      </label>
+                      <select
+                        value={selectedOrderId}
+                        onChange={(e) => setSelectedOrderId(e.target.value)}
+                        className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-semibold text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
+                      >
+                        {orders.map((ord) => (
+                          <option key={ord.id} value={ord.id}>
+                            {ord.id} &mdash; {ord.fabricName} ({ord.currentStage})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
+                        Process Area / Stage
+                      </label>
+                      <select
+                        value={selectedStage}
+                        onChange={(e) => setSelectedStage(e.target.value)}
+                        className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-semibold text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
+                      >
+                        <option value="weaving">Weaving (Airjet / Rapier)</option>
+                        <option value="preparation">Yarn Preparation / Warping</option>
+                        <option value="dyeing_processing">Dyeing &amp; Chemical Processing</option>
+                        <option value="cutting">Cutting &amp; Sizing</option>
+                        <option value="stitching">Stitching &amp; Assembly</option>
+                        <option value="checking">QC Inspection &amp; Mending</option>
+                        <option value="packing">Final Packing &amp; Dispatch</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
+                        Produced Output Metres Today
+                      </label>
+                      <input
+                        type="number"
+                        value={producedMeters}
+                        onChange={(e) => setProducedMeters(Number(e.target.value))}
+                        min={0}
+                        required
+                        className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-bold text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
+                        Defective Metres (QC Rejected)
+                      </label>
+                      <input
+                        type="number"
+                        value={defectiveMeters}
+                        onChange={(e) => setDefectiveMeters(Number(e.target.value))}
+                        min={0}
+                        required
+                        className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-bold text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
+                      Shift Operations Log &amp; Observations
+                    </label>
+                    <textarea
+                      value={shiftNotes}
+                      onChange={(e) => setShiftNotes(e.target.value)}
+                      rows={3}
+                      className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
+                      placeholder="Airjet shed pressure steady, humidity maintained at 65%..."
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
-                    Defective Metres (Greige QC)
-                  </label>
-                  <input
-                    type="number"
-                    value={defectiveMeters}
-                    onChange={(e) => setDefectiveMeters(Number(e.target.value))}
-                    min={0}
-                    required
-                    className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-bold text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
-                  />
+              )}
+
+              {/* TAB 2: TOTAL WORKER HEADCOUNT (Doc §14.1) */}
+              {activeReportTab === 'headcount' && (
+                <div className="space-y-3.5">
+                  <div className="p-3 bg-[#FBF6F0] rounded-xl border border-[#EAE2D9]">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-extrabold text-[#252622]">Total Worker Headcount</span>
+                      <span className="font-black text-sm text-[#E65338]">{totalHeadcount} Workers</span>
+                    </div>
+                    <p className="text-[11px] text-gray-500">
+                      Doc §14: Scales daily factory processing capacity. Sum of area workers should equal total present.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
+                        Weaving Shed Operators
+                      </label>
+                      <input
+                        type="number"
+                        value={weavingHeadcount}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setWeavingHeadcount(val);
+                          setTotalHeadcount(val + prepHeadcount + finishingHeadcount + qcHeadcount);
+                        }}
+                        min={0}
+                        className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-bold text-[#252622]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
+                        Warping &amp; Prep Staff
+                      </label>
+                      <input
+                        type="number"
+                        value={prepHeadcount}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setPrepHeadcount(val);
+                          setTotalHeadcount(weavingHeadcount + val + finishingHeadcount + qcHeadcount);
+                        }}
+                        min={0}
+                        className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-bold text-[#252622]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
+                        Finishing &amp; Stenter Staff
+                      </label>
+                      <input
+                        type="number"
+                        value={finishingHeadcount}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setFinishingHeadcount(val);
+                          setTotalHeadcount(weavingHeadcount + prepHeadcount + val + qcHeadcount);
+                        }}
+                        min={0}
+                        className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-bold text-[#252622]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
+                        QC Inspection &amp; Checking
+                      </label>
+                      <input
+                        type="number"
+                        value={qcHeadcount}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setQcHeadcount(val);
+                          setTotalHeadcount(weavingHeadcount + prepHeadcount + finishingHeadcount + val);
+                        }}
+                        min={0}
+                        className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-bold text-[#252622]"
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div>
-                <label className="block font-bold text-gray-700 uppercase tracking-wider mb-1">
-                  Shift Operations Log &amp; Notes
-                </label>
-                <textarea
-                  value={shiftNotes}
-                  onChange={(e) => setShiftNotes(e.target.value)}
-                  rows={3}
-                  className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] text-[#252622] focus:bg-white focus:outline-none focus:border-[#E65338]"
-                />
-              </div>
+              {/* TAB 3: KEY RAW MATERIAL STOCK COUNTS (Doc §14.2) */}
+              {activeReportTab === 'materials' && (
+                <div className="space-y-3.5">
+                  <div className="p-3 bg-[#FBF6F0] rounded-xl border border-[#EAE2D9]">
+                    <span className="font-extrabold text-[#252622]">Raw Materials Physical Inventory Tally</span>
+                    <p className="text-[11px] text-gray-500 mt-0.5">
+                      Doc §14: Floor stock tallies trigger automatic reorder alerts and shortage detection.
+                    </p>
+                  </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#EAE2D9]">
-                <button
-                  type="button"
-                  onClick={closeDailyUpdateModal}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 hover:bg-[#FBF6F0] border border-[#EAE2D9] transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-[#E65338] hover:bg-[#D24227] shadow-md shadow-[#E65338]/30 transition-all"
-                >
-                  Save Shift Log
-                </button>
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="font-bold text-gray-700">Cotton Yarn 40s Combed (kg)</label>
+                        <span className="text-[10px] text-gray-400 font-semibold">Min Reorder: 1,500 kg</span>
+                      </div>
+                      <input
+                        type="number"
+                        value={cottonYarnStock}
+                        onChange={(e) => setCottonYarnStock(Number(e.target.value))}
+                        min={0}
+                        className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-bold text-[#252622]"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="font-bold text-gray-700">Warp Beams / Sized Yarns (meters)</label>
+                        <span className="text-[10px] text-gray-400 font-semibold">Min Reorder: 800 m</span>
+                      </div>
+                      <input
+                        type="number"
+                        value={warpBeamStock}
+                        onChange={(e) => setWarpBeamStock(Number(e.target.value))}
+                        min={0}
+                        className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-bold text-[#252622]"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="font-bold text-gray-700">Polyester Microfilament 75D (kg)</label>
+                        <span className="text-[10px] text-gray-400 font-semibold">Min Reorder: 500 kg</span>
+                      </div>
+                      <input
+                        type="number"
+                        value={polyStock}
+                        onChange={(e) => setPolyStock(Number(e.target.value))}
+                        min={0}
+                        className="w-full p-2.5 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] font-bold text-[#252622]"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: MACHINE AVAILABILITY & BREAKDOWN STATUS (Doc §14.3) */}
+              {activeReportTab === 'machines' && (
+                <div className="space-y-3.5">
+                  <div className="p-3 bg-[#E65338]/10 rounded-xl border border-[#E65338]/20 text-[#E65338]">
+                    <div className="font-extrabold text-xs flex items-center gap-1.5">
+                      <AlertTriangle size={14} />
+                      <span>Automatic Maintenance Ticket Protocol</span>
+                    </div>
+                    <p className="text-[11px] text-[#252622]/80 mt-1">
+                      Marking a machine as <strong>Breakdown</strong> automatically creates a dispatch ticket for external technicians with your remarks.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    {machineChecks.map((mc, idx) => (
+                      <div key={mc.id} className="p-3 rounded-xl border border-[#EAE2D9] bg-[#FBF6F0] space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="font-extrabold text-xs text-[#252622]">
+                            {mc.name} <span className="text-gray-400 font-normal">({mc.id})</span>
+                          </span>
+
+                          <select
+                            value={mc.status}
+                            onChange={(e) => {
+                              const newStatus = e.target.value as 'available' | 'breakdown' | 'maint';
+                              setMachineChecks((prev) =>
+                                prev.map((item, i) => (i === idx ? { ...item, status: newStatus } : item))
+                              );
+                            }}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                              mc.status === 'breakdown'
+                                ? 'bg-red-50 border-red-300 text-red-700'
+                                : mc.status === 'maint'
+                                ? 'bg-amber-50 border-amber-300 text-amber-700'
+                                : 'bg-green-50 border-green-300 text-green-700'
+                            }`}
+                          >
+                            <option value="available">Available (Running)</option>
+                            <option value="maint">Maintenance Check</option>
+                            <option value="breakdown">Breakdown (Ticket Auto-Generated)</option>
+                          </select>
+                        </div>
+
+                        {mc.status === 'breakdown' && (
+                          <div>
+                            <input
+                              type="text"
+                              value={mc.remarks}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setMachineChecks((prev) =>
+                                  prev.map((item, i) => (i === idx ? { ...item, remarks: val } : item))
+                                );
+                              }}
+                              placeholder="Describe failure (e.g. Sub-nozzle solenoid valve pressure loss)..."
+                              required
+                              className="w-full p-2 rounded-lg border border-red-200 bg-white text-xs font-medium text-red-900 focus:outline-none focus:border-red-500"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-3 border-t border-[#EAE2D9] shrink-0">
+                <span className="text-[11px] text-gray-500">
+                  Section 14 compliant submission
+                </span>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={closeDailyUpdateModal}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 hover:bg-[#FBF6F0] border border-[#EAE2D9] transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-[#E65338] hover:bg-[#D24227] shadow-md shadow-[#E65338]/30 transition-all"
+                  >
+                    Submit Complete Report
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -475,4 +806,3 @@ export const SupervisorLayout: React.FC = () => {
     </div>
   );
 };
-
