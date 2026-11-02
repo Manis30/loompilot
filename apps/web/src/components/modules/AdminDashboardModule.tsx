@@ -553,11 +553,15 @@ export const AdminDashboardModule: React.FC<AdminDashboardModuleProps> = (props)
 
         let tab: AdminNavTab = 'supervisors';
         const kindLower = (n.kind || '').toLowerCase();
-        if (kindLower.includes('stock') || kindLower.includes('material') || kindLower.includes('po')) {
+        const typeLower = (n.type || '').toLowerCase();
+        const titleLower = (n.title || '').toLowerCase();
+        if (typeLower.includes('quotation_accepted') || titleLower.includes('confirmed') || titleLower.includes('handover')) {
+          tab = 'supervisors';
+        } else if (kindLower.includes('stock') || kindLower.includes('material') || kindLower.includes('po')) {
           tab = 'procurement';
-        } else if (kindLower.includes('quote') || kindLower.includes('quotation')) {
+        } else if (kindLower.includes('quote') || kindLower.includes('quotation') || typeLower.includes('quote')) {
           tab = 'quotations';
-        } else if (kindLower.includes('order')) {
+        } else if (kindLower.includes('order') || typeLower.includes('order')) {
           tab = 'orders';
         }
 

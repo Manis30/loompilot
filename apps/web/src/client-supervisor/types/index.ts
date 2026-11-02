@@ -114,6 +114,8 @@ export interface Order {
   stages: ProductionStage[];
   dailyProduction?: DailyProductionLog[];
   milestones: OrderMilestone[];
+  quotation?: any;
+  rawStatus?: string;
 }
 
 export interface Invoice {

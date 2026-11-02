@@ -416,7 +416,7 @@ export const QuotationApprovalsModule: React.FC<QuotationApprovalsModuleProps> =
       status = "approved";
     } else if (qStatus === "sent" || oStatus === "quotation_sent") {
       status = "awaiting_client_response";
-    } else if (qStatus === "accepted" || oStatus === "accepted_by_client" || oStatus === "advance_pending" || oStatus === "in_production") {
+    } else if (qStatus === "accepted" || oStatus === "client_accepted" || oStatus === "accepted_by_client" || oStatus === "assigned" || oStatus === "advance_pending" || oStatus === "in_production") {
       status = "client_accepted";
     } else if (qStatus === "declined" || oStatus === "declined_by_client") {
       status = "client_declined";

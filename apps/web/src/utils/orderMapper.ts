@@ -466,6 +466,7 @@ export function mapApiClientOrder(
   productsMap?: Map<string, any>
 ): ClientOrder {
   const id = String(apiOrder.orderNumber || apiOrder.id || apiOrder._id || '');
+  const backendId = String(apiOrder._id || apiOrder.id || id);
   const productId = String(apiOrder.productId || '');
   const product = productsMap?.get(productId);
 
@@ -510,21 +511,32 @@ export function mapApiClientOrder(
   }
 
   // Client Order Status mapping
-  let status: 'Awaiting Quotation' | 'In Production' | 'Delivered' | 'Cancelled' = 'In Production';
+  let status: 'Awaiting Quotation' | 'In Production' | 'Delivered' | 'Cancelled' | 'Quote Accepted' = 'In Production';
   const rawStatus = String(apiOrder.status || '').toLowerCase();
-  if (rawStatus === 'completed' || rawStatus === 'delivered' || rawStatus === 'partially_delivered') {
+  if (rawStatus === 'completed' || rawStatus === 'delivered' || rawStatus === 'partially_delivered' || rawStatus === 'closed') {
     status = 'Delivered';
-  } else if (rawStatus === 'cancelled') {
+  } else if (rawStatus === 'cancelled' || rawStatus === 'rejected') {
     status = 'Cancelled';
   } else if (
     rawStatus === 'submitted' ||
+    rawStatus === 'received' ||
     rawStatus === 'analyzing' ||
+    rawStatus === 'under_review' ||
     rawStatus === 'quotation_drafting' ||
     rawStatus === 'quotation_pending_approval' ||
     rawStatus === 'quotation_sent' ||
+    rawStatus === 'quotation_ready' ||
     rawStatus === 'awaiting_admin_decision'
   ) {
     status = 'Awaiting Quotation';
+  } else if (
+    rawStatus === 'client_accepted' ||
+    rawStatus === 'accepted_by_client' ||
+    rawStatus === 'confirmed' ||
+    rawStatus === 'quote_accepted' ||
+    rawStatus === 'advance_pending'
+  ) {
+    status = 'Quote Accepted';
   } else {
     status = 'In Production';
   }
@@ -580,6 +592,7 @@ export function mapApiClientOrder(
 
   return {
     id,
+    backendId,
     productId,
     productName,
     category,
@@ -606,6 +619,8 @@ export function mapApiClientOrder(
     },
     stages,
     milestones,
+    quotation: apiOrder.quotation,
+    rawStatus: apiOrder.status,
   };
 }
 

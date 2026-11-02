@@ -47,9 +47,16 @@ export const QuotationsPage: React.FC = () => {
     return localOrders;
   }, [ordersResponse, productsMap, localOrders]);
 
-  const quotationOrders = allOrders.filter(
-    (o) => o.status === 'Awaiting Quotation' || o.status === 'Quote Accepted' || (o as any).quotation
-  );
+  const quotationOrders = useMemo(() => {
+    return allOrders.filter((o) => {
+      const raw = ((o as any).rawStatus || '').toLowerCase();
+      const hasQuotation = Boolean((o as any).quotation);
+      const isQuotationReady = raw === 'quotation_ready' || raw === 'quotation_sent';
+      const isAccepted = o.status === 'Quote Accepted' || raw === 'confirmed' || raw === 'client_accepted';
+      const isMockQuotation = !raw && (o.status === 'Awaiting Quotation' || (o as any).quotation);
+      return hasQuotation || isQuotationReady || isAccepted || isMockQuotation;
+    });
+  }, [allOrders]);
 
   const handleAccept = async (order: any) => {
     setAcceptingOrderId(order.id);
@@ -100,6 +107,7 @@ export const QuotationsPage: React.FC = () => {
       {/* Main Quotations List */}
       <div className="space-y-6">
         {quotationOrders.map((order) => {
+          const isAccepted = order.status === 'Quote Accepted' || (order as any).rawStatus === 'confirmed' || (order as any).rawStatus === 'client_accepted';
           const hasRevision = !!order.originalUnitPrice && order.unitPrice < order.originalUnitPrice;
           const totalSavings = hasRevision
             ? (order.originalUnitPrice! - order.unitPrice) * order.orderedMetres
@@ -117,8 +125,18 @@ export const QuotationsPage: React.FC = () => {
                     <span className="font-mono text-xs font-bold text-vermilion bg-ivory px-3 py-1 rounded-lg border border-muted-border">
                       {order.id}
                     </span>
-                    <span className="px-2.5 py-1 rounded-full bg-warning-bg text-warning text-xs font-bold border border-warning-border">
-                      {hasRevision ? 'Price Revision Approved by Admin' : 'Quotation Issued'}
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${
+                      isAccepted
+                        ? 'bg-success-bg text-success border-success-border'
+                        : hasRevision
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : 'bg-warning-bg text-warning border-warning-border'
+                    }`}>
+                      {isAccepted
+                        ? 'Quotation Accepted & Terms Locked'
+                        : hasRevision
+                        ? 'Price Revision Approved by Admin'
+                        : 'Quotation Approved & Issued'}
                     </span>
                   </div>
                   <h2 className="text-xl font-extrabold text-charcoal mt-2">{order.productName}</h2>
@@ -130,8 +148,14 @@ export const QuotationsPage: React.FC = () => {
                 <div className="text-right">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Quotation Validity</span>
                   <div className="text-xs font-bold text-charcoal flex items-center gap-1 sm:justify-end mt-0.5">
-                    <Clock size={13} className="text-warning" />
-                    <span>Valid until 03 Nov 2026</span>
+                    <Clock size={13} className={isAccepted ? 'text-success' : 'text-warning'} />
+                    <span>
+                      {isAccepted
+                        ? 'Terms Accepted'
+                        : (order as any).quotation?.validUntil
+                        ? `Valid until ${(order as any).quotation.validUntil}`
+                        : 'Valid for 14 Days'}
+                    </span>
                   </div>
                   <div className="text-[11px] text-muted">Delivery: {order.expectedDelivery}</div>
                 </div>
@@ -229,23 +253,30 @@ export const QuotationsPage: React.FC = () => {
                     <span>Negotiate in Chat</span>
                   </Link>
 
-                  <button
-                    onClick={() => handleAccept(order)}
-                    disabled={isAccepting && acceptingOrderId === order.id}
-                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-success text-white text-xs font-bold hover:bg-[#1A6C49] shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {isAccepting && acceptingOrderId === order.id ? (
-                      <>
-                        <Loader2 size={16} className="animate-spin" />
-                        <span>Accepting...</span>
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 size={16} />
-                        <span>Accept Quotation & Issue Advance Invoice</span>
-                      </>
-                    )}
-                  </button>
+                  {isAccepted ? (
+                    <div className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#e6f4ea] text-[#137333] border border-[#ceead6] text-xs font-bold">
+                      <CheckCircle2 size={16} />
+                      <span>Quotation Accepted & Locked</span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleAccept(order)}
+                      disabled={isAccepting && acceptingOrderId === order.id}
+                      className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-success text-white text-xs font-bold hover:bg-[#1A6C49] shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {isAccepting && acceptingOrderId === order.id ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          <span>Accepting...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 size={16} />
+                          <span>Accept Quotation & Issue Advance Invoice</span>
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

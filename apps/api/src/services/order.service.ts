@@ -486,7 +486,10 @@ export class OrderService {
     supervisorId?: string;
   }): Promise<any> {
     const { tenantId, orderId, isClient, clientId, role, supervisorId } = params;
-    const order = await this.ordersRepo.findById(tenantId, orderId);
+    let order = await this.ordersRepo.findById(tenantId, orderId);
+    if (!order) {
+      order = await this.ordersRepo.findByOrderNumber(tenantId, orderId);
+    }
 
     if (!order) {
       throw new AppError(ErrorCode.NOT_FOUND, `Order '${orderId}' not found`, 404);
@@ -1349,7 +1352,7 @@ export class OrderService {
       type: "quotation_ready",
       channel: "in_app",
       title: `Quotation Ready for ${order.orderNumber}`,
-      body: `Your quotation for ${order.orderNumber} is ready for review. Total: ₹${((order.quotation?.totalPaise || 0) / 100).toLocaleString()}`,
+      body: `Your quotation for ${order.orderNumber} is ready for review. Total: â‚¹${((order.quotation?.totalPaise || 0) / 100).toLocaleString()}`,
       entity: { collection: "orders", id: orderId },
     });
 
@@ -1395,10 +1398,14 @@ export class OrderService {
     actor: { id: string; email?: string; ip?: string; requestId?: string };
   }): Promise<any> {
     const { tenantId, clientId, orderId, revisionNo, actor } = params;
-    const order = await this.ordersRepo.findById(tenantId, orderId);
+    let order = await this.ordersRepo.findById(tenantId, orderId);
+    if (!order) {
+      order = await this.ordersRepo.findByOrderNumber(tenantId, orderId);
+    }
     if (!order) {
       throw new AppError(ErrorCode.NOT_FOUND, `Order '${orderId}' not found`, 404);
     }
+    const realOrderId = String(order._id);
 
     if (String(order.clientId) !== String(clientId)) {
       throw new AppError(ErrorCode.FORBIDDEN, "Access denied: Order does not belong to client", 403);
@@ -1439,7 +1446,7 @@ export class OrderService {
       const unitPricePaise = Math.round(revision.newPricePaise / order.quantity);
       const updated = await this.ordersRepo.updateRevisionStatus(
         tenantId,
-        orderId,
+        realOrderId,
         revisionNo,
         "accepted",
         { decision: "accepted", at: new Date() },
@@ -1460,7 +1467,7 @@ export class OrderService {
       }
 
       if (order.status === OrderStatus.QUOTATION_SENT) {
-        await this.ordersRepo.updateStatus(tenantId, orderId, OrderStatus.CLIENT_ACCEPTED, {
+        await this.ordersRepo.updateStatus(tenantId, realOrderId, OrderStatus.CLIENT_ACCEPTED, {
           role: "admin",
           reason: `Quotation revision #${revisionNo} accepted by client`,
         });
@@ -1473,20 +1480,20 @@ export class OrderService {
         channel: "in_app",
         title: `Revision #${revisionNo} Accepted for ${order.orderNumber}`,
         body: `Client accepted revised pricing for ${order.orderNumber}. New total: ₹${(revision.newPricePaise / 100).toLocaleString()}`,
-        entity: { collection: "orders", id: orderId },
+        entity: { collection: "orders", id: realOrderId },
       });
 
       await this.auditService.log({
         tenantId,
         actor: { id: actor.id, type: "client", email: actor.email },
         action: "QUOTATION_REVISION_ACCEPTED",
-        entity: { collection: "orders", id: orderId },
+        entity: { collection: "orders", id: realOrderId },
         after: { revisionNo, totalPaise: revision.newPricePaise },
         ip: actor.ip,
         requestId: actor.requestId,
       });
 
-      const refreshed = await this.ordersRepo.findById(tenantId, orderId);
+      const refreshed = await this.ordersRepo.findById(tenantId, realOrderId);
       return toClientOrderDto(refreshed);
     }
 
@@ -1502,13 +1509,13 @@ export class OrderService {
       );
     }
 
-    const updated = await this.ordersRepo.updateStatus(tenantId, orderId, OrderStatus.CLIENT_ACCEPTED, {
+    const updated = await this.ordersRepo.updateStatus(tenantId, realOrderId, OrderStatus.CLIENT_ACCEPTED, {
       role: "admin",
       reason: "Quotation accepted by client",
     });
 
     if (order.quotation) {
-      await this.ordersRepo.setQuotation(tenantId, orderId, {
+      await this.ordersRepo.setQuotation(tenantId, realOrderId, {
         ...order.quotation,
         status: "accepted",
       });
@@ -1521,14 +1528,14 @@ export class OrderService {
       channel: "in_app",
       title: `Order ${order.orderNumber} Confirmed`,
       body: `Client has accepted quotation for order ${order.orderNumber}. Handover to production is pending.`,
-      entity: { collection: "orders", id: orderId },
+      entity: { collection: "orders", id: realOrderId },
     });
 
     await this.auditService.log({
       tenantId,
       actor: { id: actor.id, type: "client", email: actor.email },
       action: "QUOTATION_ACCEPTED",
-      entity: { collection: "orders", id: orderId },
+      entity: { collection: "orders", id: realOrderId },
       after: { status: OrderStatus.CLIENT_ACCEPTED },
       ip: actor.ip,
       requestId: actor.requestId,
@@ -1547,10 +1554,14 @@ export class OrderService {
     actor: { id: string; email?: string; ip?: string; requestId?: string };
   }): Promise<any> {
     const { tenantId, clientId, orderId, revisionNo, reason, actor } = params;
-    const order = await this.ordersRepo.findById(tenantId, orderId);
+    let order = await this.ordersRepo.findById(tenantId, orderId);
+    if (!order) {
+      order = await this.ordersRepo.findByOrderNumber(tenantId, orderId);
+    }
     if (!order) {
       throw new AppError(ErrorCode.NOT_FOUND, `Order '${orderId}' not found`, 404);
     }
+    const realOrderId = String(order._id);
 
     if (String(order.clientId) !== String(clientId)) {
       throw new AppError(ErrorCode.FORBIDDEN, "Access denied: Order does not belong to client", 403);
@@ -1569,7 +1580,7 @@ export class OrderService {
       // S4 Rule: When revision is declined, original quotation price stands untouched!
       const updated = await this.ordersRepo.updateRevisionStatus(
         tenantId,
-        orderId,
+        realOrderId,
         revisionNo,
         "declined",
         { decision: "declined", reason, at: new Date() }
@@ -1591,20 +1602,20 @@ export class OrderService {
         channel: "in_app",
         title: `Revision #${revisionNo} Declined for ${order.orderNumber}`,
         body: `Client declined quotation revision #${revisionNo} for ${order.orderNumber}. Original quotation price stands. Reason: ${reason || "None specified"}`,
-        entity: { collection: "orders", id: orderId },
+        entity: { collection: "orders", id: realOrderId },
       });
 
       await this.auditService.log({
         tenantId,
         actor: { id: actor.id, type: "client", email: actor.email },
         action: "QUOTATION_REVISION_DECLINED",
-        entity: { collection: "orders", id: orderId },
+        entity: { collection: "orders", id: realOrderId },
         after: { revisionNo, status: "declined", reason },
         ip: actor.ip,
         requestId: actor.requestId,
       });
 
-      const refreshed = await this.ordersRepo.findById(tenantId, orderId);
+      const refreshed = await this.ordersRepo.findById(tenantId, realOrderId);
       return toClientOrderDto(refreshed);
     }
 
@@ -1622,7 +1633,7 @@ export class OrderService {
 
     const updated = await this.ordersRepo.updateStatus(
       tenantId,
-      orderId,
+      realOrderId,
       OrderStatus.DECLINED_BY_CLIENT,
       {
         role: "admin",
@@ -1631,7 +1642,7 @@ export class OrderService {
     );
 
     if (order.quotation) {
-      await this.ordersRepo.setQuotation(tenantId, orderId, {
+      await this.ordersRepo.setQuotation(tenantId, realOrderId, {
         ...order.quotation,
         status: "declined",
       });
@@ -1729,7 +1740,7 @@ export class OrderService {
       type: "quotation_revised",
       channel: "in_app",
       title: `Quotation Revision #${nextRevisionNo} for ${order.orderNumber}`,
-      body: `A price revision has been issued for order ${order.orderNumber}. New total: ₹${(newPricePaise / 100).toLocaleString()}`,
+      body: `A price revision has been issued for order ${order.orderNumber}. New total: â‚¹${(newPricePaise / 100).toLocaleString()}`,
       entity: { collection: "orders", id: orderId },
     });
 
@@ -1885,7 +1896,7 @@ export class OrderService {
       type: "quotation_revised",
       channel: "in_app",
       title: `Price Revision Approved for Order ${order.orderNumber}`,
-      body: `Revised quotation of ₹${(newTotalPaise / 100).toLocaleString()} (+${targetRev.changePct}%) has been confirmed. ${targetRev.clientReason}`,
+      body: `Revised quotation of â‚¹${(newTotalPaise / 100).toLocaleString()} (+${targetRev.changePct}%) has been confirmed. ${targetRev.clientReason}`,
       entity: { collection: "orders", id: String(order._id) },
     });
 
@@ -2176,7 +2187,7 @@ export class OrderService {
               type: "payment_milestone_reminder",
               channel: "in_app",
               title: `Payment Milestone Due - Order ${order.orderNumber}`,
-              body: `Payment reminder: Milestone '${m.milestone || `Milestone ${idx + 1}`}' (₹${((m.amountPaise || 0) / 100).toFixed(2)}) is due soon for order ${order.orderNumber}.`,
+              body: `Payment reminder: Milestone '${m.milestone || `Milestone ${idx + 1}`}' (â‚¹${((m.amountPaise || 0) / 100).toFixed(2)}) is due soon for order ${order.orderNumber}.`,
               entity: { collection: "orders", id: String(order._id) },
               dedupeKey,
             });
@@ -2265,9 +2276,9 @@ export class OrderService {
       if (!params.overrideReason || params.overrideReason.trim() === "") {
         throw new AppError(
           ErrorCode.ADVANCE_NOT_RECEIVED,
-          `Advance milestone payment of ₹${(requiredAdvancePaise / 100).toFixed(
+          `Advance milestone payment of â‚¹${(requiredAdvancePaise / 100).toFixed(
             2
-          )} required before assignment (received: ₹${(advanceReceivedPaise / 100).toFixed(2)})`,
+          )} required before assignment (received: â‚¹${(advanceReceivedPaise / 100).toFixed(2)})`,
           400
         );
       }
@@ -2825,9 +2836,9 @@ export class OrderService {
     if (currentReceived + params.amountPaise > milestone.amountPaise) {
       throw new AppError(
         ErrorCode.OVERPAYMENT,
-        `Payment amount of ₹${(params.amountPaise / 100).toFixed(
+        `Payment amount of â‚¹${(params.amountPaise / 100).toFixed(
           2
-        )} exceeds remaining due of ₹${(
+        )} exceeds remaining due of â‚¹${(
           (milestone.amountPaise - currentReceived) /
           100
         ).toFixed(2)} for milestone '${milestone.milestone}'`,
@@ -2916,7 +2927,7 @@ export class OrderService {
           type: "payment_received",
           channel: "in_app",
           title: `Payment Received for Order ${order.orderNumber}`,
-          body: `Receipt of ₹${(params.amountPaise / 100).toFixed(2)} recorded for milestone '${
+          body: `Receipt of â‚¹${(params.amountPaise / 100).toFixed(2)} recorded for milestone '${
             milestone.milestone
           }' (${paymentMethod.toUpperCase()})`,
           entity: { collection: "orders", id: params.orderId },
@@ -3044,9 +3055,9 @@ export class OrderService {
         );
         throw new AppError(
           ErrorCode.OVERPAYMENT,
-          `Captured payment amount of ₹${(event.amountPaise / 100).toFixed(
+          `Captured payment amount of â‚¹${(event.amountPaise / 100).toFixed(
             2
-          )} exceeds remaining due of ₹${(remainingDue / 100).toFixed(2)} for milestone '${
+          )} exceeds remaining due of â‚¹${(remainingDue / 100).toFixed(2)} for milestone '${
             milestone.milestone
           }'`,
           400
@@ -3131,7 +3142,7 @@ export class OrderService {
             type: "razorpay_payment_captured",
             channel: "in_app",
             title: `Razorpay Payment Received: ${order.orderNumber}`,
-            body: `₹${(event.amountPaise / 100).toFixed(
+            body: `â‚¹${(event.amountPaise / 100).toFixed(
               2
             )} received via Razorpay for milestone '${milestone.milestone}'`,
             entity: { collection: "orders", id: String(order._id) },
@@ -3251,10 +3262,10 @@ export class OrderService {
     if (orderTotalPaise > 0 && previousInvoicedPaise + params.invoiceAmountPaise > orderTotalPaise) {
       throw new AppError(
         ErrorCode.INVOICE_EXCEEDS_ORDER_VALUE,
-        `Cumulative invoice amount ₹${(
+        `Cumulative invoice amount â‚¹${(
           (previousInvoicedPaise + params.invoiceAmountPaise) /
           100
-        ).toFixed(2)} exceeds total order value ₹${(orderTotalPaise / 100).toFixed(2)}`,
+        ).toFixed(2)} exceeds total order value â‚¹${(orderTotalPaise / 100).toFixed(2)}`,
         400
       );
     }
@@ -3429,7 +3440,7 @@ export class OrderService {
             type: "payment_overdue",
             channel: "in_app",
             title: `Payment Overdue: Order ${order.orderNumber}`,
-            body: `Milestone '${m.milestone}' of ₹${(m.amountPaise / 100).toFixed(
+            body: `Milestone '${m.milestone}' of â‚¹${(m.amountPaise / 100).toFixed(
               2
             )} is overdue since ${m.dueDate}`,
             entity: { collection: "orders", id: String(order._id) },
