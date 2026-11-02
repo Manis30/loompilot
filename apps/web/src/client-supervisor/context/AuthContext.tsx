@@ -45,24 +45,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (isMeSuccess && meData) {
       const profile = (meData as any)?.profile;
-      if (profile && ((meData as any)?.realm === 'client' || !meData.realm)) {
+      if (profile && ((meData as any)?.realm === 'client' || !(meData as any).realm)) {
         const restored: ClientProfile = {
           id: profile.id || profile._id || 'CLT-RESTORED',
           clientCode: `CLT-${(profile.id || profile._id || '').slice(-6).toUpperCase()}`,
           company: profile.clientName || profile.name || 'Client Corporation',
           brand: profile.clientName || profile.name || 'Commercial Line',
-          contactPerson: profile.name,
+          gstin: profile.gstin || '29AABCL1234F1Z5',
+          contactPerson: profile.name || 'Sourcing Manager',
           designation: 'Authorized Sourcing Representative',
           email: profile.email || '',
           phone: profile.phone || '+91 98765 43210',
           shippingPlant: 'Designated Mill Inward Dock',
           billingAddress: [profile.city, profile.country].filter(Boolean).join(', ') || 'Corporate Office',
           accountTier: 'Enterprise Verified',
-          accountManager: {
-            name: 'Operations Desk',
-            email: 'ops@mill.loompilot.local',
-            phone: '+91 80 4000 1122',
-          },
+          creditLimit: '₹50,00,000',
+          availableCredit: '₹35,00,000',
+          relationshipManager: 'Operations Desk (+91 80 4000 1122)',
         };
         setUser(restored);
         storageService.setAuthUser(restored);

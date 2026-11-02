@@ -727,7 +727,7 @@ export const AdminPortalApp: React.FC = () => {
             invoiceNo,
             invoiceAmountPaise,
             carrier: delivery.carrier?.trim() || undefined,
-            notes: delivery.notes || (delivery.carrier ? `Dispatched via ${delivery.carrier.trim()}` : undefined),
+            notes: (delivery as any).notes || (delivery.carrier ? `Dispatched via ${delivery.carrier.trim()}` : undefined),
           },
           idempotencyKey,
         }).unwrap();

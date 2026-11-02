@@ -283,9 +283,14 @@ export const SupervisorProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         machineId: t.machineId || 'Loom-01',
         shed: t.shed || 'Shed A',
         issueType: t.issueType || 'Mechanical',
-        description: t.description || t.title || 'Maintenance check',
+        category: t.category || t.issueType || 'Maintenance',
+        relatedOrder: t.relatedOrder || 'Floor General',
+        severity: (t.priority === 'High' ? 'High' : t.priority === 'Critical' ? 'Critical' : 'Medium') as IssueTicket['severity'],
+        description: t.description || t.issue || t.title || 'Maintenance check',
+        impact: t.impact || 'Normal Operations',
         reportedBy: t.reportedBy || 'Floor Supervisor',
-        status: t.status === 'resolved' || t.status === 'closed' ? 'Resolved' : 'Pending',
+        status: (t.status === 'resolved' || t.status === 'closed' ? 'Resolved' : t.status === 'assigned' ? 'Technician Assigned' : 'Open') as IssueTicket['status'],
+        rawStatus: t.status,
         priority: t.priority || 'Medium',
       }));
     }

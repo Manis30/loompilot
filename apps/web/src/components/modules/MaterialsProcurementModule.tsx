@@ -859,6 +859,7 @@ export function mapMovementToTransaction(
 }
 
 export const MaterialsProcurementModule: React.FC<MaterialsProcurementModuleProps> = ({
+  materials,
   orders,
   onRecordPurchaseDecision,
   onRerunFeasibility

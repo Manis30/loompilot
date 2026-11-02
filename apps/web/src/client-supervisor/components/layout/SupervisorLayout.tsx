@@ -48,6 +48,13 @@ export const SupervisorLayout: React.FC = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
 
+  // Daily Shift Update Modal state
+  const [selectedOrderId, setSelectedOrderId] = useState<string>(orders?.[0]?.id || '');
+  const [producedMeters, setProducedMeters] = useState<number>(650);
+  const [defectiveMeters, setDefectiveMeters] = useState<number>(12);
+  const [shiftNotes, setShiftNotes] = useState('Shift A airjet velocity steady. Warp tension calibrated.');
+  const [submitSupervisorReportMutation] = useSubmitSupervisorReportMutation();
+
   // If not authenticated, redirect to login
   if (!profile) {
     return <Navigate to="/login" replace />;
@@ -58,13 +65,6 @@ export const SupervisorLayout: React.FC = () => {
   const empId = profile?.empId || 'LP-SUP-STAFF';
   const email = profile?.email || '';
   const facility = profile?.facility || 'Loom Shed Division';
-
-  // Daily Shift Update Modal state
-  const [selectedOrderId, setSelectedOrderId] = useState<string>(orders[0]?.id || '');
-  const [producedMeters, setProducedMeters] = useState<number>(650);
-  const [defectiveMeters, setDefectiveMeters] = useState<number>(12);
-  const [shiftNotes, setShiftNotes] = useState('Shift A airjet velocity steady. Warp tension calibrated.');
-  const [submitSupervisorReportMutation] = useSubmitSupervisorReportMutation();
 
   const navItems = [
     { name: 'Factory Dashboard', to: '/supervisor/dashboard', icon: LayoutDashboard },

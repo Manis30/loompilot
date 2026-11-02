@@ -464,5 +464,3 @@ export const {
   useClientCreatePaymentOrderMutation,
 } = ordersApi;
 
-export const useGetOrdersSummaryQuery = useGetOrderSummaryQuery;
-

@@ -242,7 +242,7 @@ export const mapOrderToProductionOrder = (ord: Order): ProductionOrderWithProduc
 
   const products: ProductProductionItem[] = (ord.items && ord.items.length > 0)
     ? ord.items.map((item, idx) => {
-        const itemQty = item.quantity || prodQty;
+        const itemQty = (item as any).quantity || prodQty;
         const itemComp = Math.round(itemQty * (progressPct / 100));
         return {
           id: `${ord.id}-${String.fromCharCode(65 + idx)}`,
@@ -1376,6 +1376,10 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
     );
   }
 
+  if (!currentOrder || !currentProduct || !currentActiveStage) {
+    return null;
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, height: '100%', overflowY: 'auto', paddingRight: 4, background: '#ffffff' }}>
       {/* =========================================================================
@@ -2131,8 +2135,8 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
                             !canonical.isKnown ||
                             canonical.step === 0 ||
                             canonical.step >= 8 ||
-                            currentOrder.status === 'completed' ||
-                            currentOrder.status === 'delivered';
+                            (currentOrder.status as string) === 'completed' ||
+                            (currentOrder.status as string) === 'delivered';
 
                           return (
                             <button
@@ -2141,7 +2145,7 @@ export const ProductionTrackingModule: React.FC<ProductionTrackingModuleProps> =
                               title={
                                 !canonical.isKnown || canonical.step === 0
                                   ? 'Stage unavailable or unrecognized'
-                                  : canonical.step >= 8 || currentOrder.status === 'completed' || currentOrder.status === 'delivered'
+                                  : canonical.step >= 8 || (currentOrder.status as string) === 'completed' || (currentOrder.status as string) === 'delivered'
                                   ? 'Order is already delivered'
                                   : isAdvancingStage
                                   ? 'Advancing stage...'

@@ -129,9 +129,9 @@ export function validateEnv(raw: Record<string, string | undefined> = process.en
     AUTH_RATE_LIMIT_MAX: raw["AUTH_RATE_LIMIT_MAX"] ?? 20,
     INVITE_TOKEN_TTL: raw["INVITE_TOKEN_TTL"] ?? "7d",
 
-    PAYMENT_GATEWAY: raw["PAYMENT_GATEWAY"] ?? "fake",
-    RAZORPAY_KEY_ID: raw["RAZORPAY_KEY_ID"] ?? "",
-    RAZORPAY_KEY_SECRET: raw["RAZORPAY_KEY_SECRET"] ?? "",
+    PAYMENT_GATEWAY: raw["PAYMENT_GATEWAY"] ?? (raw["RAZORPAY_KEY_ID"] || raw["RAZORPAY_KEY"] ? "razorpay" : "fake"),
+    RAZORPAY_KEY_ID: raw["RAZORPAY_KEY_ID"] ?? raw["RAZORPAY_KEY"] ?? "",
+    RAZORPAY_KEY_SECRET: raw["RAZORPAY_KEY_SECRET"] ?? raw["RAZORPAY_SECRET"] ?? "",
     RAZORPAY_WEBHOOK_SECRET: raw["RAZORPAY_WEBHOOK_SECRET"] ?? "",
 
     AGENTS_MODE: raw["AGENTS_MODE"] ?? "fake",

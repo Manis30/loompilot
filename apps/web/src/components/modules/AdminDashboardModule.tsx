@@ -28,14 +28,13 @@ import {
   RotateCw
 } from 'lucide-react';
 import type { Order, AppUser, MarketCommodity, AdminNavTab, AuditEntry } from '../../types';
-import { useGetOrdersSummaryQuery } from '../../store/api/ordersApi';
+import { useGetOrdersSummaryQuery, useGetAuditLogsQuery } from '../../store/api/dashboardApi';
 import {
   useGetProductionBoardQuery,
   useGetSupervisorNotificationsQuery
 } from '../../store/api/productionApi';
 import { useGetStockSummaryQuery } from '../../store/api/stockApi';
 import { useGetMachinesQuery } from '../../store/api/machinesApi';
-import { useGetAuditLogsQuery } from '../../store/api/dashboardApi';
 import './AdminDashboardModule.css';
 
 export interface AdminDashboardModuleProps {
@@ -43,6 +42,7 @@ export interface AdminDashboardModuleProps {
   users: AppUser[];
   commodities: MarketCommodity[];
   auditLogs?: AuditEntry[];
+  isAuditLogsLoading?: boolean;
   ordersSummary?: any;
   isOrdersSummaryLoading?: boolean;
   isOrdersSummaryError?: boolean;
@@ -364,8 +364,8 @@ export const AdminDashboardModule: React.FC<AdminDashboardModuleProps> = (props)
       if (o.quotation?.totalPrice && o.quotation.totalPrice > 0) {
         const val = o.quotation.totalPrice;
         amountDisplay = `₹${val >= 100000 ? (val / 100000).toFixed(2) + 'L' : val.toLocaleString('en-IN')}`;
-      } else if (o.quotation?.totalPricePaise && o.quotation.totalPricePaise > 0) {
-        const val = o.quotation.totalPricePaise / 100;
+      } else if ((o.quotation as any)?.totalPricePaise && (o.quotation as any).totalPricePaise > 0) {
+        const val = (o.quotation as any).totalPricePaise / 100;
         amountDisplay = `₹${val >= 100000 ? (val / 100000).toFixed(2) + 'L' : val.toLocaleString('en-IN')}`;
       }
 
@@ -635,7 +635,7 @@ export const AdminDashboardModule: React.FC<AdminDashboardModuleProps> = (props)
   }, [machines]);
 
   const loomsTelemetryText = activeLoomsCount !== undefined
-    ? `${activeLoomsCount} OF ${machines.length} LOOMS ACTIVE`
+    ? `${activeLoomsCount} OF ${machines?.length ?? 0} LOOMS ACTIVE`
     : isDemo
     ? '48 LOOMS ACTIVE'
     : 'Looms: Unavailable';

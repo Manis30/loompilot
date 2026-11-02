@@ -117,6 +117,7 @@ export const UnifiedLoginPage: React.FC = () => {
           clientCode: `CLT-${authUser.id.slice(-6).toUpperCase()}`,
           company: authUser.name || 'Client Corporation',
           brand: authUser.name || 'Commercial Line',
+          gstin: '29AABCL1234F1Z5',
           contactPerson: authUser.name,
           designation: 'Authorized Sourcing Representative',
           email: authUser.email,
@@ -124,11 +125,9 @@ export const UnifiedLoginPage: React.FC = () => {
           shippingPlant: 'Designated Mill Inward Dock',
           billingAddress: 'Corporate Office',
           accountTier: 'Enterprise Verified',
-          accountManager: {
-            name: 'Operations Desk',
-            email: 'ops@mill.loompilot.local',
-            phone: '+91 80 4000 1122',
-          },
+          creditLimit: '₹50,00,000',
+          availableCredit: '₹35,00,000',
+          relationshipManager: 'Operations Desk (+91 80 4000 1122)',
         });
 
         addToast(`Authenticated as ${authUser.name}.`, 'success');

@@ -163,7 +163,7 @@ export const MessagesPage: React.FC = () => {
                   </div>
                 </div>
               );
-            })}
+            }))}
           </div>
         </div>
 
