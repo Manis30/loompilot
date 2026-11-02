@@ -1,0 +1,1190 @@
+/* ==========================================================================
+   LOOMPILOT EXECUTIVE DASHBOARD - Reference Template Stylesheet
+   Matches exact 3-column layout, pine green/lime color scheme, cards & widgets
+   ========================================================================== */
+
+.db-viewport {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 100%;
+  background: #ffffff;
+  color: #1B1918;
+  font-family: var(--font-family, 'Plus Jakarta Sans', 'Outfit', sans-serif);
+  padding: 18px 20px 32px 20px;
+  gap: 16px;
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.db-viewport button,
+.db-viewport input,
+.db-viewport select,
+.db-viewport textarea,
+.db-viewport table,
+.db-viewport th,
+.db-viewport td {
+  font-family: inherit;
+}
+
+/* ==========================================================================
+   1. TOP NAVIGATION / HEADER
+   ========================================================================== */
+.db-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.db-header-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1B1918;
+  letter-spacing: -0.4px;
+  margin: 0;
+}
+
+.db-header-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  max-width: 480px;
+}
+
+.db-search-box {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+}
+
+.db-search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #7b8e81;
+  pointer-events: none;
+}
+
+.db-search-input {
+  width: 100%;
+  background: #edf3ee;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  padding: 8px 16px 8px 38px;
+  font-size: 13px;
+  color: #1B1918;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.db-search-input:focus {
+  background: #ffffff;
+  border-color: #79B4B7;
+  box-shadow: 0 0 0 3px rgba(121, 180, 183, 0.25);
+}
+
+.db-search-input::placeholder {
+  color: #8b9c90;
+}
+
+.db-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.db-icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid #e2ebe4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1e3d2b;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+}
+
+.db-icon-btn:hover {
+  background: #F8F0DF;
+  border-color: #79B4B7;
+  color: #18191B;
+}
+
+.db-badge-dot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e53e3e;
+  border: 1.5px solid #ffffff;
+}
+
+.db-user-pill {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 3px 12px 3px 4px;
+  background: #ffffff;
+  border: 1px solid #e2ebe4;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.db-user-pill:hover {
+  border-color: #79B4B7;
+  background: #F8F0DF;
+}
+
+.db-user-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #222C2E;
+  color: #FEFBF3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.db-user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1B1918;
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   2. MAIN 3-COLUMN GRID
+   ========================================================================== */
+.db-grid {
+  display: grid;
+  grid-template-columns: 300px minmax(460px, 1fr) 310px;
+  gap: 16px;
+  width: 100%;
+  align-items: start;
+}
+
+@media (max-width: 1240px) {
+  .db-grid {
+    grid-template-columns: 290px minmax(380px, 1fr);
+  }
+  .db-col-right {
+    grid-column: span 2;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+}
+
+@media (max-width: 900px) {
+  .db-grid {
+    grid-template-columns: 1fr;
+  }
+  .db-col-right {
+    grid-column: span 1;
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Standard White Dashboard Card */
+.db-card {
+  background: #ffffff;
+  border: 1px solid #eaecf0;
+  border-radius: 20px;
+  padding: 18px 20px;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.db-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.db-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1B1918;
+  margin: 0;
+}
+
+.db-card-action-btn {
+  background: transparent;
+  border: none;
+  color: #718276;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease;
+}
+
+.db-card-action-btn:hover {
+  color: #1B1918;
+}
+
+.db-dropdown-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: #ffffff;
+  border: 1px solid #e2ebe4;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #526759;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.db-dropdown-pill:hover {
+  border-color: #79B4B7;
+  color: #18191B;
+}
+
+/* ==========================================================================
+   3. COLUMN 1: LEFT WIDGETS
+   ========================================================================== */
+.db-col-left {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Credit / Telemetry Operational Card */
+.db-credit-card {
+  background: linear-gradient(135deg, #242120 0%, #151312 100%);
+  border-radius: 22px;
+  padding: 22px 20px;
+  color: #ffffff;
+  position: relative;
+  box-shadow: 0 10px 25px rgba(19, 68, 46, 0.25);
+  overflow: hidden;
+}
+
+.db-credit-card::before {
+  content: '';
+  position: absolute;
+  top: -60px;
+  right: -60px;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(142, 228, 118, 0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.db-credit-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* 4-leaf fintech icon */
+.db-card-brand-logo {
+  display: grid;
+  grid-template-columns: repeat(2, 6px);
+  gap: 3px;
+}
+
+.db-card-brand-dot {
+  width: 6px;
+  height: 6px;
+  background: #79B4B7;
+  border-radius: 2px;
+}
+
+.db-contactless-icon {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.db-card-holder {
+  font-size: 17px;
+  font-weight: 600;
+  color: #ffffff;
+  letter-spacing: 0.2px;
+  margin-top: 18px;
+}
+
+.db-card-balance-section {
+  margin-top: 14px;
+}
+
+.db-card-balance-lbl {
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #8fb99b;
+}
+
+.db-card-balance-val {
+  font-size: 28px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.5px;
+  margin-top: 1px;
+}
+
+.db-credit-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 18px;
+  font-size: 11px;
+  color: #8fb99b;
+  font-weight: 500;
+}
+
+/* 4 Circular Action Buttons */
+.db-quick-actions-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 6px;
+}
+
+.db-quick-action-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.db-action-circle-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1px solid #e2ebe4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1e3d2b;
+  transition: all 0.18s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.db-quick-action-item:hover .db-action-circle-btn {
+  background: #F8F0DF;
+  border-color: #79B4B7;
+  color: #18191B;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(19, 68, 46, 0.12);
+}
+
+.db-quick-action-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #2b3e32;
+  text-align: center;
+}
+
+/* Daily Limit Card */
+.db-daily-limit-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: #6e8073;
+  margin-bottom: 8px;
+}
+
+.db-daily-limit-percent {
+  font-weight: 700;
+  color: #1B1918;
+}
+
+.db-progress-track {
+  width: 100%;
+  height: 7px;
+  background: #e8efe9;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.db-progress-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.4s ease;
+}
+
+/* Saving Plans Card */
+.db-saving-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.db-add-plan-link {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #18191B;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.db-add-plan-link:hover {
+  text-decoration: underline;
+}
+
+.db-saving-total-lbl {
+  font-size: 11px;
+  color: #718276;
+}
+
+.db-saving-total-val {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1B1918;
+  margin-bottom: 12px;
+}
+
+.db-saving-plans-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.db-saving-plan-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.db-plan-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.db-plan-item-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.db-plan-item-icon-box {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: #eef5ef;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #18191B;
+}
+
+.db-plan-item-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #1B1918;
+}
+
+.db-plan-item-stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.db-plan-current {
+  font-weight: 700;
+  color: #1B1918;
+}
+
+.db-plan-target {
+  color: #7a8c80;
+}
+
+/* ==========================================================================
+   4. COLUMN 2: CENTER WIDGETS
+   ========================================================================== */
+.db-col-center {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Top 3 KPI Grid */
+.db-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.db-kpi-card {
+  background: #ffffff;
+  border: 1px solid #edf2ee;
+  border-radius: 20px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.db-kpi-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.db-kpi-icon-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #edf7ef;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #18191B;
+}
+
+.db-kpi-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 700;
+  width: fit-content;
+}
+
+.db-kpi-pill-green {
+  background: #e2f6e6;
+  color: #1f7a37;
+  border: 1px solid #c9eed1;
+}
+
+.db-kpi-pill-red {
+  background: #fdeeed;
+  color: #c53030;
+  border: 1px solid #f9d3d0;
+}
+
+.db-kpi-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1B1918;
+  letter-spacing: -0.3px;
+  line-height: 1.1;
+}
+
+.db-kpi-label {
+  font-size: 11.5px;
+  color: #718276;
+}
+
+/* Cashflow Bar Chart Card */
+.db-cashflow-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.db-cashflow-subhead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.db-cashflow-balance-lbl {
+  font-size: 11px;
+  color: #718276;
+}
+
+.db-cashflow-balance-val {
+  font-size: 22px;
+  font-weight: 700;
+  color: #18191B;
+  letter-spacing: -0.3px;
+}
+
+.db-cashflow-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 11.5px;
+  color: #435549;
+}
+
+.db-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.db-legend-box {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+/* 12-Month Bi-Directional Chart Canvas */
+.db-cashflow-chart-container {
+  width: 100%;
+  height: 180px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding-top: 24px;
+}
+
+.db-cashflow-y-guide {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  font-size: 9.5px;
+  color: #9cb0a2;
+}
+
+.db-cashflow-y-line {
+  flex: 1;
+  border-bottom: 1px dashed #e8efe9;
+  margin-left: 6px;
+}
+
+.db-chart-columns-wrap {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 130px;
+  position: relative;
+  margin-left: 24px;
+}
+
+.db-month-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 18px;
+  cursor: pointer;
+  height: 100%;
+}
+
+.db-bars-stack {
+  height: 105px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.db-bar-income {
+  width: 12px;
+  background: #79B4B7;
+  border-radius: 3px 3px 0 0;
+  transition: all 0.2s ease;
+}
+
+.db-bar-expense {
+  width: 12px;
+  background: #79B4B7;
+  border-radius: 0 0 3px 3px;
+  transition: all 0.2s ease;
+}
+
+.db-month-col:hover .db-bar-income,
+.db-month-col.is-active .db-bar-income {
+  background: #0b2d1e;
+  transform: scaleX(1.15);
+}
+
+.db-month-col:hover .db-bar-expense,
+.db-month-col.is-active .db-bar-expense {
+  background: #73d159;
+  transform: scaleX(1.15);
+}
+
+.db-month-label {
+  font-size: 10.5px;
+  color: #718276;
+  margin-top: 6px;
+  font-weight: 500;
+}
+
+.db-month-col.is-active .db-month-label {
+  color: #1B1918;
+  font-weight: 700;
+}
+
+/* Tooltip on Active Month */
+.db-chart-tooltip {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #ffffff;
+  border: 1px solid #e2ebe4;
+  border-radius: 8px;
+  padding: 6px 10px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  font-size: 10px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.db-chart-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 4px;
+  border-style: solid;
+  border-color: #ffffff transparent transparent transparent;
+}
+
+.db-tooltip-title {
+  font-weight: 700;
+  color: #1B1918;
+}
+
+.db-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #55695c;
+}
+
+/* Recent Transactions Table Card */
+.db-table-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.db-table-filter-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid #e2ebe4;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #526759;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.db-table-filter-btn:hover {
+  border-color: #79B4B7;
+  color: #18191B;
+}
+
+.db-table-wrapper {
+  overflow-x: auto;
+  margin-top: 6px;
+}
+
+.db-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+}
+
+.db-table th {
+  padding: 8px 10px;
+  color: #718276;
+  font-weight: 500;
+  font-size: 11px;
+  border-bottom: 1px solid #edf2ee;
+  white-space: nowrap;
+}
+
+.db-table td {
+  padding: 10px 10px;
+  border-bottom: 1px solid #f2f7f3;
+  vertical-align: middle;
+}
+
+.db-table tbody tr:hover td {
+  background: #f9fbf9;
+}
+
+.db-tx-name-box {
+  display: flex;
+  flex-direction: column;
+}
+
+.db-tx-name {
+  font-weight: 600;
+  color: #1B1918;
+}
+
+.db-tx-category {
+  font-size: 10.5px;
+  color: #7b8e81;
+}
+
+.db-tx-date {
+  color: #647569;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.db-tx-amount {
+  font-weight: 700;
+  color: #1B1918;
+  white-space: nowrap;
+}
+
+.db-tx-note {
+  color: #647569;
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Status Pills */
+.db-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.db-status-completed {
+  background: #e3f6e7;
+  color: #1f7a37;
+}
+
+.db-status-pending {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.db-status-failed {
+  background: #fdeeed;
+  color: #c53030;
+}
+
+/* ==========================================================================
+   5. COLUMN 3: RIGHT WIDGETS
+   ========================================================================== */
+.db-col-right {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Statistic Donut Card */
+.db-stat-tabs-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid #edf2ee;
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+}
+
+.db-stat-tab-btn {
+  background: none;
+  border: none;
+  padding: 4px 2px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #718276;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+}
+
+.db-stat-tab-btn.is-active {
+  color: #1B1918;
+}
+
+.db-stat-tab-btn.is-active::after {
+  content: '';
+  position: absolute;
+  bottom: -9px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #79B4B7;
+  border-radius: 2px;
+}
+
+/* Donut Canvas */
+.db-donut-center-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin: 10px 0 16px 0;
+}
+
+.db-donut-svg {
+  transform: rotate(-90deg);
+}
+
+.db-donut-center-text {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.db-donut-lbl {
+  font-size: 10.5px;
+  color: #718276;
+}
+
+.db-donut-val {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1B1918;
+  letter-spacing: -0.3px;
+}
+
+/* Category breakdown list */
+.db-breakdown-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.db-breakdown-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.db-breakdown-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.db-percent-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.db-percent-60 {
+  background: #222C2E;
+  color: #FEFBF3;
+}
+
+.db-percent-15 {
+  background: #79B4B7;
+  color: #0b2d1e;
+}
+
+.db-percent-12 {
+  background: #d4ebd7;
+  color: #18191B;
+}
+
+.db-percent-8 {
+  background: #e8efe9;
+  color: #3b5042;
+}
+
+.db-percent-5 {
+  background: #edf2ee;
+  color: #68796d;
+}
+
+.db-breakdown-name {
+  color: #243a2d;
+  font-weight: 500;
+}
+
+.db-breakdown-val {
+  font-weight: 700;
+  color: #1B1918;
+}
+
+/* Recent Activity Card */
+.db-activity-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.db-activity-section-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #1B1918;
+  text-transform: capitalize;
+}
+
+.db-activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 11.5px;
+}
+
+.db-activity-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.db-activity-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.35;
+}
+
+.db-activity-text {
+  color: #374b3f;
+}
+
+.db-activity-user {
+  font-weight: 600;
+  color: #1B1918;
+}
+
+.db-activity-time {
+  font-size: 10.5px;
+  color: #7b8e81;
+}
+
+/* Slide-over Drawer & Modals */
+.db-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(18, 42, 31, 0.45);
+  backdrop-filter: blur(2px);
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.db-drawer-panel {
+  width: 440px;
+  max-width: 90vw;
+  height: 100%;
+  background: #ffffff;
+  box-shadow: -8px 0 30px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  animation: dbSlideIn 0.25s ease-out;
+}
+
+@keyframes dbSlideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.db-drawer-header {
+  padding: 18px 20px;
+  border-bottom: 1px solid #edf2ee;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.db-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.db-notif-item {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #edf2ee;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.db-notif-item:hover {
+  background: #F8F0DF;
+  border-color: #79B4B7;
+}
+
+.db-notif-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1B1918;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.db-notif-msg {
+  font-size: 11.5px;
+  color: #55695c;
+  line-height: 1.4;
+}
+
+.db-notif-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: #7b8e81;
+}
+

@@ -1,0 +1,10 @@
+packages:
+  - 'packages/*'
+  - 'apps/*'
+
+allowBuilds:
+  bcrypt: true
+  esbuild: true
+  mongodb-memory-server: true
+  msgpackr-extract: true
+  '@scarf/scarf': false

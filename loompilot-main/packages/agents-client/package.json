@@ -1,0 +1,22 @@
+{
+  "name": "@loompilot/agents-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "node -e 'process.exit(0)'",
+    "generate": "echo 'Client generator will run in Stage 4'"
+  },
+  "dependencies": {
+    "@loompilot/shared": "workspace:*",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}
