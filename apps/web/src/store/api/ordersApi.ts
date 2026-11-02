@@ -363,20 +363,38 @@ export const ordersApi = apiSlice.injectEndpoints({
     }),
 
     submitClientOrder: builder.mutation<{ success: boolean; data: any }, any>({
-      query: (body) => ({
-        url: '/client/orders',
-        method: 'POST',
-        body,
-      }),
+      query: (body) => {
+        const idempKey =
+          (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `idem-cl-ord-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
+        return {
+          url: '/client/orders',
+          method: 'POST',
+          body,
+          headers: {
+            'Idempotency-Key': idempKey,
+          },
+        };
+      },
       invalidatesTags: [{ type: 'Order', id: 'CLIENT_LIST' }, { type: 'Order', id: 'LIST' }],
     }),
 
     clientAcceptQuotation: builder.mutation<{ success: boolean; data: any }, { id: string; body: any }>({
-      query: ({ id, body }) => ({
-        url: `/client/orders/${id}/quotation/accept`,
-        method: 'POST',
-        body,
-      }),
+      query: ({ id, body }) => {
+        const idempKey =
+          (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `idem-cl-acc-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
+        return {
+          url: `/client/orders/${id}/quotation/accept`,
+          method: 'POST',
+          body,
+          headers: {
+            'Idempotency-Key': idempKey,
+          },
+        };
+      },
       invalidatesTags: (_res, _err, { id }) => [
         { type: 'Order', id },
         { type: 'Order', id: 'CLIENT_LIST' },
@@ -385,11 +403,20 @@ export const ordersApi = apiSlice.injectEndpoints({
     }),
 
     clientDeclineQuotation: builder.mutation<{ success: boolean; data: any }, { id: string; body: any }>({
-      query: ({ id, body }) => ({
-        url: `/client/orders/${id}/quotation/decline`,
-        method: 'POST',
-        body,
-      }),
+      query: ({ id, body }) => {
+        const idempKey =
+          (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `idem-cl-dec-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
+        return {
+          url: `/client/orders/${id}/quotation/decline`,
+          method: 'POST',
+          body,
+          headers: {
+            'Idempotency-Key': idempKey,
+          },
+        };
+      },
       invalidatesTags: (_res, _err, { id }) => [
         { type: 'Order', id },
         { type: 'Order', id: 'CLIENT_LIST' },
@@ -401,10 +428,19 @@ export const ordersApi = apiSlice.injectEndpoints({
       { success: boolean; data: any },
       { id: string; milestoneId: string }
     >({
-      query: ({ id, milestoneId }) => ({
-        url: `/client/orders/${id}/milestones/${milestoneId}/pay`,
-        method: 'POST',
-      }),
+      query: ({ id, milestoneId }) => {
+        const idempKey =
+          (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `idem-cl-mil-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
+        return {
+          url: `/client/orders/${id}/milestones/${milestoneId}/pay`,
+          method: 'POST',
+          headers: {
+            'Idempotency-Key': idempKey,
+          },
+        };
+      },
       invalidatesTags: (_res, _err, { id }) => [{ type: 'Order', id }],
     }),
 

@@ -129,7 +129,8 @@ export const CreateOrderPage: React.FC = () => {
     const realProduct = Array.isArray(liveProducts)
       ? liveProducts.find((p: any) => (p.id || p._id) === data.productId)
       : undefined;
-    const validProductId = realProduct ? String(realProduct.id || realProduct._id) : undefined;
+    const rawId = realProduct ? String(realProduct._id || realProduct.id) : undefined;
+    const validProductId = rawId && /^[0-9a-fA-F]{24}$/.test(rawId) ? rawId : undefined;
 
     try {
       const res = await submitClientOrderMutation({

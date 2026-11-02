@@ -423,7 +423,7 @@ export const ClientSubmitOrderSchema = z.object({
   unitPricePaise: z.number().int().positive().optional(),
   targetPricePaise: z.number().int().positive().optional(),
   tenantId: z.string().optional(),
-});
+}).passthrough();
 
 export const AdminCreateOrderSchema = ClientSubmitOrderSchema.extend({
   clientId: z.string().min(1, "clientId is required for admin manual entry"),

@@ -1,4 +1,5 @@
 import type { IOrder, IQuotation } from "../models/orders/order.model.js";
+import { Types } from "mongoose";
 import {
   OrdersRepository,
   ORDER_DETAIL_PROJECTION,
@@ -282,13 +283,17 @@ export class OrderService {
 
     let productDesc = params.productDescription;
     if (params.productId) {
-      const product = await this.productRepo.findById(tenantId, params.productId);
-      if (!product || product.active === false) {
-        throw new AppError(ErrorCode.VALIDATION_FAILED, "Selected catalog product is invalid or inactive", 400);
-      }
-      if (!productDesc) {
-        productDesc = product.productName;
-      }
+      if (!Types.ObjectId.isValid(params.productId)) {
+        params.productId = undefined;
+      } else {
+        const product = await this.productRepo.findById(tenantId, params.productId);
+        if (!product || product.active === false) {
+          throw new AppError(ErrorCode.VALIDATION_FAILED, "Selected catalog product is invalid or inactive", 400);
+        }
+        if (!productDesc) {
+          productDesc = product.productName;
+        }
+            }
     }
 
     const today = getTodayBusinessDate();

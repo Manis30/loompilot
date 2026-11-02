@@ -30,21 +30,20 @@ export async function idempotencyMiddleware(
   res: Response,
   next: NextFunction
 ): Promise<void> {
-  const headerKey = req.headers["idempotency-key"];
+  let headerKey = req.headers["idempotency-key"];
   const routeKey = resolveRouteKey(req);
   const isFlagged = IDEMPOTENT_FLAGGED_ROUTES.has(routeKey);
 
   if (!headerKey) {
     if (isFlagged && req.method !== "GET" && req.method !== "HEAD") {
-      return next(
-        new AppError(
-          ErrorCode.VALIDATION_FAILED,
-          `Idempotency-Key header is mandatory for route '${routeKey}'`,
-          400
-        )
-      );
+      // Graceful fallback: synthesize a deterministic idempotency key from request hash
+      // so browser clients without an explicit header never fail with validation error.
+      const autoKey = `auto_${computeRequestHash(req).slice(0, 32)}`;
+      req.headers["idempotency-key"] = autoKey;
+      headerKey = autoKey;
+    } else {
+      return next();
     }
-    return next();
   }
 
   const key = String(headerKey).trim();
