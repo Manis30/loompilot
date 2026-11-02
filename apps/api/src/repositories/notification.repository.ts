@@ -94,28 +94,6 @@ export class NotificationRepository extends BaseRepository<INotification> {
     };
   }
 
-  async markAsRead(
-    tenantId: string,
-    notificationId: string,
-    userId: string
-  ): Promise<INotification | null> {
-    return this.model
-      .findOneAndUpdate(
-        {
-          tenantId,
-          _id: notificationId,
-          "recipient.userId": new Types.ObjectId(userId),
-        },
-        {
-          $set: { readAt: new Date() },
-          $inc: { version: 1 },
-        },
-        { new: true }
-      )
-      .lean<INotification>()
-      .exec();
-  }
-
   async findForClient(
     tenantId: string,
     clientId?: string,
