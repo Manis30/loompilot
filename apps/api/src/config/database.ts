@@ -36,11 +36,33 @@ export async function connectMongo(uri?: string, dbName?: string): Promise<typeo
     // long build locks. Indexes must be created explicitly via migration scripts or `pnpm run db:indexes`.
     mongoose.set("autoIndex", env.NODE_ENV !== "production");
 
-    await mongoose.connect(targetUri, {
-      dbName: targetDb,
-      serverSelectionTimeoutMS: 5000,
-      autoIndex: env.NODE_ENV !== "production",
-    });
+    try {
+      await mongoose.connect(targetUri, {
+        dbName: targetDb,
+        serverSelectionTimeoutMS: 5000,
+        autoIndex: env.NODE_ENV !== "production",
+      });
+    } catch (connectErr: any) {
+      if (
+        env.NODE_ENV !== "production" &&
+        targetUri.includes("replicaSet=") &&
+        connectErr?.name === "MongooseServerSelectionError"
+      ) {
+        logger.warn(
+          "MongoDB replica set connection timed out. Falling back to standalone MongoDB URI..."
+        );
+        const fallbackUri = targetUri
+          .replace(/([?&])replicaSet=[^&]*(&|$)/, "$1")
+          .replace(/[?&]$/, "");
+        await mongoose.connect(fallbackUri, {
+          dbName: targetDb,
+          serverSelectionTimeoutMS: 5000,
+          autoIndex: true,
+        });
+      } else {
+        throw connectErr;
+      }
+    }
 
     return mongoose;
   } catch (err) {
@@ -62,4 +84,3 @@ export async function disconnectMongo(): Promise<void> {
 export function isMongoConnected(): boolean {
   return mongoose.connection.readyState === 1;
 }
-

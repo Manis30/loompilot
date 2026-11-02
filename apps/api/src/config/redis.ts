@@ -78,6 +78,7 @@ export function getRedisClient(): Redis {
 
     // Always log error object under the 'err' key (std serializer)
     redisClient.on("error", (err) => {
+      if (process.env.USE_REDIS_MOCK === "true") return;
       logger.error({ err }, "Redis connection error");
     });
 
@@ -109,6 +110,18 @@ export async function connectRedis(): Promise<Redis> {
         { err },
         `Failed to connect to Redis at ${hostPort} (${errorCode})`
       );
+      if (env.NODE_ENV !== "production") {
+        logger.warn(
+          "Redis is not available in local environment. Falling back to in-memory Redis (ioredis-mock)..."
+        );
+        try {
+          client.removeAllListeners();
+          client.disconnect();
+        } catch {}
+        process.env.USE_REDIS_MOCK = "true";
+        redisClient = new (RedisMock as any)() as unknown as Redis;
+        return redisClient;
+      }
       throw err;
     }
   }

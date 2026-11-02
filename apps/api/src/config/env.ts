@@ -28,7 +28,7 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
 
   MONGODB_URI: z.string().min(1, "MONGODB_URI is required"),
-  MONGODB_DB_NAME: z.string().default("loompilot"),
+  MONGODB_DB_NAME: z.string().default("LoomPilot"),
 
   REDIS_URL: z.string().min(1, "REDIS_URL is required"),
 
@@ -94,8 +94,8 @@ export function validateEnv(raw: Record<string, string | undefined> = process.en
     PORT: raw["PORT"] ?? raw["API_PORT"] ?? 4000,
     LOG_LEVEL: raw["LOG_LEVEL"] ?? "info",
 
-    MONGODB_URI: raw["MONGODB_URI"] ?? (isDevOrTest ? "mongodb://localhost:27017/loompilot?replicaSet=rs0" : undefined),
-    MONGODB_DB_NAME: raw["MONGODB_DB_NAME"] ?? raw["MONGODB_DATABASE"] ?? "loompilot",
+    MONGODB_URI: raw["MONGODB_URI"] ?? (isDevOrTest ? "mongodb://localhost:27017/LoomPilot" : undefined),
+    MONGODB_DB_NAME: raw["MONGODB_DB_NAME"] ?? raw["MONGODB_DATABASE"] ?? "LoomPilot",
 
     REDIS_URL: computeRedisUrl(raw),
 
