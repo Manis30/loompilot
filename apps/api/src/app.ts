@@ -29,7 +29,6 @@ import { stockRouter } from "./routes/stock.routes.js";
 import { importRouter } from "./routes/import.routes.js";
 import { auditRouter } from "./routes/audit.routes.js";
 import { clientOrderRouter } from "./routes/client-order.routes.js";
-import { clientNotificationRouter } from "./routes/client-notification.routes.js";
 import { orderRouter } from "./routes/order.routes.js";
 import { internalGatewayRouter } from "./routes/internal-gateway.routes.js";
 import { webhookRouter } from "./routes/webhook.routes.js";
@@ -38,9 +37,8 @@ import { supervisorAdminRouter } from "./routes/supervisor-admin.routes.js";
 import { maintenanceTicketRouter } from "./routes/maintenance-ticket.routes.js";
 import { productionRouter } from "./routes/production.routes.js";
 import { procurementRouter } from "./routes/procurement.routes.js";
-import { createConversationRouter } from "./routes/conversation.routes.js";
-import { createAdminAssistantRouter } from "./routes/admin-assistant.routes.js";
-import { createMarketPriceRouter } from "./routes/market-price.routes.js";
+import { marketPriceRouter } from "./routes/market-price.routes.js";
+import { clientNotificationRouter } from "./routes/client-notification.routes.js";
 import { AppContainer, getContainer, setContainer } from "./container.js";
 
 export function createApp(container: AppContainer = getContainer()): Express {
@@ -85,7 +83,12 @@ export function createApp(container: AppContainer = getContainer()): Express {
     })
   );
 
-  // 4. Redis-backed Rate Limiter
+  // 4. Health & readiness endpoints
+  const healthRoutes = createHealthRoutes(container.healthController);
+  app.use(healthRoutes);
+  app.use("/api/v1", healthRoutes);
+
+  // 5. Redis-backed Rate Limiter
   app.use(createRateLimiter(container.redisClient, env));
 
   // 5. Request parsing with configurable body size limit & cookies
@@ -125,12 +128,7 @@ export function createApp(container: AppContainer = getContainer()): Express {
     });
   }
 
-  // 8. Health & readiness endpoints
-  const healthRoutes = createHealthRoutes(container.healthController);
-  app.use(healthRoutes);
-  app.use("/api/v1", healthRoutes);
-
-  // 9. Stage 3 Core Domain Routes
+  // 6. Stage 3 Core Domain Routes
   app.use("/api/v1", authRouter);
   app.use("/api/v1/me", meRouter);
   app.use("/api/v1/users", userRouter);
@@ -142,8 +140,10 @@ export function createApp(container: AppContainer = getContainer()): Express {
   app.use("/api/v1/settings", settingsRouter);
   app.use("/api/v1/suppliers", supplierRouter);
   app.use("/api/v1/materials", materialRouter);
+  app.use("/api/v1/market-prices", marketPriceRouter);
   app.use("/api/v1/machines", machineRouter);
   app.use("/api/v1/products", productRouter);
+  app.use("/api/v1/client/notifications", clientNotificationRouter);
   app.use("/api/v1/client", clientCatalogueRouter);
   app.use("/api/v1/files", fileRouter);
   app.use("/api/v1/stock", stockRouter);
@@ -151,7 +151,6 @@ export function createApp(container: AppContainer = getContainer()): Express {
 
   // Phase C: Orders, Feasibility & Quotations
   app.use("/api/v1/client/orders", clientOrderRouter);
-  app.use("/api/v1/client/notifications", clientNotificationRouter);
   app.use("/api/v1/orders", orderRouter);
   app.use("/internal/v1", internalGatewayRouter);
 
@@ -166,15 +165,6 @@ export function createApp(container: AppContainer = getContainer()): Express {
 
   // Phase 7: Inventory & Procurement
   app.use("/api/v1/purchase-decisions", procurementRouter);
-
-  // Phase 8: Client Negotiation Chat, Admin AI Copilot & Market Prices
-  const conversationRouter = createConversationRouter(container);
-  const adminAssistantRouter = createAdminAssistantRouter(container);
-  const marketPriceRouter = createMarketPriceRouter(container);
-
-  app.use(conversationRouter);
-  app.use(adminAssistantRouter);
-  app.use(marketPriceRouter);
 
   // 10. Unmatched routes -> 404
   app.use((req) => {

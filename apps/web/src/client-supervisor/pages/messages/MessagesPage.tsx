@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
+import { formatCurrency } from '../../utils/formatters';
 import {
   Send,
   Paperclip,
@@ -17,12 +18,12 @@ import {
   RefreshCw,
   Loader2,
 } from 'lucide-react';
-import { ChatThread, ChatMessage } from '../../types';
-import { useGetClientOrdersQuery } from '../../../store/api/ordersApi';
 import {
-  useGetClientOrderChatQuery,
+  useGetClientOrdersQuery,
+  useGetClientOrderMessagesQuery,
   useSendClientOrderMessageMutation,
-} from '../../../store/api/chatApi';
+} from '../../../store/api/ordersApi';
+import { ChatThread } from '../../types';
 
 const isDemo = (import.meta as any).env?.VITE_ENABLE_DEMO_LOGIN === 'true';
 
@@ -32,43 +33,60 @@ export const MessagesPage: React.FC = () => {
   const navigate = useNavigate();
   const {
     chats: localChats,
-    sendChatMessage: demoSendChatMessage,
+    sendChatMessage,
     acceptQuotation,
     addToast,
     isChatSending,
+    chatError,
+    clearChatError,
   } = useApp();
 
-  // 1. Live Orders Query for active customer orders
-  const { data: clientOrdersRes, refetch: refetchOrders } = useGetClientOrdersQuery();
-  const liveOrders = clientOrdersRes?.data || [];
+  const {
+    data: ordersResponse,
+    isLoading: isOrdersLoading,
+    isError: isOrdersError,
+    refetch: refetchOrders,
+  } = useGetClientOrdersQuery(undefined);
 
-  // Compute chats dictionary from live orders or demo fallback
   const chats = useMemo<Record<string, ChatThread>>(() => {
-    const threadMap: Record<string, ChatThread> = {};
+    if (isDemo) {
+      return localChats;
+    }
+    const rawOrders = ordersResponse?.data || [];
+    if (Array.isArray(rawOrders) && rawOrders.length > 0) {
+      const map: Record<string, ChatThread> = {};
+      rawOrders.forEach((o: any) => {
+        const id = o.orderNumber || String(o._id || o.id).slice(-8).toUpperCase();
+        const unitPrice = o.quotation?.unitPricePaise
+          ? formatCurrency(o.quotation.unitPricePaise / 100) + ' / m'
+          : (o.unitPrice ? formatCurrency(o.unitPrice) + ' / m' : 'Awaiting Quote');
+        const total = o.quotation?.totalPaise
+          ? formatCurrency(o.quotation.totalPaise / 100)
+          : (o.totalValue ? formatCurrency(o.totalValue) : 'TBD');
+        const qty = o.quantity ? `${Number(o.quantity).toLocaleString()} metres` : 'Custom volume';
+        const delivery = o.deliveryDeadline
+          ? new Date(o.deliveryDeadline).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+          : 'In 4 weeks';
 
-    if (Array.isArray(liveOrders) && liveOrders.length > 0) {
-      for (const ord of liveOrders) {
-        const ordId = (ord as any).id || (ord as any)._id || (ord as any).orderNumber;
-        threadMap[ordId] = {
-          orderId: ordId,
-          productName: (ord as any).productName || (ord as any).productDescription || 'Custom Woven Line',
-          orderQuantity: `${((ord as any).quantity || 1000).toLocaleString()} pcs`,
-          quotedPrice: `₹${(((ord as any).quotation?.unitPricePaise || 28500) / 100).toFixed(2)}/m`,
-          totalQuote: `₹${(((ord as any).quotation?.totalPaise || 2850000) / 100).toLocaleString('en-IN')}`,
-          validity: '14 Days Valid',
-          deliveryDate: (ord as any).deliveryDeadline || 'Upcoming',
-          status: (ord as any).status || 'Quote Review',
+        map[id] = {
+          orderId: id,
+          productName: o.productDescription || o.styleName || o.spec?.fabric || 'Custom Apparel Textile',
+          orderQuantity: qty,
+          quotedPrice: unitPrice,
+          totalQuote: total,
+          validity: o.quotation?.validUntil
+            ? `Valid until ${new Date(o.quotation.validUntil).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`
+            : 'Quote in review',
+          deliveryDate: delivery,
+          status: o.status === 'in_production' ? 'In Production' : o.status === 'submitted' ? 'Awaiting Quotation' : (o.status || 'Active Contract'),
           unread: false,
           messages: [],
         };
-      }
+      });
+      return map;
     }
-
-    if (Object.keys(threadMap).length === 0 && isDemo) {
-      return localChats;
-    }
-    return threadMap;
-  }, [liveOrders, localChats]);
+    return {};
+  }, [ordersResponse, localChats]);
 
   const orderIds = Object.keys(chats);
   const [selectedOrderId, setSelectedOrderId] = useState<string>(queryOrderId || '');
@@ -81,86 +99,73 @@ export const MessagesPage: React.FC = () => {
       setSelectedOrderId(queryOrderId);
     } else if (!selectedOrderId || !chats[selectedOrderId]) {
       if (orderIds.length > 0) {
-        setSelectedOrderId(orderIds[0]!);
+        setSelectedOrderId(orderIds[0]);
       }
     }
   }, [queryOrderId, chats, orderIds, selectedOrderId]);
 
-  // 2. Live Conversation Query & Mutation
+  const activeChat = selectedOrderId ? chats[selectedOrderId] : (orderIds.length > 0 ? chats[orderIds[0]] : undefined);
+
+  const rawOrders = ordersResponse?.data || [];
+  const selectedRawOrder = Array.isArray(rawOrders)
+    ? rawOrders.find((o: any) => o.orderNumber === selectedOrderId || String(o._id || o.id) === selectedOrderId)
+    : undefined;
+  const backendOrderId = selectedRawOrder
+    ? String(selectedRawOrder._id || selectedRawOrder.id)
+    : (selectedOrderId && selectedOrderId.length === 24 ? selectedOrderId : undefined);
+
   const {
-    data: liveChatRes,
-    isLoading: isChatLoading,
-    refetch: refetchLiveChat,
-  } = useGetClientOrderChatQuery(selectedOrderId, {
-    skip: !selectedOrderId,
+    data: liveConvData,
+    isLoading: isLiveConvLoading,
+    refetch: refetchLiveConv,
+  } = useGetClientOrderMessagesQuery(backendOrderId || '', {
+    skip: !backendOrderId,
+    pollingInterval: 3000,
   });
 
-  const [sendOrderMessageMutation, { isLoading: isSendingLiveMessage }] =
-    useSendClientOrderMessageMutation();
+  const [sendClientMsgMutation, { isLoading: isSendingClientMsg }] = useSendClientOrderMessageMutation();
 
-  const activeChat = selectedOrderId ? chats[selectedOrderId] : (orderIds.length > 0 ? chats[orderIds[0]!] : undefined);
-
-  // Derive message list from live backend conversation if available
-  const messagesToDisplay: ChatMessage[] = useMemo(() => {
-    const rawMessages = liveChatRes?.data?.messages;
-    if (Array.isArray(rawMessages) && rawMessages.length > 0) {
-      return rawMessages.map((m, idx) => ({
-        id: m.id || `live_${idx}_${Date.now()}`,
-        sender: m.senderType === 'client' ? 'user' : m.senderType === 'admin' ? 'admin' : 'assistant',
-        senderName:
-          m.senderType === 'client'
-            ? 'You'
-            : m.senderType === 'admin'
-            ? 'Senior Merchandiser (Admin)'
-            : 'LoomPilot AI Concierge',
-        avatar: m.senderType === 'client' ? 'user' : m.senderType === 'admin' ? 'admin' : 'ai',
-        time: m.createdAt
-          ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          : 'Today',
+  const activeMessages = useMemo(() => {
+    if (liveConvData?.data?.messages && Array.isArray(liveConvData.data.messages) && liveConvData.data.messages.length > 0) {
+      return liveConvData.data.messages.map((m: any) => ({
+        id: m._id || m.id || `msg-${Math.random()}`,
+        sender: m.senderRole === 'client' ? 'user' : (m.senderRole === 'admin' ? 'admin' : 'ai'),
+        senderName: m.senderName || (m.senderRole === 'client' ? 'You' : (m.senderRole === 'admin' ? 'Senior Mill Merchandiser' : 'LoomPilot AI Concierge')),
+        timestamp: m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
         text: m.text,
+        actionOffer: m.actionOffer,
       }));
     }
-
-    if (activeChat?.messages && activeChat.messages.length > 0) {
-      return activeChat.messages;
-    }
-
-    return [];
-  }, [liveChatRes, activeChat]);
+    return activeChat?.messages || [];
+  }, [liveConvData, activeChat]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messagesToDisplay.length]);
+  }, [activeMessages]);
 
-  const handleSend = async (e?: React.FormEvent) => {
+  const handleSend = async (e?: React.FormEvent, customText?: string) => {
     if (e) e.preventDefault();
-    const text = inputText.trim();
-    if (!text || !selectedOrderId || isChatSending || isSendingLiveMessage) return;
+    const text = (customText || inputText).trim();
+    if (!text || (!backendOrderId && !selectedOrderId) || isChatSending || isSendingClientMsg) return;
 
-    try {
-      await sendOrderMessageMutation({ orderId: selectedOrderId, message: text }).unwrap();
-      setInputText('');
-      refetchLiveChat();
-    } catch (_err) {
-      if (isDemo) {
-        await demoSendChatMessage(selectedOrderId, text);
+    if (backendOrderId) {
+      try {
+        await sendClientMsgMutation({ orderId: backendOrderId, message: text }).unwrap();
         setInputText('');
-      } else {
-        addToast('Failed to deliver message to merchandising desk', 'error');
+        refetchLiveConv();
+      } catch (err: any) {
+        addToast(err?.data?.message || 'Error communicating with AI Concierge', 'error');
+      }
+    } else {
+      const ok = await sendChatMessage(selectedOrderId, text);
+      if (ok) {
+        setInputText('');
       }
     }
   };
 
   const handleQuickPrompt = async (promptText: string) => {
-    if (!selectedOrderId || isChatSending || isSendingLiveMessage) return;
-    try {
-      await sendOrderMessageMutation({ orderId: selectedOrderId, message: promptText }).unwrap();
-      refetchLiveChat();
-    } catch (_err) {
-      if (isDemo) {
-        await demoSendChatMessage(selectedOrderId, promptText);
-      }
-    }
+    await handleSend(undefined, promptText);
   };
 
   return (
@@ -168,7 +173,7 @@ export const MessagesPage: React.FC = () => {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-extrabold text-charcoal tracking-tight">
-          Quotations &amp; Negotiation Workspace
+          Quotations & Negotiation Workspace
         </h1>
         <p className="text-sm text-muted mt-1">
           Collaborate with LoomPilot AI concierge and Senior Mill Merchandisers on price per metre, delivery windows, and binding contracts.
@@ -180,216 +185,344 @@ export const MessagesPage: React.FC = () => {
         {/* Left Panel: Conversation Threads (4 cols) */}
         <div className="lg:col-span-4 border-r border-muted-border bg-ivory/40 flex flex-col">
           <div className="p-4 border-b border-muted-border bg-white flex items-center justify-between">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-charcoal">Active Conversations</h3>
-            <button
-              onClick={() => {
-                refetchOrders();
-                refetchLiveChat();
-              }}
-              className="text-xs text-muted hover:text-charcoal flex items-center gap-1 font-semibold"
-            >
-              <RefreshCw size={12} />
-              <span>Sync</span>
-            </button>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-charcoal">Active Order Threads</h3>
+            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-ivory text-muted border border-muted-border">
+              {orderIds.length} Threads
+            </span>
           </div>
 
-          <div className="flex-1 overflow-y-auto divide-y divide-muted-border/60">
-            {orderIds.length === 0 ? (
-              <div className="p-8 text-center text-muted text-xs">
-                No active orders found. Create an enquiry to begin merchandising conversations.
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            {!isDemo && isOrdersLoading && (
+              <div className="py-12 text-center text-xs text-muted flex items-center justify-center gap-2">
+                <Loader2 className="animate-spin text-vermilion" size={16} />
+                <span>Loading active order threads...</span>
               </div>
-            ) : (
-              orderIds.map((oId) => {
-                const thread = chats[oId]!;
-                const isSelected = selectedOrderId === oId;
-                const lastMsg = thread.messages[thread.messages.length - 1];
-
-                return (
-                  <button
-                    key={oId}
-                    onClick={() => setSelectedOrderId(oId)}
-                    className={`w-full text-left p-4 transition-all relative ${
-                      isSelected ? 'bg-white shadow-sm' : 'hover:bg-white/60'
-                    }`}
-                  >
-                    {isSelected && (
-                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-terracotta rounded-r" />
-                    )}
-                    <div className="flex justify-between items-start mb-1">
-                      <span className="font-extrabold text-charcoal text-sm">{oId}</span>
-                      <span className="text-[10px] text-muted font-medium">{thread.deliveryDate}</span>
-                    </div>
-                    <div className="text-xs font-semibold text-charcoal/90 truncate mb-1">
-                      {thread.productName}
-                    </div>
-                    <div className="text-[11px] text-muted truncate">
-                      {lastMsg ? lastMsg.text : `${thread.orderQuantity} &bull; ${thread.quotedPrice}`}
-                    </div>
-                    <div className="mt-2 flex items-center justify-between text-[10px]">
-                      <span className="font-bold text-forest bg-forest/10 px-2 py-0.5 rounded-full">
-                        {thread.totalQuote}
-                      </span>
-                      <span className="text-muted font-medium">{thread.status}</span>
-                    </div>
-                  </button>
-                );
-              })
             )}
+
+            {!isDemo && isOrdersError && (
+              <div className="p-4 text-center text-xs text-danger space-y-2">
+                <div>Failed to load order threads from server.</div>
+                <button
+                  type="button"
+                  onClick={() => refetchOrders()}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-danger text-white text-[11px] font-bold"
+                >
+                  <RefreshCw size={11} />
+                  <span>Retry</span>
+                </button>
+              </div>
+            )}
+
+            {!isOrdersLoading && !isOrdersError && orderIds.length === 0 && (
+              <div className="py-12 text-center text-xs text-muted space-y-1">
+                <div className="font-bold text-charcoal">No Order Threads Found</div>
+                <p className="text-[11px] text-muted max-w-[200px] mx-auto">
+                  Submit a manufacturing order to initiate price and delivery negotiations.
+                </p>
+              </div>
+            )}
+
+            {orderIds.map((id) => {
+              const chat = chats[id];
+              const isSelected = id === selectedOrderId;
+
+              return (
+                <div
+                  key={id}
+                  onClick={() => {
+                    setSelectedOrderId(id);
+                    clearChatError();
+                  }}
+                  className={`p-3.5 rounded-xl border transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-charcoal text-white border-charcoal shadow-md'
+                      : 'bg-white border-muted-border hover:border-muted text-charcoal'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={`font-mono text-xs font-bold ${isSelected ? 'text-white' : 'text-vermilion'}`}>
+                      {id}
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        isSelected
+                          ? 'bg-white/20 text-white'
+                          : chat.status.includes('Approved')
+                          ? 'bg-warning-bg text-warning'
+                          : 'bg-success-bg text-success'
+                      }`}
+                    >
+                      {chat.status}
+                    </span>
+                  </div>
+
+                  <div className={`text-xs font-bold truncate ${isSelected ? 'text-white' : 'text-charcoal'}`}>
+                    {chat.productName}
+                  </div>
+
+                  <div className={`text-[11px] mt-1 ${isSelected ? 'text-gray-300' : 'text-muted'}`}>
+                    {chat.quotedPrice} • {chat.orderQuantity}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        {/* Right Panel: Active Chat & Negotiation Area (8 cols) */}
+        {/* Right Panel: Conversation Stream (8 cols) */}
         <div className="lg:col-span-8 flex flex-col bg-white">
           {activeChat ? (
             <>
-              {/* Chat Thread Header */}
-              <div className="p-4 border-b border-muted-border flex items-center justify-between bg-white">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-base font-extrabold text-charcoal">
-                      {activeChat.orderId} &mdash; {activeChat.productName}
-                    </h2>
-                    <span className="text-xs bg-sand/60 text-charcoal font-bold px-2 py-0.5 rounded-full border border-muted-border">
-                      {activeChat.orderQuantity}
-                    </span>
+              {/* Order Context Header Bar */}
+              <div className="p-4 bg-ivory border-b border-muted-border flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-4 text-xs">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-muted block">Contract Reference</span>
+                    <strong className="text-charcoal font-bold font-mono">{activeChat.orderId}</strong>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-muted mt-1">
-                    <span>
-                      Quoted: <strong className="text-charcoal font-semibold">{activeChat.quotedPrice}</strong>
-                    </span>
-                    <span>&bull;</span>
-                    <span>
-                      Total: <strong className="text-charcoal font-semibold">{activeChat.totalQuote}</strong>
-                    </span>
-                    <span>&bull;</span>
-                    <span>Target Delivery: <strong className="text-charcoal font-semibold">{activeChat.deliveryDate}</strong></span>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-muted block">Fabric Formulation</span>
+                    <strong className="text-charcoal font-bold">{activeChat.productName}</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-muted block">Volume</span>
+                    <strong className="text-charcoal font-bold">{activeChat.orderQuantity}</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-muted block">Current Rate</span>
+                    <strong className="text-vermilion font-bold">{activeChat.quotedPrice}</strong>
                   </div>
                 </div>
 
-                <Link
-                  to={`/client/orders/${activeChat.orderId}`}
-                  className="text-xs font-bold text-terracotta hover:underline flex items-center gap-1"
-                >
-                  <span>View Order</span>
-                  <ArrowRight size={13} />
-                </Link>
+                {activeChat.status.includes('Approved') && (
+                  <button
+                    onClick={() => {
+                      acceptQuotation(activeChat.orderId);
+                      navigate('/client/payments');
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success text-white text-xs font-bold hover:bg-[#1A6C49] shadow-sm transition-colors"
+                  >
+                    <CheckCircle2 size={14} />
+                    <span>Accept Quotation</span>
+                  </button>
+                )}
               </div>
 
-              {/* Chat Messages Stream */}
-              <div className="flex-1 p-6 overflow-y-auto space-y-4 bg-ivory/20">
-                {isChatLoading && (
-                  <div className="flex justify-center py-4">
-                    <Loader2 size={20} className="animate-spin text-terracotta" />
+              {/* Service Status & Error Banners */}
+              <div className="px-4 pt-4 space-y-2">
+                {/* Live Commercial Escalation Status */}
+                {liveConvData?.data?.escalation?.status === 'open' && (
+                  <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-charcoal text-xs flex items-start gap-2.5 animate-in fade-in">
+                    <ShieldCheck size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold text-amber-900 block">Commercial Escalation Under Review</span>
+                      <span className="text-amber-800 text-[11px] leading-relaxed">
+                        Your concession request ({liveConvData.data.escalation.concessionRequested ? `${liveConvData.data.escalation.concessionRequested}%` : 'discount'} requested) has been escalated to Senior Mill Merchandisers. Managing Director John Doe is reviewing capacity.
+                      </span>
+                    </div>
                   </div>
                 )}
 
-                {messagesToDisplay.map((msg) => {
-                  const isUser = msg.sender === 'user';
-                  const isAdmin = msg.sender === 'admin';
-                  const isAi = msg.sender === 'assistant';
-
-                  return (
-                    <div
-                      key={msg.id}
-                      className={`flex gap-3 max-w-[85%] ${
-                        isUser ? 'ml-auto flex-row-reverse' : 'mr-auto'
-                      }`}
-                    >
-                      {/* Avatar */}
-                      <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white font-bold text-xs ${
-                          isUser
-                            ? 'bg-terracotta'
-                            : isAdmin
-                            ? 'bg-forest'
-                            : 'bg-charcoal'
-                        }`}
+                {chatError && (
+                  <div className="p-3 rounded-xl bg-danger-bg border border-danger/20 text-danger text-xs flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle size={15} className="flex-shrink-0" />
+                      <span>{chatError}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleSend()}
+                        disabled={isChatSending || isSendingClientMsg}
+                        className="px-2.5 py-1 rounded-lg bg-danger text-white text-[11px] font-bold hover:bg-danger/90 transition-colors inline-flex items-center gap-1"
                       >
-                        {isUser ? <User size={15} /> : isAdmin ? <Building size={15} /> : <Bot size={15} />}
-                      </div>
+                        <RefreshCw size={11} />
+                        <span>Retry</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={clearChatError}
+                        className="px-2 py-1 rounded-lg text-xs font-bold text-muted hover:text-charcoal"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
 
-                      {/* Message Bubble */}
-                      <div className="space-y-1.5">
-                        <div className={`flex items-center gap-2 text-[10px] text-muted ${isUser ? 'justify-end' : ''}`}>
-                          <span className="font-bold text-charcoal">{msg.senderName}</span>
-                          <span>{msg.time}</span>
-                        </div>
+              {/* Message Stream */}
+              <div className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-4 bg-ivory/20">
+                {activeMessages.length === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-2 text-muted min-h-[260px]">
+                    <Bot size={36} className="opacity-40" />
+                    <div className="text-xs font-bold text-charcoal">No Conversation History</div>
+                    <p className="text-[11px] text-muted max-w-sm">
+                      Ask questions about yarn costing, production lead times, or negotiate volume discounts with the LoomPilot AI Concierge.
+                    </p>
+                  </div>
+                ) : (
+                  activeMessages.map((msg: any) => {
+                    const isUser = msg.sender === 'user';
+                    const isAdmin = msg.sender === 'admin';
 
+                    return (
+                      <div
+                        key={msg.id}
+                        className={`flex gap-3 max-w-[85%] ${isUser ? 'ml-auto flex-row-reverse' : ''}`}
+                      >
+                        {/* Avatar */}
                         <div
-                          className={`p-3.5 rounded-2xl text-xs leading-relaxed ${
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs flex-shrink-0 ${
                             isUser
-                              ? 'bg-terracotta text-white rounded-tr-none shadow-sm'
+                              ? 'bg-vermilion text-white'
                               : isAdmin
-                              ? 'bg-forest/10 border border-forest/20 text-charcoal rounded-tl-none font-medium'
-                              : 'bg-white border border-muted-border text-charcoal rounded-tl-none shadow-sm'
+                              ? 'bg-[#1C4D79] text-white'
+                              : 'bg-charcoal text-white'
                           }`}
                         >
-                          <p className="whitespace-pre-line">{msg.text}</p>
+                          {isUser ? <User size={15} /> : isAdmin ? <Building size={15} /> : <Bot size={15} />}
+                        </div>
+
+                        {/* Content Bubble */}
+                        <div className="space-y-1">
+                          <div className={`flex items-center gap-2 text-[11px] ${isUser ? 'justify-end' : ''}`}>
+                            <strong className="text-charcoal font-bold">{msg.senderName}</strong>
+                            <span className="text-muted-light">{msg.time}</span>
+                            {msg.badge && (
+                              <span className="px-2 py-0.5 rounded-full bg-warning-bg text-warning text-[10px] font-bold">
+                                {msg.badge}
+                              </span>
+                            )}
+                          </div>
+
+                          <div
+                            className={`p-3.5 rounded-2xl text-xs leading-relaxed ${
+                              isUser
+                                ? 'bg-charcoal text-white rounded-tr-none'
+                                : 'bg-white border border-muted-border text-charcoal shadow-sm rounded-tl-none'
+                            }`}
+                          >
+                            <p>{msg.text}</p>
+
+                            {/* Formal Quote Revision Box */}
+                            {msg.revisedData && (
+                              <div className="mt-3 p-3.5 rounded-xl bg-ivory border border-warning text-charcoal space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-warning">
+                                    Official Revised Offer
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded-full bg-success-bg text-success text-[10px] font-bold inline-flex items-center gap-1">
+                                    <TrendingDown size={11} />
+                                    Saves {msg.revisedData.savings}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-baseline gap-2">
+                                  <span className="text-xs text-muted line-through">{msg.revisedData.originalRate}</span>
+                                  <span className="text-lg font-extrabold text-success">{msg.revisedData.newRate}</span>
+                                  <span className="text-xs font-bold text-charcoal">
+                                    (Revised Total: {msg.revisedData.newTotal})
+                                  </span>
+                                </div>
+
+                                <p className="text-[11px] text-muted">
+                                  Approved by Anil Sharma. Locks preferential spinning & loom allocation upon acceptance.
+                                </p>
+
+                                <button
+                                  onClick={() => {
+                                    acceptQuotation(activeChat.orderId);
+                                    navigate('/client/payments');
+                                  }}
+                                  className="w-full py-2 px-3 rounded-lg bg-success text-white text-xs font-bold hover:bg-[#1A6C49] transition-colors"
+                                >
+                                  Accept This Revised Quote & Start Production
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-
+                    );
+                  })
+                )}
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Quick Negotiation Prompts */}
-              <div className="px-4 py-2 border-t border-muted-border/60 bg-sand/30 flex items-center gap-2 overflow-x-auto text-xs">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-muted shrink-0">Quick Ask:</span>
+              {/* Quick Negotiation Action Prompts */}
+              <div className="px-4 py-2 border-t border-muted-border bg-white flex items-center gap-2 overflow-x-auto scrollbar-none">
+                <span className="text-[11px] font-bold text-muted flex-shrink-0">Shortcuts:</span>
                 <button
                   type="button"
-                  onClick={() => handleQuickPrompt("Can you offer a volume discount if we increase the order quantity by 20%?")}
-                  className="px-2.5 py-1 rounded-full bg-white border border-muted-border hover:border-terracotta text-charcoal text-[11px] shrink-0 font-medium transition-all"
+                  disabled={isChatSending}
+                  onClick={() => handleQuickPrompt('Can you reduce the quotation price given our bulk commitment?')}
+                  className="px-3 py-1 rounded-full text-[11px] font-semibold bg-ivory border border-muted-border hover:border-vermilion hover:text-vermilion whitespace-nowrap transition-colors disabled:opacity-50"
                 >
-                  Volume Discount Inquiry
+                  💰 Request Bulk Discount
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleQuickPrompt("Could you propose an alternative fabric blend that meets our ₹270/m target rate?")}
-                  className="px-2.5 py-1 rounded-full bg-white border border-muted-border hover:border-terracotta text-charcoal text-[11px] shrink-0 font-medium transition-all"
+                  disabled={isChatSending}
+                  onClick={() => handleQuickPrompt('Can we expedite the delivery deadline by 1 week?')}
+                  className="px-3 py-1 rounded-full text-[11px] font-semibold bg-ivory border border-muted-border hover:border-vermilion hover:text-vermilion whitespace-nowrap transition-colors disabled:opacity-50"
                 >
-                  Alternative Fabric Specs
+                  ⏱ Expedite Delivery Date
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleQuickPrompt("What is the earliest delivery date if we confirm quotation today?")}
-                  className="px-2.5 py-1 rounded-full bg-white border border-muted-border hover:border-terracotta text-charcoal text-[11px] shrink-0 font-medium transition-all"
+                  disabled={isChatSending}
+                  onClick={() => handleQuickPrompt('Can you provide lab dip shade swatches before loom beaming?')}
+                  className="px-3 py-1 rounded-full text-[11px] font-semibold bg-ivory border border-muted-border hover:border-vermilion hover:text-vermilion whitespace-nowrap transition-colors disabled:opacity-50"
                 >
-                  Earliest Delivery Date
+                  🎨 Request Lab Swatches
                 </button>
               </div>
 
-              {/* Input Bar */}
-              <form onSubmit={handleSend} className="p-3 border-t border-muted-border bg-white flex items-center gap-2">
+              {/* Chat Input Bar */}
+              <form onSubmit={handleSend} className="p-3.5 border-t border-muted-border bg-white flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => addToast('Reference spec sheet or PO attached.', 'info')}
+                  className="p-2 rounded-xl text-muted hover:text-charcoal hover:bg-ivory transition-colors"
+                  title="Attach Spec Sheet"
+                >
+                  <Paperclip size={18} />
+                </button>
+
                 <input
                   type="text"
                   value={inputText}
+                  disabled={isChatSending || isSendingClientMsg}
                   onChange={(e) => setInputText(e.target.value)}
-                  placeholder="Ask a question about yarn counts, delivery date, or propose a target rate..."
-                  disabled={isChatSending || isSendingLiveMessage}
-                  className="flex-1 px-4 py-2.5 rounded-xl border border-muted-border text-xs text-charcoal focus:outline-none focus:border-terracotta disabled:opacity-60 font-medium bg-ivory/20 focus:bg-white transition-all"
+                  placeholder="Ask 'Why is the price high?', request a volume discount, or ask for shade swatches..."
+                  className="flex-1 px-4 py-2 text-xs rounded-full border border-muted-border bg-ivory focus:bg-white focus:border-vermilion focus:outline-none disabled:opacity-60"
                 />
+
                 <button
                   type="submit"
-                  disabled={!inputText.trim() || isChatSending || isSendingLiveMessage}
-                  className="px-4 py-2.5 rounded-xl bg-terracotta text-white font-bold text-xs hover:bg-terracotta-dark disabled:opacity-50 transition-all flex items-center gap-1.5 shadow-sm"
+                  disabled={!inputText.trim() || isChatSending || isSendingClientMsg}
+                  className="px-4 py-2 rounded-full bg-vermilion hover:bg-vermilion-hover text-white text-xs font-bold shadow-vermilion disabled:opacity-50 transition-all inline-flex items-center gap-1.5 flex-shrink-0"
                 >
-                  {isChatSending || isSendingLiveMessage ? (
-                    <Loader2 size={14} className="animate-spin" />
+                  {isChatSending || isSendingClientMsg ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" />
+                      <span>Sending...</span>
+                    </>
                   ) : (
-                    <Send size={14} />
+                    <>
+                      <span>Send</span>
+                      <Send size={13} />
+                    </>
                   )}
-                  <span>Send</span>
                 </button>
               </form>
             </>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-muted">
-              <Bot size={40} className="text-muted/50 mb-3" />
-              <h3 className="font-extrabold text-charcoal text-sm">No Conversation Selected</h3>
-              <p className="text-xs max-w-sm mt-1">
-                Select an order from the active list to negotiate commercial terms with the mill.
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-xs text-muted space-y-1">
+              <div className="font-bold text-charcoal">No Active Thread Selected</div>
+              <p className="text-[11px] text-muted max-w-sm">
+                Select an order thread from the left panel to open the negotiation workspace.
               </p>
             </div>
           )}

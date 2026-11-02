@@ -206,6 +206,19 @@ export const catalogApi = apiSlice.injectEndpoints({
       query: (id) => `/users/${id}`,
       providesTags: (_res, _err, id) => [{ type: 'User', id }],
     }),
+
+    getMarketPrices: builder.query<{ success: boolean; data: any[] }, void>({
+      query: () => '/market-prices',
+      providesTags: [{ type: 'MarketPrice', id: 'LIST' }],
+    }),
+
+    triggerSurgeReprice: builder.mutation<{ data: { affectedOrders: string[]; message: string } }, void>({
+      query: () => ({
+        url: '/market-prices/trigger-surge-reprice',
+        method: 'POST',
+      }),
+      invalidatesTags: [{ type: 'MarketPrice', id: 'LIST' }, { type: 'Order', id: 'LIST' }],
+    }),
   }),
 });
 
@@ -225,5 +238,7 @@ export const {
   useGetClientByIdQuery,
   useGetUsersQuery,
   useGetUserByIdQuery,
+  useGetMarketPricesQuery,
+  useTriggerSurgeRepriceMutation,
 } = catalogApi;
 

@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { X, Send } from 'lucide-react';
+import { X, Send, Loader2 } from 'lucide-react';
 import type { Order } from '../../types';
 
 interface ProposeAlternativeModalProps {
   order: Order | null;
   onClose: () => void;
-  onConfirmAlternative: (orderId: string, alternativeDate: string, splitDescription: string) => void;
+  onConfirmAlternative: (orderId: string, alternativeDate: string, splitDescription: string) => Promise<void> | void;
 }
 
 export const ProposeAlternativeModal: React.FC<ProposeAlternativeModalProps> = ({
@@ -19,11 +19,22 @@ export const ProposeAlternativeModal: React.FC<ProposeAlternativeModalProps> = (
   const [splitDesc, setSplitDesc] = useState<string>(
     'Split shipment: Deliver 10,000m on requested date (Nov 12), balance 15,000m on Nov 24.'
   );
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onConfirmAlternative(order.id, altDate, splitDesc);
-    onClose();
+    setErrorMessage(null);
+    setIsSubmitting(true);
+    try {
+      await onConfirmAlternative(order.id, altDate, splitDesc);
+      onClose();
+    } catch (err: any) {
+      const msg = err?.data?.message || err?.error || err?.message || 'Failed to propose alternative.';
+      setErrorMessage(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -68,13 +79,33 @@ export const ProposeAlternativeModal: React.FC<ProposeAlternativeModalProps> = (
             />
           </div>
 
+          {errorMessage && (
+            <div style={{
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              borderRadius: 14,
+              padding: '10px 14px',
+              fontSize: 11,
+              color: '#b91c1c',
+              fontWeight: 600
+            }}>
+              {errorMessage}
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-            <button type="submit" className="admin-btn-primary" style={{ flex: 1.2, justifyContent: 'center' }}>
-              <Send size={14} />
-              <span>Draft Counter-Quotation</span>
+            <button
+              type="submit"
+              className="admin-btn-primary"
+              style={{ flex: 1.2, justifyContent: 'center', opacity: isSubmitting ? 0.7 : 1 }}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              <span>{isSubmitting ? 'Evaluating Alternative...' : 'Draft Counter-Quotation'}</span>
             </button>
             <button
               type="button"
+              disabled={isSubmitting}
               style={{
                 flex: 1,
                 background: '#ffffff',

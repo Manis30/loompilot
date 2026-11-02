@@ -31,6 +31,7 @@ export const apiSlice = createApi({
     'Dashboard',
     'Payment',
     'AI',
+    'MarketPrice',
   ],
   endpoints: () => ({}),
 });

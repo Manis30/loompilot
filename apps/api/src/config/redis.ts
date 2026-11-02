@@ -1,4 +1,6 @@
 import { Redis } from "ioredis";
+// @ts-ignore
+import RedisMock from "ioredis-mock";
 import { getEnv } from "./env.js";
 import { logger } from "../utils/logger.js";
 
@@ -49,6 +51,12 @@ export function extractErrorCode(err: unknown): string {
 export function getRedisClient(): Redis {
   if (!redisClient) {
     const env = getEnv();
+    if (process.env.USE_REDIS_MOCK === "true") {
+      logger.info("Using in-memory Redis client (ioredis-mock)");
+      redisClient = new (RedisMock as any)() as unknown as Redis;
+      return redisClient;
+    }
+
     redisClient = new Redis(env.REDIS_URL, {
       maxRetriesPerRequest: null, // Required by BullMQ
       enableReadyCheck: true,
@@ -88,6 +96,9 @@ export function setRedisClient(client: Redis | null): void {
 export async function connectRedis(): Promise<Redis> {
   const env = getEnv();
   const client = getRedisClient();
+  if (process.env.USE_REDIS_MOCK === "true") {
+    return client;
+  }
   if (client.status === "wait" || client.status === "close") {
     try {
       await client.connect();
@@ -122,6 +133,7 @@ export async function disconnectRedis(): Promise<void> {
 }
 
 export function isRedisReady(): boolean {
+  if (process.env.USE_REDIS_MOCK === "true") return true;
   if (!redisClient) return false;
   return redisClient.status === "ready" || redisClient.status === "connect";
 }

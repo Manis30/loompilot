@@ -276,22 +276,22 @@ export const SupervisorProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const issues: IssueTicket[] = useMemo(() => {
     const raw = ticketsRes?.data || [];
     if (Array.isArray(raw) && raw.length > 0) {
-      return raw.map((t: any) => ({
+      return raw.map((t: any): IssueTicket => ({
         id: String(t.ticketNumber || t.id || t._id),
+        category: t.category || t.issueType || 'Machine Maintenance',
+        relatedOrder: t.relatedOrder || t.orderId || 'Active Run',
+        machineId: t.machineId || 'Loom-01',
         date: t.createdAt ? new Date(t.createdAt).toLocaleDateString() : 'Today',
         time: t.createdAt ? new Date(t.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now',
-        category: t.category || t.issueType || 'Maintenance',
-        relatedOrder: t.relatedOrder || t.orderId || 'ORD-GEN',
-        machineId: t.machineId || 'Loom-01',
+        severity: (t.severity || (t.priority === 'High' ? 'High' : 'Medium')) as any,
+        description: t.description || t.title || 'Maintenance check',
+        impact: t.impact || 'Loom line paused pending technician verification',
+        status: (t.status === 'resolved' || t.status === 'closed' ? 'Resolved' : 'Open') as any,
         shed: t.shed || 'Shed A',
         issueType: t.issueType || 'Mechanical',
-        description: t.description || t.title || 'Maintenance check',
         reportedBy: t.reportedBy || 'Floor Supervisor',
-        severity: (t.severity || t.priority || 'Medium') as any,
-        impact: t.impact || 'Normal Operations',
-        status: t.status === 'resolved' || t.status === 'closed' ? 'Resolved' : 'Pending',
-        rawStatus: t.status,
         priority: t.priority || 'Medium',
+        rawStatus: t.status,
       }));
     }
     return isDemoEnabled ? INITIAL_ISSUES : [];
@@ -387,7 +387,7 @@ export const SupervisorProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       category: issueData.category,
       machineId: issueData.machineId,
       description: issueData.description,
-      priority: issueData.priority?.toLowerCase() || 'medium',
+      priority: (issueData.priority || issueData.severity || 'medium').toLowerCase(),
     }).unwrap();
 
     refetchTickets();

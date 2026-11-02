@@ -433,42 +433,118 @@ export const ordersApi = apiSlice.injectEndpoints({
       ],
     }),
 
-    createOrderPurchaseDecision: builder.mutation<
+    getOrderMessages: builder.query<{ success: boolean; data: any }, string>({
+      query: (orderId) => `/orders/${orderId}/messages`,
+      providesTags: (_res, _err, id) => [{ type: 'Order', id: `MESSAGES_${id}` }],
+    }),
+
+    getClientOrderMessages: builder.query<{ success: boolean; data: any }, string>({
+      query: (orderId) => `/client/orders/${orderId}/messages`,
+      providesTags: (_res, _err, id) => [{ type: 'Order', id: `CLIENT_MESSAGES_${id}` }],
+    }),
+
+    sendClientOrderMessage: builder.mutation<
       { success: boolean; data: any },
-      { id: string; body: any }
+      { orderId: string; message: string }
     >({
-      query: ({ id, body }) => ({
-        url: `/orders/${id}/purchase-decisions`,
+      query: ({ orderId, message }) => ({
+        url: `/client/orders/${orderId}/chat`,
         method: 'POST',
-        body,
+        body: { message },
       }),
-      invalidatesTags: (_res, _err, { id }) => [
-        { type: 'Order', id },
-        { type: 'Order', id: 'LIST' },
-        { type: 'Stock', id: 'PURCHASE_DECISIONS' },
+      invalidatesTags: (_res, _err, { orderId }) => [
+        { type: 'Order', id: `CLIENT_MESSAGES_${orderId}` },
+        { type: 'Order', id: orderId },
       ],
     }),
 
-    getClientNotifications: builder.query<
-      { success: boolean; data: any[]; pagination?: any; meta?: any },
-      { unreadOnly?: boolean; category?: string } | void
+    sendAdminOrderMessage: builder.mutation<
+      { success: boolean; data: any },
+      { orderId: string; message: string }
     >({
+      query: ({ orderId, message }) => ({
+        url: `/orders/${orderId}/chat`,
+        method: 'POST',
+        body: { message },
+      }),
+      invalidatesTags: (_res, _err, { orderId }) => [
+        { type: 'Order', id: `MESSAGES_${orderId}` },
+        { type: 'Order', id: orderId },
+      ],
+    }),
+
+    resolveEscalation: builder.mutation<
+      { success: boolean; data: any },
+      { orderId: string; resolutionNotes?: string; discountPct?: number; notes?: string }
+    >({
+      query: ({ orderId, ...body }) => ({
+        url: `/orders/${orderId}/escalation/resolve`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: (_res, _err, { orderId }) => [
+        { type: 'Order', id: `MESSAGES_${orderId}` },
+        { type: 'Order', id: orderId },
+        { type: 'Order', id: 'LIST' },
+      ],
+    }),
+
+    approvePriceRevision: builder.mutation<{ success: boolean; data: any }, { orderId: string; revisionNo?: number; body?: any }>({
+      query: ({ orderId, revisionNo = 1, body }) => ({
+        url: `/orders/${orderId}/revisions/${revisionNo}/approve`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: (_res, _err, { orderId }) => [
+        { type: 'Order', id: orderId },
+        { type: 'Order', id: 'LIST' },
+        { type: 'MarketPrice', id: 'LIST' },
+      ],
+    }),
+
+    rejectPriceRevision: builder.mutation<{ success: boolean; data: any }, { orderId: string; revisionNo?: number; body?: any }>({
+      query: ({ orderId, revisionNo = 1, body }) => ({
+        url: `/orders/${orderId}/revisions/${revisionNo}/reject`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: (_res, _err, { orderId }) => [
+        { type: 'Order', id: orderId },
+        { type: 'Order', id: 'LIST' },
+        { type: 'MarketPrice', id: 'LIST' },
+      ],
+    }),
+
+    createOrderPurchaseDecision: builder.mutation<{ success: boolean; data: any }, { orderId: string; body: any }>({
+      query: ({ orderId, body }) => ({
+        url: `/orders/${orderId}/purchase-decisions`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: (_res, _err, { orderId }) => [
+        { type: 'Order', id: orderId },
+        { type: 'Order', id: 'LIST' },
+      ],
+    }),
+
+    rerunFeasibility: builder.mutation<{ success: boolean; data: any }, { orderId: string; body?: any }>({
+      query: ({ orderId, body }) => ({
+        url: `/orders/${orderId}/feasibility/rerun`,
+        method: 'POST',
+        body: body || {},
+      }),
+      invalidatesTags: (_res, _err, { orderId }) => [
+        { type: 'Order', id: orderId },
+        { type: 'Order', id: 'LIST' },
+      ],
+    }),
+
+    getClientNotifications: builder.query<{ success: boolean; data: any[]; meta?: any }, { unreadOnly?: boolean } | void>({
       query: (params) => ({
         url: '/client/notifications',
         params: params || {},
       }),
-      transformResponse: (response: any) => {
-        if (Array.isArray(response)) {
-          return { success: true, data: response, pagination: undefined, meta: undefined };
-        }
-        return {
-          success: true,
-          data: response?.data || response?.items || [],
-          pagination: response?.meta || response?.pagination,
-          meta: response?.meta || response?.pagination,
-        };
-      },
-      providesTags: [{ type: 'Order', id: 'CLIENT_NOTIFICATIONS' }],
+      providesTags: [{ type: 'Notification', id: 'CLIENT_LIST' }],
     }),
 
     markClientNotificationRead: builder.mutation<{ success: boolean; data: any }, string>({
@@ -476,15 +552,7 @@ export const ordersApi = apiSlice.injectEndpoints({
         url: `/client/notifications/${id}/read`,
         method: 'PATCH',
       }),
-      invalidatesTags: [{ type: 'Order', id: 'CLIENT_NOTIFICATIONS' }],
-    }),
-
-    markAllClientNotificationsRead: builder.mutation<{ success: boolean; data: any }, void>({
-      query: () => ({
-        url: '/client/notifications/read-all',
-        method: 'POST',
-      }),
-      invalidatesTags: [{ type: 'Order', id: 'CLIENT_NOTIFICATIONS' }],
+      invalidatesTags: [{ type: 'Notification', id: 'CLIENT_LIST' }],
     }),
   }),
 });
@@ -516,9 +584,16 @@ export const {
   useClientDeclineQuotationMutation,
   useClientPayMilestoneMutation,
   useClientCreatePaymentOrderMutation,
+  useGetOrderMessagesQuery,
+  useGetClientOrderMessagesQuery,
+  useSendClientOrderMessageMutation,
+  useSendAdminOrderMessageMutation,
+  useResolveEscalationMutation,
+  useApprovePriceRevisionMutation,
+  useRejectPriceRevisionMutation,
   useCreateOrderPurchaseDecisionMutation,
+  useRerunFeasibilityMutation,
   useGetClientNotificationsQuery,
   useMarkClientNotificationReadMutation,
-  useMarkAllClientNotificationsReadMutation,
 } = ordersApi;
 

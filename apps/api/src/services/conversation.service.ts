@@ -1,88 +1,113 @@
-import { Types } from "mongoose";
 import { ConversationRepository } from "../repositories/conversation.repository.js";
 import { OrdersRepository } from "../repositories/orders.repository.js";
-import { NotificationRepository } from "../repositories/notification.repository.js";
-import { IAgentsClient } from "../interfaces/agents-client.interface.js";
-import { IConversation, IConversationMessage } from "../models/interaction/conversation.model.js";
+import { AuditService } from "./audit.service.js";
 import { AppError } from "../errors/app-error.js";
-import { ErrorCode } from "@loompilot/shared";
+import { ErrorCode, InternalQuotationRevision } from "@loompilot/shared";
+import { IAgentsClient } from "../interfaces/agents-client.interface.js";
+import { getContainer } from "../container.js";
+import { logger } from "../utils/logger.js";
+import { IConversation, IConversationMessage } from "../models/interaction/conversation.model.js";
 
 export class ConversationService {
   constructor(
-    private readonly conversationRepo = new ConversationRepository(),
+    private readonly convRepo = new ConversationRepository(),
     private readonly ordersRepo = new OrdersRepository(),
-    private readonly notificationRepo = new NotificationRepository(),
-    private readonly agentsClient?: IAgentsClient
+    private readonly auditService = new AuditService(),
+    private agentsClient?: IAgentsClient
   ) {}
 
-  async getClientOrderChat(
-    tenantId: string,
-    clientId: string,
-    orderId: string
-  ): Promise<IConversation> {
+  private getAgentsClient(): IAgentsClient {
+    return this.agentsClient || getContainer().agentsClient;
+  }
+
+  async getClientConversation(tenantId: string, orderId: string, clientId: string): Promise<IConversation> {
     const order = await this.ordersRepo.findById(tenantId, orderId);
     if (!order) {
       throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
     }
     if (String(order.clientId) !== clientId) {
-      throw new AppError(ErrorCode.FORBIDDEN, "Access denied to order conversation", 403);
+      throw new AppError(ErrorCode.FORBIDDEN, "Access denied: Order does not belong to client", 403);
     }
 
-    let conv = await this.conversationRepo.findByOrderId(tenantId, orderId);
-    if (!conv) {
-      conv = await this.conversationRepo.create(tenantId, {
-        tenantId,
-        orderId: new Types.ObjectId(orderId),
-        clientId: new Types.ObjectId(clientId),
-        status: "agent_handling",
-        messages: [
-          {
-            senderType: "assistant",
-            text: `Welcome! I am your LoomPilot textile merchandiser concierge for order ${order.orderNumber}. I can answer questions on fabric specifications, delivery timelines, and standard volume price tiers.`,
-            createdAt: new Date(),
-          },
-        ],
-        lastMessageAt: new Date(),
-        version: 1,
-      } as any);
-    }
-
-    return conv;
+    return this.convRepo.findOrCreate(tenantId, orderId, clientId);
   }
 
-  async sendClientMessage(
+  async postClientMessage(
     tenantId: string,
-    clientId: string,
     orderId: string,
+    clientId: string,
     text: string
-  ): Promise<{ reply: string; conversation: IConversation }> {
-    const conv = await this.getClientOrderChat(tenantId, clientId, orderId);
+  ): Promise<{ conversation: IConversation; assistantReply?: IConversationMessage }> {
     const order = await this.ordersRepo.findById(tenantId, orderId);
+    if (!order) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+    }
+    if (String(order.clientId) !== clientId) {
+      throw new AppError(ErrorCode.FORBIDDEN, "Access denied: Order does not belong to client", 403);
+    }
+
+    const conv = await this.convRepo.findOrCreate(tenantId, orderId, clientId);
 
     const clientMsg: IConversationMessage = {
       senderType: "client",
-      text,
-      createdAt: new Date(),
+      text: text.trim(),
       visibility: "client_visible",
+      createdAt: new Date(),
     };
 
-    await this.conversationRepo.appendMessage(tenantId, String(conv._id), clientMsg);
+    let updatedConv = await this.convRepo.addMessage(tenantId, String(conv._id), clientMsg);
 
-    // Analyze intent for price discount / negotiation escalation
-    const lowerText = text.toLowerCase();
-    const isPriceNegotiation =
-      lowerText.includes("discount") ||
-      lowerText.includes("cheaper") ||
-      lowerText.includes("reduce") ||
-      lowerText.includes("price") ||
-      lowerText.includes("concession") ||
-      lowerText.includes("lower rate") ||
-      lowerText.includes("rate");
+    const lower = text.toLowerCase();
+    const isDiscountRequest =
+      lower.includes("discount") ||
+      lower.includes("concession") ||
+      lower.includes("reduce") ||
+      lower.includes("cheaper") ||
+      lower.includes("lower") ||
+      lower.includes("rebate") ||
+      lower.includes("negotiate") ||
+      lower.includes("better price") ||
+      lower.includes("margin");
 
-    let assistantText = "";
-    if (this.agentsClient) {
+    let assistantMsg: IConversationMessage | undefined;
+
+    if (isDiscountRequest) {
+      // Per LoomPilot specification (Doc §3.6, §4):
+      // The assistant never grants a discount or reveals cost/margin.
+      // A concession request is escalated to the admin in the same chat.
+      const currentPricePaise = order.quotation?.totalPaise || (order as any).quotedTotalPaise || 0;
+
+      await this.convRepo.setEscalation(tenantId, String(conv._id), {
+        type: "discount",
+        summary: `Client requested volume discount on order ${order.orderNumber}: "${text.trim()}"`,
+        currentPricePaise,
+        status: "open",
+      });
+
+      const replyText =
+        "Under LoomPilot mill governance, the AI concierge cannot independently authorize pricing discounts. I have formatted your concession request and escalated it directly to our Managing Director for executive review in this chat thread.";
+
+      assistantMsg = {
+        senderType: "assistant",
+        text: replyText,
+        visibility: "client_visible",
+        createdAt: new Date(),
+      };
+
+      updatedConv = await this.convRepo.addMessage(tenantId, String(conv._id), assistantMsg);
+
+      await this.auditService.log({
+        tenantId,
+        actor: { id: clientId, type: "client" },
+        action: "DISCOUNT_REQUEST_ESCALATED",
+        entity: { collection: "conversations", id: String(conv._id) },
+        after: { orderId, text },
+      });
+    } else {
+      // Call AI Agent for chat assistance
       try {
-        const agentResult = await this.agentsClient.chatReply({
+        const client = this.getAgentsClient();
+        const agentResult = await client.chatReply({
           tenantId,
           conversationId: String(conv._id),
           orderId,
@@ -90,142 +115,164 @@ export class ConversationService {
           lastMessage: text,
           senderRole: "client",
         });
-        if (agentResult.success && agentResult.data?.messageText) {
-          assistantText = agentResult.data.messageText;
-        }
-      } catch (err) {
-        // Fallback below
+
+        const replyText =
+          agentResult?.data?.messageText ||
+          "Thank you for your message. Your inquiry regarding order " +
+            order.orderNumber +
+            " has been logged with our mill production team.";
+
+        assistantMsg = {
+          senderType: "assistant",
+          text: replyText,
+          visibility: "client_visible",
+          createdAt: new Date(),
+        };
+
+        updatedConv = await this.convRepo.addMessage(tenantId, String(conv._id), assistantMsg);
+      } catch (err: any) {
+        logger.warn({ err: err?.message, orderId }, "Agent chat reply fallback triggered");
+        assistantMsg = {
+          senderType: "assistant",
+          text: "Thank you for reaching out. We have logged your query and our merchandising team will follow up shortly.",
+          visibility: "client_visible",
+          createdAt: new Date(),
+        };
+        updatedConv = await this.convRepo.addMessage(tenantId, String(conv._id), assistantMsg);
       }
     }
-
-    if (!assistantText) {
-      if (isPriceNegotiation) {
-        assistantText =
-          "Under LoomPilot commercial governance, AI concierge cannot independently authorize rate concessions. I have logged your request and escalated it directly to Senior Production Merchandising & Admin for approval.";
-      } else {
-        assistantText =
-          `Thank you for your message regarding Order ${order?.orderNumber || orderId}. Our production schedule and materials are aligned with your delivery window.`;
-      }
-    }
-
-    // If price negotiation is detected, flag escalation for Admin
-    if (isPriceNegotiation && conv.status !== "escalated") {
-      await this.conversationRepo.setEscalation(tenantId, String(conv._id), {
-        type: "discount",
-        summary: `Client requested rate concession on Order ${order?.orderNumber || orderId}: "${text}"`,
-        status: "open",
-        currentPricePaise: order?.quotation?.totalPaise,
-      });
-
-      // Dispatch notification to admin
-      await this.notificationRepo.createNotification(tenantId, {
-        recipient: { userId: "admin" },
-        kind: "alert",
-        type: "client_negotiation_escalation",
-        channel: "in_app",
-        title: `Discount Escalation: Order ${order?.orderNumber || orderId}`,
-        body: `Client has requested a price concession on order ${order?.orderNumber || orderId}. Please review in Chat Escalations.`,
-        entity: { collection: "orders", id: orderId },
-      });
-    }
-
-    const assistantMsg: IConversationMessage = {
-      senderType: "assistant",
-      text: assistantText,
-      createdAt: new Date(),
-      visibility: "client_visible",
-    };
-
-    const updated = await this.conversationRepo.appendMessage(
-      tenantId,
-      String(conv._id),
-      assistantMsg
-    );
 
     return {
-      reply: assistantText,
-      conversation: updated || conv,
+      conversation: updatedConv || conv,
+      assistantReply: assistantMsg,
     };
   }
 
-  async getAdminConversations(
-    tenantId: string,
-    filter: { status?: string; hasEscalation?: boolean } = {}
-  ): Promise<IConversation[]> {
-    return this.conversationRepo.findConversations(tenantId, filter);
-  }
-
-  async getConversationById(
-    tenantId: string,
-    conversationId: string
-  ): Promise<IConversation> {
-    const conv = await this.conversationRepo.findById(tenantId, conversationId);
-    if (!conv) {
-      throw new AppError(ErrorCode.NOT_FOUND, "Conversation not found", 404);
+  async getAdminConversation(tenantId: string, orderId: string): Promise<IConversation> {
+    const order = await this.ordersRepo.findById(tenantId, orderId);
+    if (!order) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
     }
-    return conv;
+    return this.convRepo.findOrCreate(tenantId, orderId, String(order.clientId));
   }
 
-  async sendAdminMessage(
+  async postAdminMessage(
     tenantId: string,
-    _adminUser: { id: string; name?: string },
-    conversationId: string,
+    orderId: string,
+    adminActor: { id: string; email?: string; name?: string },
     text: string
   ): Promise<IConversation> {
-    const conv = await this.getConversationById(tenantId, conversationId);
+    const order = await this.ordersRepo.findById(tenantId, orderId);
+    if (!order) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+    }
+
+    const conv = await this.convRepo.findOrCreate(tenantId, orderId, String(order.clientId));
 
     const adminMsg: IConversationMessage = {
       senderType: "admin",
-      text,
-      createdAt: new Date(),
+      text: text.trim(),
       visibility: "client_visible",
+      createdAt: new Date(),
     };
 
-    const updated = await this.conversationRepo.appendMessage(
-      tenantId,
-      conversationId,
-      adminMsg
-    );
+    const updated = await this.convRepo.addMessage(tenantId, String(conv._id), adminMsg);
 
-    // Notify client of admin reply
-    if (conv.clientId) {
-      await this.notificationRepo.createNotification(tenantId, {
-        recipient: { clientId: String(conv.clientId) },
-        kind: "notification",
-        type: "admin_chat_reply",
-        channel: "in_app",
-        title: "New Message from LoomPilot Merchandising",
-        body: `Managing Merchandiser: "${text.slice(0, 100)}${text.length > 100 ? "..." : ""}"`,
-        entity: { collection: "orders", id: String(conv.orderId) },
-      });
+    // If conversation was escalated, update status to admin_handling
+    if (conv.status === "escalated" || conv.status === "agent_handling") {
+      await this.convRepo.updateConversationStatus(
+        tenantId,
+        String(conv._id),
+        "admin_handling",
+        adminActor.id
+      );
     }
+
+    await this.auditService.log({
+      tenantId,
+      actor: { id: adminActor.id, type: "user", email: adminActor.email },
+      action: "ADMIN_CHAT_REPLY",
+      entity: { collection: "conversations", id: String(conv._id) },
+      after: { orderId, text: text.trim() },
+    });
 
     return updated || conv;
   }
 
-  async resolveAdminEscalation(
+  async resolveEscalation(
     tenantId: string,
-    adminUser: { id: string; name?: string },
-    conversationId: string,
-    params: { approved: boolean; concessionPercent?: number; notes?: string }
+    orderId: string,
+    adminActor: { id: string; email?: string },
+    data: { approved: boolean; concessionPercent?: number; notes?: string }
   ): Promise<IConversation> {
-    const conv = await this.getConversationById(tenantId, conversationId);
-    const order = await this.ordersRepo.findById(tenantId, String(conv.orderId));
+    const order = await this.ordersRepo.findById(tenantId, orderId);
+    if (!order) {
+      throw new AppError(ErrorCode.NOT_FOUND, "Order not found", 404);
+    }
 
-    const resolutionText = params.approved
-      ? `Senior Management has approved a ${params.concessionPercent || 5}% concession for order ${order?.orderNumber || conv.orderId}. Revised pricing has been authorized.`
-      : `Senior Management has reviewed your request. Due to locked raw material costs and yarn commitments, the current rate stands.`;
+    const conv = await this.convRepo.findOrCreate(tenantId, orderId, String(order.clientId));
 
-    const resolution = {
-      by: adminUser.id,
-      at: new Date(),
-      outcome: params.approved ? "approved" : "rejected",
-      notes: params.notes || (params.approved ? "Concession granted" : "Rate upheld"),
+    const concessionPct = data.concessionPercent || 5;
+    let resolutionMessage = "";
+
+    if (data.approved) {
+      const oldPricePaise = order.quotation?.totalPaise || 0;
+      const discountAmountPaise = Math.round((oldPricePaise * concessionPct) / 100);
+      const newPricePaise = Math.max(0, oldPricePaise - discountAmountPaise);
+
+      // Create official quotation revision on order
+      const revisionDoc: InternalQuotationRevision = {
+        schemaVersion: "1.0",
+        tenantId,
+        orderId,
+        reasonType: "discount",
+        oldPricePaise,
+        newPricePaise,
+        changePct: -concessionPct,
+        clientReason: `Management approved a ${concessionPct}% concession in appreciation of our manufacturing partnership.`,
+      };
+
+      const currentRevisions = order.quotation?.revisions || [];
+      const nextRevisionNo = currentRevisions.length + 1;
+
+      await this.ordersRepo.addQuotationRevision(tenantId, orderId, {
+        ...revisionDoc,
+        revisionNo: nextRevisionNo,
+        status: "sent",
+        createdAt: new Date(),
+      } as any);
+
+      resolutionMessage = `Management has approved your discount request: A ${concessionPct}% concession has been authorized for order ${order.orderNumber}. A revised quotation (Revision #${nextRevisionNo}) has been issued for your review and acceptance.`;
+    } else {
+      resolutionMessage =
+        data.notes ||
+        `Management has reviewed your request for order ${order.orderNumber}. Due to current locked raw material rates and minimum margin constraints, we are unable to provide an additional discount at this stage.`;
+    }
+
+    // Append resolution message to conversation
+    const adminMsg: IConversationMessage = {
+      senderType: "admin",
+      text: resolutionMessage,
+      visibility: "client_visible",
+      createdAt: new Date(),
     };
 
-    await this.conversationRepo.resolveEscalation(tenantId, conversationId, resolution);
+    await this.convRepo.addMessage(tenantId, String(conv._id), adminMsg);
 
-    // Send closing admin message into thread
-    return this.sendAdminMessage(tenantId, adminUser, conversationId, resolutionText);
+    const updated = await this.convRepo.resolveEscalation(tenantId, String(conv._id), {
+      by: adminActor.id,
+      outcome: data.approved ? `Approved ${concessionPct}% discount` : "Declined",
+      notes: data.notes,
+    });
+
+    await this.auditService.log({
+      tenantId,
+      actor: { id: adminActor.id, type: "user", email: adminActor.email },
+      action: "ESCALATION_RESOLVED",
+      entity: { collection: "conversations", id: String(conv._id) },
+      after: { orderId, approved: data.approved, concessionPercent: concessionPct },
+    });
+
+    return updated || conv;
   }
 }

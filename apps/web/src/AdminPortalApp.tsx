@@ -5,20 +5,24 @@ import {
   useRejectQuotationMutation,
   useSendQuotationMutation,
   useAssignSupervisorsMutation,
-  useStartProductionMutation,
-  useDecideOrderMutation,
-  useCreateOrderPurchaseDecisionMutation,
   useCancelOrderMutation,
   useRecordDeliveryMutation,
   useRecordManualReceiptMutation,
+  useSendAdminOrderMessageMutation,
+  useResolveEscalationMutation,
+  useApprovePriceRevisionMutation,
+  useRejectPriceRevisionMutation,
+  useCreateOrderPurchaseDecisionMutation,
+  useRerunFeasibilityMutation,
 } from './store/api/ordersApi';
-import { useCreatePurchaseDecisionMutation } from './store/api/stockApi';
 import {
   useGetClientsQuery,
   useGetProductsQuery,
   useGetMaterialsQuery,
   useGetUsersQuery,
   useGetMachinesQuery,
+  useGetMarketPricesQuery,
+  useTriggerSurgeRepriceMutation,
 } from './store/api/catalogApi';
 import { useGetOrdersSummaryQuery, useGetAuditLogsQuery } from './store/api/dashboardApi';
 import { useGetProductionBoardQuery, useGetSupervisorNotificationsQuery } from './store/api/productionApi';
@@ -38,15 +42,6 @@ import { ProductionTrackingModule } from './components/modules/ProductionTrackin
 import { SupervisorsResourcesModule } from './components/modules/SupervisorsResourcesModule';
 import { PriceCentreModule } from './components/modules/PriceCentreModule';
 import { ChatEscalationsModule } from './components/modules/ChatEscalationsModule';
-import {
-  useGetAdminConversationsQuery,
-  useSendAdminMessageMutation,
-  useResolveAdminEscalationMutation,
-} from './store/api/chatApi';
-import {
-  useGetMarketPricesQuery,
-  useTriggerRequoteMutation,
-} from './store/api/marketApi';
 import { DeliveriesPaymentsModule } from './components/modules/DeliveriesPaymentsModule';
 import { AIActivityAlertsModule } from './components/modules/AIActivityAlertsModule';
 import { UserManagementModule } from './components/modules/UserManagementModule';
@@ -143,6 +138,7 @@ export const AdminPortalApp: React.FC = () => {
   const { data: ordersResponse, refetch: refetchOrders } = useGetOrdersQuery(undefined);
   const { data: clientsResponse } = useGetClientsQuery(undefined);
   const { data: productsResponse } = useGetProductsQuery(undefined);
+  const { data: materialsData } = useGetMaterialsQuery(undefined);
   const { data: usersResponse } = useGetUsersQuery(undefined);
 
   // Live Dashboard aggregate hooks
@@ -187,19 +183,17 @@ export const AdminPortalApp: React.FC = () => {
   const [rejectQuotationMutation] = useRejectQuotationMutation();
   const [sendQuotationMutation] = useSendQuotationMutation();
   const [assignSupervisorsMutation] = useAssignSupervisorsMutation();
-  const [startProductionMutation] = useStartProductionMutation();
-  const [decideOrderMutation] = useDecideOrderMutation();
-  const [createOrderPurchaseDecisionMutation] = useCreateOrderPurchaseDecisionMutation();
-  const [createPurchaseDecisionMutation] = useCreatePurchaseDecisionMutation();
   const [cancelOrderMutation] = useCancelOrderMutation();
   const [recordDeliveryMutation] = useRecordDeliveryMutation();
   const [recordManualReceiptMutation] = useRecordManualReceiptMutation();
-
-  const { data: adminConversationsRes } = useGetAdminConversationsQuery();
-  const [sendAdminMessageMutation] = useSendAdminMessageMutation();
-  const [resolveAdminEscalationMutation] = useResolveAdminEscalationMutation();
-  const { data: marketPricesRes } = useGetMarketPricesQuery();
-  const [triggerRequoteMutation] = useTriggerRequoteMutation();
+  const [sendAdminOrderMessageMutation] = useSendAdminOrderMessageMutation();
+  const [resolveEscalationMutation] = useResolveEscalationMutation();
+  const [approvePriceRevisionMutation] = useApprovePriceRevisionMutation();
+  const [rejectPriceRevisionMutation] = useRejectPriceRevisionMutation();
+  const [createOrderPurchaseDecisionMutation] = useCreateOrderPurchaseDecisionMutation();
+  const [rerunFeasibilityMutation] = useRerunFeasibilityMutation();
+  const [triggerSurgeRepriceMutation] = useTriggerSurgeRepriceMutation();
+  const { data: marketPricesData } = useGetMarketPricesQuery();
 
   const clientsMap = useMemo(() => {
     const map = new Map<string, any>();
@@ -264,8 +258,12 @@ export const AdminPortalApp: React.FC = () => {
       );
     }
   }, [usersResponse]);
-  const [commoditiesState] = useState<MarketCommodity[]>(isDemo ? INITIAL_COMMODITIES : []);
-  const commodities: MarketCommodity[] = (marketPricesRes?.data && marketPricesRes.data.length > 0 ? marketPricesRes.data : commoditiesState) as MarketCommodity[];
+  const commodities: MarketCommodity[] = useMemo(() => {
+    if (marketPricesData?.data && Array.isArray(marketPricesData.data) && marketPricesData.data.length > 0) {
+      return marketPricesData.data as MarketCommodity[];
+    }
+    return isDemo ? INITIAL_COMMODITIES : [];
+  }, [marketPricesData]);
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>(isDemo ? INITIAL_AUDIT_LOGS : []);
   const [agentRuns, setAgentRuns] = useState<AgentRun[]>(isDemo ? INITIAL_AGENT_RUNS : []);
   const [chatMessages, setChatMessages] = useState<Record<string, ChatMessage[]>>(isDemo ? INITIAL_CHAT_MESSAGES : {});
@@ -319,7 +317,7 @@ export const AdminPortalApp: React.FC = () => {
   // Notification Counts
   const pendingQuotesCount = orders.filter((o) => o.quotation && !o.quotation.adminApproved).length;
   const openEscalationsCount = orders.filter((o) => o.discountEscalation?.status === 'open').length;
-  const surgeAlertsCount = commodities.filter((c: MarketCommodity) => c.isSurge).length;
+  const surgeAlertsCount = commodities.filter((c) => c.isSurge).length;
 
   // =========================================================================
   // SIMULATION HANDLERS (Optional / Internal)
@@ -454,138 +452,79 @@ export const AdminPortalApp: React.FC = () => {
   };
 
   const handleApprovePriceRevision = async (orderId: string) => {
-    try {
-      await triggerRequoteMutation({
-        orderId,
-        notes: 'Price surge revision approved by Admin; locked materials excluded.',
-      }).unwrap();
-    } catch (_err) {
-      // Local state fallback
-    }
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId && o.priceRevision) {
-          return {
-            ...o,
-            priceRevision: {
-              ...o.priceRevision,
-              adminApproved: true,
-              status: 'approved'
-            }
-          };
-        }
-        return o;
-      })
-    );
+    const targetOrder = orders.find((o) => o.id === orderId);
+    const realId = targetOrder?.backendId || orderId;
+    const revisionNo = targetOrder?.priceRevision?.revisionNo || 1;
 
-    addAuditLog('PRICE_REVISION_APPROVED', `Admin approved price revision for ${orderId}. Client notified with approved reason.`, orderId);
-    addAgentRun('Market Price Agent', 'SUCCESS', `Revision for ${orderId} approved by Admin. Client notified.`, orderId);
-    showToast(`Price revision approved! Client notified for order ${orderId} with client-safe explanation.`);
+    try {
+      await approvePriceRevisionMutation({
+        orderId: realId,
+        revisionNo,
+        body: { approvedReason: 'Admin approved raw material surge re-quotation' }
+      }).unwrap();
+
+      refetchOrders();
+      addAuditLog('PRICE_REVISION_APPROVED', `Admin approved price revision for ${orderId}. Client notified with approved reason.`, orderId);
+      addAgentRun('Market Price Agent', 'SUCCESS', `Revision for ${orderId} approved by Admin. Client notified.`, orderId);
+      showToast(`Price revision approved! Client notified for order ${orderId} with client-safe explanation.`);
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to approve price revision.';
+      showToast(`Price revision approval error: ${errMsg}`);
+    }
   };
 
-  const handleRejectPriceRevision = (orderId: string) => {
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId) {
-          return { ...o, priceRevision: undefined };
-        }
-        return o;
-      })
-    );
+  const handleRejectPriceRevision = async (orderId: string) => {
+    const targetOrder = orders.find((o) => o.id === orderId);
+    const realId = targetOrder?.backendId || orderId;
+    const revisionNo = targetOrder?.priceRevision?.revisionNo || 1;
 
-    addAuditLog('PRICE_REVISION_REJECTED', `Admin rejected price revision for ${orderId}. Mill absorbed price hike.`, orderId);
-    showToast(`Price revision rejected. Mill will absorb material surge for order ${orderId}.`);
+    try {
+      await rejectPriceRevisionMutation({
+        orderId: realId,
+        revisionNo,
+        body: { declineReason: 'Mill absorbed price hike.' }
+      }).unwrap();
+
+      refetchOrders();
+      addAuditLog('PRICE_REVISION_REJECTED', `Admin rejected price revision for ${orderId}. Mill absorbed price hike.`, orderId);
+      showToast(`Price revision rejected. Mill will absorb material surge for order ${orderId}.`);
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to reject price revision.';
+      showToast(`Price revision rejection error: ${errMsg}`);
+    }
+  };
+
+  const handleTriggerSurgeReprice = async () => {
+    try {
+      const res = await triggerSurgeRepriceMutation().unwrap();
+      refetchOrders();
+      showToast(`Market surge evaluated: ${res.data?.affectedOrders?.length || 0} order revisions generated.`);
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to trigger surge repricing.';
+      showToast(`Surge evaluation failed: ${errMsg}`);
+    }
   };
 
   // =========================================================================
   // HANDOVER & RECOVERY HANDLERS
   // =========================================================================
 
-  const handleConfirmHandover = async (
-    orderId: string,
-    supervisorId: string,
-    supervisorName: string,
-    overrideReason?: string
-  ) => {
+  const handleConfirmHandover = async (orderId: string, supervisorId: string, supervisorName: string, overrideReason?: string) => {
     const targetOrder = orders.find((o) => o.id === orderId);
     const realId = targetOrder?.backendId || orderId;
-
-    // Advance Payment Gate Enforcement (Doc §3.7, §11: Raw materials bought & production starts ONLY after advance received)
-    const advanceMilestones = (targetOrder?.financials?.milestones || []).filter(
-      (m: any) => m.trigger === 'advance' || (m.milestone && m.milestone.toLowerCase().includes('advance'))
-    );
-    let requiredAdvancePaise = 0;
-    if (advanceMilestones.length > 0) {
-      requiredAdvancePaise = advanceMilestones.reduce((sum: number, m: any) => sum + (m.amountPaise || 0), 0);
-    } else if (targetOrder?.quotation?.totalPrice) {
-      requiredAdvancePaise = Math.round(targetOrder.quotation.totalPrice * 0.3 * 100);
-    }
-    const advanceReceivedPaise = targetOrder?.financials?.advanceReceivedPaise || 0;
-    const isAdvanceCleared =
-      (advanceReceivedPaise >= requiredAdvancePaise && requiredAdvancePaise > 0) ||
-      targetOrder?.status === 'in_production';
-
-    if (!isAdvanceCleared && (!overrideReason || !overrideReason.trim())) {
-      showToast('Advance payment gate locked: Advance deposit required before production handover.');
-      throw new Error('Advance payment required before handover. Please enter an admin override reason to proceed.');
-    }
-
     try {
-      // 1. Assign supervisor on server with advance overrideReason if applicable
       await assignSupervisorsMutation({
         id: realId,
         body: {
-          supervisorIds: [supervisorId],
-          overrideReason: overrideReason?.trim() || undefined,
+          assignments: [{ supervisorId }],
+          overrideReason: overrideReason || undefined,
         },
       }).unwrap();
 
-      // 2. Execute real purchase decision via POST /api/v1/purchase-decisions (Doc §3.7, §11)
-      try {
-        const materialId = targetOrder?.specs?.yarnCount || '30s Combed Cotton Yarn';
-        const purchaseQty = Math.max(100, Math.round((targetOrder?.quantityMeters || 1000) * 0.25));
-        await createPurchaseDecisionMutation({
-          orderId: realId,
-          materialId,
-          qty: purchaseQty,
-          ratePaise: 28500,
-          notes: `Automated raw material purchase executed upon advance payment clearance & supervisor handover to ${supervisorName}`,
-        }).unwrap();
-      } catch (purchaseErr: any) {
-        console.warn('Purchase decision execution note:', purchaseErr);
-      }
-
-      // 3. Authorize production start on server
-      try {
-        await startProductionMutation(realId).unwrap();
-      } catch (startErr: any) {
-        console.warn('Start production note:', startErr);
-      }
-
-      setOrders((prev) =>
-        prev.map((o) => {
-          if (o.id === orderId) {
-            return {
-              ...o,
-              status: 'in_production',
-              currentPhase: 'Loom Weaving Shed A',
-              assignedSupervisorId: supervisorId,
-              assignedSupervisorName: supervisorName,
-              handoverDate: new Date().toISOString().split('T')[0],
-              productionPlanConfirmed: true
-            };
-          }
-          return o;
-        })
-      );
-
-      addAuditLog(
-        'ORDER_HANDOVER_AND_PURCHASE',
-        `Admin verified advance gate & handed over ${orderId} to supervisor ${supervisorName}. Raw material purchase PO executed. Floor start authorized.`,
-        orderId
-      );
+      refetchOrders();
+      addAuditLog('ORDER_HANDOVER', `Admin handed over ${orderId} to supervisor ${supervisorName}. Stock reserved.${overrideReason ? ` (Override: ${overrideReason})` : ''}`, orderId);
       addAgentRun('Monitoring Agent', 'SUCCESS', `Order ${orderId} entered in_production. Monitoring snapshots active.`, orderId);
-      showToast(`Order ${orderId} handed over, material PO executed, and floor start authorized!`);
+      showToast(`Order ${orderId} successfully assigned to ${supervisorName}!`);
     } catch (err: any) {
       const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to assign supervisor on server.';
       showToast(`Supervisor assignment failed: ${errMsg}`);
@@ -596,146 +535,64 @@ export const AdminPortalApp: React.FC = () => {
   const handleConfirmPurchase = async (orderId: string, supplier: string, quantityKg: number, totalCost: number) => {
     const targetOrder = orders.find((o) => o.id === orderId);
     const realId = targetOrder?.backendId || orderId;
-    const ratePaise = Math.round((totalCost / quantityKg) * 100);
 
-    // 1. Invoke POST /api/v1/orders/:id/purchase-decisions / POST /api/v1/purchase-decisions
+    const targetMaterialId =
+      (materialsData?.data && Array.isArray(materialsData.data) && materialsData.data[0]?._id) ||
+      (materialsData?.data && Array.isArray(materialsData.data) && materialsData.data[0]?.id) ||
+      '668005000000000000000001';
+
     try {
-      await createPurchaseDecisionMutation({
+      await createOrderPurchaseDecisionMutation({
         orderId: realId,
-        materialId: targetOrder?.specs?.yarnCount || '30s Combed Cotton Yarn',
-        supplierId: supplier,
-        qty: quantityKg,
-        ratePaise,
-        notes: `Spot purchase from ${supplier} confirmed by Admin to resolve feasibility bottleneck`,
-      }).unwrap();
-    } catch (purchaseErr: any) {
-      console.warn('Backend purchase decision notice:', purchaseErr);
-    }
-
-    // 2. Invoke POST /api/v1/orders/:id/decide
-    try {
-      await decideOrderMutation({
-        id: realId,
         body: {
-          decision: 'alternative',
-          alternativeId: 'buy_materials',
-          purchaseDecision: {
-            materialId: targetOrder?.specs?.yarnCount || '30s Combed Cotton Yarn',
-            supplierId: supplier,
-            qty: quantityKg,
-            ratePaise,
-            notes: `Spot purchase from ${supplier}`,
-          },
-          notes: `Admin executed purchase decision with ${supplier} for ${quantityKg}kg yarn ($${totalCost}). Feasibility resolved.`,
-        },
-      }).unwrap();
-      showToast(`Purchase decision recorded on server! Order ${orderId} is now FEASIBLE.`);
-    } catch (decideErr: any) {
-      console.warn('Backend decide notice:', decideErr);
-      showToast(`Purchase decision confirmed. Server note: ${decideErr?.data?.message || decideErr?.message || 'Saved'}`);
-    }
-
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId) {
-          return {
-            ...o,
-            status: 'quotation_drafting',
-            currentPhase: 'Quotation Drafting (Yarn Purchased)',
-            feasibility: o.feasibility
-              ? {
-                  ...o.feasibility,
-                  verdict: 'feasible',
-                  eta: '2026-11-14',
-                  bottleneckProcess: 'Yarn Secured from Vardhman (2d Lead Time)',
-                  recoveryOptions: [],
-                  llmSummary: `Purchase decision executed with ${supplier} for ${quantityKg.toLocaleString()} kg ($${totalCost.toLocaleString()}). Material ETA Nov 14 provides feasible window.`
-                }
-              : undefined,
-            quotation: {
-              id: `quote_${orderId}`,
-              orderId,
-              version: 1,
-              materialCost: 28500,
-              wastagePercent: 4.0,
-              processingCost: 11200,
-              overheadCost: 3500,
-              priceRiskBuffer: 2100,
-              marginPercent: 18.0,
-              pricePerUnit: 3.85,
-              totalPrice: Math.round(3.85 * o.quantityMeters),
-              validUntil: '2026-11-15',
-              etaBasis: '14 Nov 2026 (Includes 2-day yarn transport)',
-              adminApproved: false,
-              status: 'pending_approval',
-              bomItems: [],
-              explanation: 'Quotation prepared incorporating fast-track yarn purchase decision.'
-            }
-          };
+          materialId: targetMaterialId,
+          supplierId: supplier,
+          qty: quantityKg,
+          ratePaise: Math.round((totalCost / quantityKg) * 100),
+          notes: `Purchased from ${supplier} for ${quantityKg} kg ($${totalCost})`
         }
-        return o;
-      })
-    );
+      }).unwrap();
 
-    addAuditLog('PURCHASE_DECISION_EXECUTED', `Admin purchased ${quantityKg}kg yarn from ${supplier} ($${totalCost}). Feasibility re-run: FEASIBLE.`, orderId);
-    addAgentRun('Feasibility Agent', 'SUCCESS', `Order ${orderId} re-evaluated with supplier delivery date. Verdict: FEASIBLE.`, orderId);
+      await rerunFeasibilityMutation({
+        orderId: realId,
+        body: {
+          decisionId: `dec_${Date.now()}`
+        }
+      }).unwrap();
+
+      refetchOrders();
+      addAuditLog('PURCHASE_DECISION_EXECUTED', `Admin purchased ${quantityKg}kg yarn from ${supplier} ($${totalCost}). Feasibility re-run initiated.`, orderId);
+      addAgentRun('Feasibility Agent', 'SUCCESS', `Order ${orderId} re-evaluated with supplier delivery date. Verdict: FEASIBLE.`, orderId);
+      showToast(`Purchase decision confirmed on server! Feasibility re-run completed for ${orderId}.`);
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to record purchase decision.';
+      showToast(`Purchase decision error: ${errMsg}`);
+      throw err;
+    }
   };
 
   const handleConfirmAlternative = async (orderId: string, altDate: string, splitDesc: string) => {
     const targetOrder = orders.find((o) => o.id === orderId);
     const realId = targetOrder?.backendId || orderId;
 
-    // Invoke POST /api/v1/orders/:id/decide
     try {
-      await decideOrderMutation({
-        id: realId,
+      await rerunFeasibilityMutation({
+        orderId: realId,
         body: {
-          decision: 'alternative',
-          alternativeId: 'propose_alternative',
-          notes: `Proposed alternative delivery date: ${altDate}. Split details: ${splitDesc}`,
-        },
-      }).unwrap();
-      showToast(`Alternative proposal saved to server!`);
-    } catch (decideErr: any) {
-      console.warn('Backend decide notice:', decideErr);
-      showToast(`Alternative proposal saved.`);
-    }
-
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id === orderId) {
-          return {
-            ...o,
-            status: 'quotation_drafting',
-            deadlineDate: altDate,
-            currentPhase: 'Alternative Counter-Offer Drafted',
-            quotation: {
-              id: `quote_${orderId}_alt`,
-              orderId,
-              version: 1,
-              materialCost: 26000,
-              wastagePercent: 3.5,
-              processingCost: 10500,
-              overheadCost: 3200,
-              priceRiskBuffer: 1800,
-              marginPercent: 18.0,
-              pricePerUnit: 3.65,
-              totalPrice: Math.round(3.65 * o.quantityMeters),
-              validUntil: '2026-11-12',
-              etaBasis: `${altDate} (${splitDesc})`,
-              adminApproved: false,
-              status: 'pending_approval',
-              bomItems: [],
-              explanation: `Counter-offer with revised completion date ${altDate}.`
-            }
-          };
+          deadline: altDate,
+          notes: splitDesc
         }
-        return o;
-      })
-    );
+      }).unwrap();
 
-    addAuditLog('ALTERNATIVE_PROPOSED', `Admin proposed alternative completion date ${altDate} for ${orderId}.`, orderId);
-    addAgentRun('Quotation Agent', 'SUCCESS', `Counter-quotation prepared for ${orderId} matching revised schedule.`, orderId);
+      refetchOrders();
+      addAuditLog('ALTERNATIVE_PROPOSED', `Admin proposed alternative completion date ${altDate} for ${orderId}. Feasibility re-run triggered.`, orderId);
+      addAgentRun('Feasibility Agent', 'SUCCESS', `Alternative scenario generated for ${orderId}. Delivery date: ${altDate}.`, orderId);
+      showToast(`Alternative date ${altDate} submitted. Feasibility re-run completed.`);
+    } catch (err: any) {
+      const errMsg = err?.data?.message || err?.error || err?.message || 'Failed to rerun feasibility.';
+      showToast(`Alternative proposal error: ${errMsg}`);
+      throw err;
+    }
   };
 
   const handleDeclineOrder = async (orderId: string) => {
@@ -1013,20 +870,6 @@ export const AdminPortalApp: React.FC = () => {
   // =========================================================================
 
   const handleSendChatMessage = async (orderId: string, content: string) => {
-    const targetConv = adminConversationsRes?.data?.find(
-      (conv: any) => String(conv.orderId) === orderId || conv._id === orderId
-    );
-    if (targetConv) {
-      try {
-        await sendAdminMessageMutation({
-          conversationId: targetConv._id,
-          message: content,
-          orderId,
-        }).unwrap();
-      } catch (_err) {
-        // Continue to local update
-      }
-    }
     const newMsg: ChatMessage = {
       id: `msg_${Date.now()}`,
       sender: 'admin',
@@ -1040,26 +883,22 @@ export const AdminPortalApp: React.FC = () => {
       [orderId]: [...(prev[orderId] || []), newMsg]
     }));
 
+    // Find backend order ID
+    const targetOrder = orders.find(o => o.id === orderId || (o as any).backendId === orderId);
+    const liveOrderId = (targetOrder as any)?.backendId || (orderId.length === 24 ? orderId : undefined);
+    if (liveOrderId) {
+      try {
+        await sendAdminOrderMessageMutation({ orderId: liveOrderId, message: content }).unwrap();
+      } catch (err) {
+        console.warn('Failed to send admin chat reply to server:', err);
+      }
+    }
+
     addAuditLog('ADMIN_CHAT_REPLY', `Admin replied in client conversation for ${orderId}.`, orderId);
     showToast(`Reply sent to client on ${orderId}.`);
   };
 
   const handleResolveEscalation = async (orderId: string, approved: boolean, concessionPercent?: number) => {
-    const targetConv = adminConversationsRes?.data?.find(
-      (conv: any) => String(conv.orderId) === orderId || conv._id === orderId
-    );
-    if (targetConv) {
-      try {
-        await resolveAdminEscalationMutation({
-          conversationId: targetConv._id,
-          approved,
-          concessionPercent,
-          orderId,
-        }).unwrap();
-      } catch (_err) {
-        // Continue to local update
-      }
-    }
     setOrders((prev) =>
       prev.map((o) => {
         if (o.id === orderId && o.discountEscalation) {
@@ -1079,7 +918,23 @@ export const AdminPortalApp: React.FC = () => {
       ? `Managing Director John Doe has reviewed your account and authorized a ${concessionPercent}% concession on order ${orderId} in appreciation of your seasonal partnership!`
       : `Managing Director John Doe has reviewed your request. Due to locked raw material costs, we cannot grant the discount, but we are prioritizing your shipment on Airjet Shed A.`;
 
-    handleSendChatMessage(orderId, replyText);
+    const targetOrder = orders.find(o => o.id === orderId || (o as any).backendId === orderId);
+    const liveOrderId = (targetOrder as any)?.backendId || (orderId.length === 24 ? orderId : undefined);
+
+    if (liveOrderId && approved) {
+      try {
+        await resolveEscalationMutation({
+          orderId: liveOrderId,
+          discountPct: concessionPercent || 5,
+          resolutionNotes: replyText,
+        }).unwrap();
+        refetchOrders();
+      } catch (err) {
+        console.warn('Backend escalation resolve error:', err);
+      }
+    }
+
+    await handleSendChatMessage(orderId, replyText);
     addAuditLog('DISCOUNT_ESCALATION_RESOLVED', `Admin ${approved ? 'approved' : 'declined'} concession for ${orderId}.`, orderId);
     showToast(`Escalation ${approved ? 'approved' : 'declined'} for order ${orderId}.`);
   };
@@ -1231,7 +1086,6 @@ export const AdminPortalApp: React.FC = () => {
                 isMachinesLoading={isMachinesLoading}
                 refetchMachines={refetchMachines}
                 auditLogs={auditLogsData?.data || auditLogs}
-                isAuditLogsLoading={isAuditLogsLoading}
                 notifications={isDemo ? undefined : (isNotificationsError ? undefined : notificationsData?.data)}
                 isNotificationsLoading={isNotificationsLoading}
                 isNotificationsError={isNotificationsError}
@@ -1298,6 +1152,7 @@ export const AdminPortalApp: React.FC = () => {
                 onSelectOrder={setSelectedOrderId}
                 onApprovePriceRevision={handleApprovePriceRevision}
                 onRejectPriceRevision={handleRejectPriceRevision}
+                onTriggerSurgeReprice={handleTriggerSurgeReprice}
               />
             )}
 

@@ -762,6 +762,7 @@ export const PurchaseDecisionCreateSchema = z.object({
   ratePaise: z.number().int().positive("ratePaise must be positive integer"),
   expectedArrivalDate: z.string().optional(),
   supplierOrderNo: z.string().optional(),
+  overrideReason: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -775,6 +776,7 @@ export const PurchaseRequestDirectCreateSchema = z.object({
   optionId: z.string().optional(),
   expectedArrivalDate: z.string().optional(),
   supplierOrderNo: z.string().optional(),
+  overrideReason: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -819,5 +821,15 @@ export const AuditQuerySchema = paginationQuerySchema.extend({
   action: z.string().trim().optional(),
   dateFrom: z.string().trim().optional(),
   dateTo: z.string().trim().optional(),
+});
+
+export const ChatMessageBodySchema = z.object({
+  message: z.string().min(1, "Message text is required"),
+});
+
+export const ChatEscalationResolveSchema = z.object({
+  approved: z.boolean(),
+  concessionPercent: z.number().min(0).max(100).optional(),
+  notes: z.string().optional(),
 });
 

@@ -10,6 +10,8 @@ import { ErrorCode, OrderStatus } from "@loompilot/shared";
 import { PaginationQuery, PaginatedResult } from "../utils/pagination.js";
 import { IUnitOfWork } from "../interfaces/unit-of-work.interface.js";
 import { MongoUnitOfWork } from "../repositories/unit-of-work.js";
+import { IAgentsClient } from "../interfaces/agents-client.interface.js";
+import { getContainer } from "../container.js";
 
 export class SupervisorReportService {
   constructor(
@@ -23,7 +25,8 @@ export class SupervisorReportService {
       machineRepo,
       auditService
     ),
-    private readonly unitOfWork: IUnitOfWork = new MongoUnitOfWork()
+    private readonly unitOfWork: IUnitOfWork = new MongoUnitOfWork(),
+    private readonly agentsClient?: IAgentsClient
   ) {}
 
   async submitReport(
@@ -122,9 +125,11 @@ export class SupervisorReportService {
     const report = await this.reportRepo.create(tenantId, reportData as any);
 
     // 6. Update order production stage totals and progress
+    const touchedOrderIds = new Set<string>();
     if (data.outputs && data.outputs.length > 0) {
       for (const output of data.outputs) {
         try {
+          touchedOrderIds.add(output.orderId);
           const order = await this.ordersRepo.findById(tenantId, output.orderId);
           if (order) {
             const currentStageTotals = [...(order.production?.stageTotals || [])];
@@ -165,6 +170,43 @@ export class SupervisorReportService {
           // Continue processing remaining outputs
         }
       }
+
+      // Trigger the monitoring agent for each touched order so progress percentages, projected finish dates, and at-risk alerts recalculate automatically
+      for (const orderId of touchedOrderIds) {
+        try {
+          const client = this.agentsClient || getContainer().agentsClient;
+          const result = await client.runMonitoring({ tenantId, orderId });
+          if (result.success && result.data) {
+            const snapshot = result.data;
+            const monitoringData = {
+              status: snapshot.onTrack
+                ? ("on_track" as const)
+                : snapshot.predictedDelayDays > 2
+                ? ("behind" as const)
+                : ("at_risk" as const),
+              stale: false,
+              recommendations: snapshot.recommendations || [],
+              updatedAt: new Date(),
+              agentRunId: snapshot.agentRunId as any,
+            };
+
+            await this.ordersRepo.setProductionMonitoring(
+              snapshot.tenantId,
+              snapshot.orderId,
+              monitoringData
+            );
+
+            if (snapshot.phase || snapshot.percentComplete !== undefined) {
+              await this.ordersRepo.updateProductionProgress(snapshot.tenantId, snapshot.orderId, {
+                phase: snapshot.phase,
+                percentComplete: snapshot.percentComplete,
+              });
+            }
+          }
+        } catch (err) {
+          // Continue processing
+        }
+      }
     }
 
     // 7. Synchronize machine status and auto-create maintenance tickets on breakdown
@@ -202,7 +244,7 @@ export class SupervisorReportService {
               if (m.status === "available") {
                 const unresolved = await this.ticketRepo.findUnresolvedTicketsForMachine(
                   tenantId,
-                  String((lockedMachine as any)._id),
+                  String(lockedMachine._id),
                   undefined,
                   tx
                 );

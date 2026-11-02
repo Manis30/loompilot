@@ -2,32 +2,21 @@ import { Router } from "express";
 import { MarketPriceController } from "../controllers/market-price.controller.js";
 import { authenticate } from "../middleware/auth.js";
 import { authorize } from "../middleware/rbac.js";
-import { AppContainer } from "../container.js";
 
-export function createMarketPriceRouter(container: AppContainer): Router {
-  const router = Router();
-  const controller = new MarketPriceController(container.agentsClient);
+export const marketPriceRouter: Router = Router();
+const controller = new MarketPriceController();
 
-  router.get(
-    "/api/v1/market-prices",
-    authenticate,
-    authorize("GET /api/v1/market-prices"),
-    controller.getMarketPrices
-  );
+marketPriceRouter.use(authenticate);
 
-  router.get(
-    "/api/v1/market-prices/alerts",
-    authenticate,
-    authorize("GET /api/v1/market-prices/alerts"),
-    controller.getSurgeAlerts
-  );
+marketPriceRouter.get(
+  "/",
+  authorize("GET /api/v1/market-prices"),
+  controller.getMarketPrices
+);
 
-  router.post(
-    "/api/v1/market-prices/trigger-requote",
-    authenticate,
-    authorize("POST /api/v1/market-prices/trigger-requote"),
-    controller.triggerRequote
-  );
+marketPriceRouter.post(
+  "/trigger-surge-reprice",
+  authorize("POST /api/v1/market-prices/trigger-surge-reprice"),
+  controller.triggerSurgeReprice
+);
 
-  return router;
-}

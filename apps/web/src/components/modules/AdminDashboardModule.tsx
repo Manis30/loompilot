@@ -28,14 +28,14 @@ import {
   RotateCw
 } from 'lucide-react';
 import type { Order, AppUser, MarketCommodity, AdminNavTab, AuditEntry } from '../../types';
-import { useGetOrdersSummaryQuery } from '../../store/api/dashboardApi';
+import { useGetOrderSummaryQuery } from '../../store/api/ordersApi';
 import {
   useGetProductionBoardQuery,
   useGetSupervisorNotificationsQuery
 } from '../../store/api/productionApi';
 import { useGetStockSummaryQuery } from '../../store/api/stockApi';
 import { useGetMachinesQuery } from '../../store/api/machinesApi';
-import { useGetAuditLogsQuery } from '../../store/api/dashboardApi';
+import { useGetAuditLogsQuery, useGetOrdersSummaryQuery } from '../../store/api/dashboardApi';
 import './AdminDashboardModule.css';
 
 export interface AdminDashboardModuleProps {
@@ -148,7 +148,7 @@ export const AdminDashboardModule: React.FC<AdminDashboardModuleProps> = (props)
     isLoading: isFetchedOrdersSummaryLoading,
     error: fetchedOrdersSummaryError,
     refetch: refetchFetchedOrdersSummary
-  } = useGetOrdersSummaryQuery(undefined, { skip: props.ordersSummary !== undefined });
+  } = useGetOrderSummaryQuery(undefined, { skip: props.ordersSummary !== undefined });
 
   const {
     data: fetchedProductionBoardData,
@@ -675,20 +675,20 @@ export const AdminDashboardModule: React.FC<AdminDashboardModuleProps> = (props)
 
   // Performance calculations: Backend ordersSummary.performance measures active in-flight orders (onTrack vs delayed)
   // Denominator strictly includes active evaluated orders, excluding draft, completed, delivered, or cancelled orders
-  const perfOnTrackCount = ordersSummary?.performance?.onTrackCount;
+  const summaryOnTrackCount = ordersSummary?.performance?.onTrackCount;
   const delayedCount = ordersSummary?.performance?.delayedCount;
   const hasPerformanceData =
-    typeof perfOnTrackCount === 'number' && typeof delayedCount === 'number';
-  const totalActiveEvaluatedOrders = hasPerformanceData ? perfOnTrackCount + delayedCount : 0;
+    typeof summaryOnTrackCount === 'number' && typeof delayedCount === 'number';
+  const totalActiveEvaluatedOrders = hasPerformanceData ? summaryOnTrackCount + delayedCount : 0;
 
   const onTrackRateDisplay = totalActiveEvaluatedOrders > 0
-    ? `${((perfOnTrackCount / totalActiveEvaluatedOrders) * 100).toFixed(1)}%`
+    ? `${((summaryOnTrackCount / totalActiveEvaluatedOrders) * 100).toFixed(1)}%`
     : isDemo
-    ? '94.6%'
-    : 'Unavailable';
+    ? '94.2%'
+    : 'Rate: Unavailable';
 
   const onTrackPillText = totalActiveEvaluatedOrders > 0
-    ? `${perfOnTrackCount}/${totalActiveEvaluatedOrders} on track`
+    ? `${onTrackCount}/${totalActiveEvaluatedOrders} on track`
     : isDemo
     ? '46/48 on track'
     : 'On-Track: Unavailable';

@@ -1,10 +1,10 @@
 import { Types } from "mongoose";
 import { BaseRepository } from "./base.repository.js";
 import {
+  ConversationModel,
   IConversation,
   IConversationMessage,
   IConversationEscalation,
-  ConversationModel,
 } from "../models/interaction/conversation.model.js";
 import { TxContext } from "../interfaces/unit-of-work.interface.js";
 
@@ -19,53 +19,86 @@ export class ConversationRepository extends BaseRepository<IConversation> {
     tx?: TxContext
   ): Promise<IConversation | null> {
     const session = this.getSession(tx);
+    const filter = this.enforceTenant(tenantId, {
+      orderId: Types.ObjectId.isValid(orderId) ? new Types.ObjectId(orderId) : orderId,
+    });
     return this.model
-      .findOne({
-        tenantId,
-        orderId: new Types.ObjectId(orderId),
-      })
+      .findOne(filter)
       .session(session ?? null)
       .lean<IConversation>()
       .exec();
   }
 
-  async findConversations(
+  async findOrCreate(
     tenantId: string,
-    filter: { status?: string; hasEscalation?: boolean } = {},
+    orderId: string,
+    clientId: string,
     tx?: TxContext
-  ): Promise<IConversation[]> {
-    const session = this.getSession(tx);
-    const query: any = { tenantId };
-    if (filter.status) {
-      query.status = filter.status;
-    }
-    if (filter.hasEscalation === true) {
-      query["escalation.status"] = { $in: ["open", "in_progress"] };
+  ): Promise<IConversation> {
+    const existing = await this.findByOrderId(tenantId, orderId, tx);
+    if (existing) {
+      return existing;
     }
 
-    return this.model
-      .find(query)
-      .sort({ lastMessageAt: -1, updatedAt: -1 })
-      .session(session ?? null)
-      .lean<IConversation[]>()
-      .exec();
+    const session = this.getSession(tx);
+    const created = await this.model.create(
+      [
+        {
+          tenantId,
+          orderId: new Types.ObjectId(orderId),
+          clientId: new Types.ObjectId(clientId),
+          status: "agent_handling",
+          messages: [],
+          lastMessageAt: new Date(),
+          version: 1,
+        },
+      ],
+      { session: session ?? undefined }
+    );
+
+    const doc = created[0]!;
+    return ((doc as any).toObject ? (doc as any).toObject() : doc) as IConversation;
   }
 
-  async appendMessage(
+  async addMessage(
     tenantId: string,
     conversationId: string,
     message: IConversationMessage,
     tx?: TxContext
   ): Promise<IConversation | null> {
     const session = this.getSession(tx);
+    const filter = this.enforceTenant(tenantId, { _id: conversationId });
     return this.model
       .findOneAndUpdate(
-        { tenantId, _id: new Types.ObjectId(conversationId) },
+        filter,
         {
           $push: { messages: message },
           $set: { lastMessageAt: message.createdAt || new Date() },
           $inc: { version: 1 },
         },
+        { new: true, session: session ?? null }
+      )
+      .lean<IConversation>()
+      .exec();
+  }
+
+  async updateConversationStatus(
+    tenantId: string,
+    conversationId: string,
+    status: IConversation["status"],
+    assignedAdminId?: string,
+    tx?: TxContext
+  ): Promise<IConversation | null> {
+    const session = this.getSession(tx);
+    const filter = this.enforceTenant(tenantId, { _id: conversationId });
+    const update: any = { status };
+    if (assignedAdminId) {
+      update.assignedAdminId = new Types.ObjectId(assignedAdminId);
+    }
+    return this.model
+      .findOneAndUpdate(
+        filter,
+        { $set: update, $inc: { version: 1 } },
         { new: true, session: session ?? null }
       )
       .lean<IConversation>()
@@ -79,15 +112,15 @@ export class ConversationRepository extends BaseRepository<IConversation> {
     tx?: TxContext
   ): Promise<IConversation | null> {
     const session = this.getSession(tx);
+    const filter = this.enforceTenant(tenantId, { _id: conversationId });
     return this.model
       .findOneAndUpdate(
-        { tenantId, _id: new Types.ObjectId(conversationId) },
+        filter,
         {
           $set: {
             escalation,
             status: "escalated",
           },
-          $push: { escalationHistory: escalation },
           $inc: { version: 1 },
         },
         { new: true, session: session ?? null }
@@ -99,24 +132,20 @@ export class ConversationRepository extends BaseRepository<IConversation> {
   async resolveEscalation(
     tenantId: string,
     conversationId: string,
-    resolution: {
-      by: string;
-      at: Date;
-      outcome: string;
-      notes?: string;
-    },
+    resolution: { by: string; outcome: string; notes?: string },
     tx?: TxContext
   ): Promise<IConversation | null> {
     const session = this.getSession(tx);
+    const filter = this.enforceTenant(tenantId, { _id: conversationId });
     return this.model
       .findOneAndUpdate(
-        { tenantId, _id: new Types.ObjectId(conversationId) },
+        filter,
         {
           $set: {
             "escalation.status": "resolved",
             "escalation.resolution": {
               by: new Types.ObjectId(resolution.by),
-              at: resolution.at,
+              at: new Date(),
               outcome: resolution.outcome,
               notes: resolution.notes,
             },
@@ -130,4 +159,3 @@ export class ConversationRepository extends BaseRepository<IConversation> {
       .exec();
   }
 }
-

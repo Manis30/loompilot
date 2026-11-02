@@ -31,6 +31,10 @@ export async function authRateLimiter(
   const windowSeconds = Math.ceil(env.AUTH_RATE_LIMIT_WINDOW_MS / 1000);
   const maxAttempts = env.AUTH_RATE_LIMIT_MAX;
 
+  if (process.env.USE_REDIS_MOCK === "true") {
+    return next();
+  }
+
   try {
     const redis = getRedisClient();
     const current = (await redis.eval(

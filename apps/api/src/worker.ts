@@ -1,14 +1,10 @@
-import { Worker, Job } from "bullmq";
 import { getEnv } from "./config/env.js";
 import { connectMongo, disconnectMongo } from "./config/database.js";
-import { connectRedis, disconnectRedis } from "./config/redis.js";
+import { connectRedis, disconnectRedis, getRedisClient } from "./config/redis.js";
 import { logger } from "./utils/logger.js";
 import { createContainer } from "./container.js";
 import { OrderService } from "./services/order.service.js";
-import { SettingsModel } from "./models/identity/settings.model.js";
-import { OutboxMessageModel } from "./models/platform/outbox-message.model.js";
-import { ClientModel } from "./models/identity/client.model.js";
-import { UserModel } from "./models/identity/user.model.js";
+import { Worker } from "bullmq";
 
 async function startWorker() {
   const env = getEnv();
@@ -27,168 +23,92 @@ async function startWorker() {
   const orderService = new OrderService();
   logger.info("Worker container initialized with job queues and adapters");
 
-  // Helper to fetch all active tenant IDs
-  async function getActiveTenantIds(): Promise<string[]> {
-    try {
-      const allSettings = await SettingsModel.find({}).lean();
-      if (allSettings.length > 0) {
-        return Array.from(new Set(allSettings.map((s) => s.tenantId)));
-      }
-    } catch (err) {
-      logger.warn({ err }, "Could not fetch settings for tenants, falling back to default");
-    }
-    return [env.TENANT_DEFAULT_ID || "default"];
-  }
+  const defaultTenantId = "tenant_loompilot_tn_01";
 
-  // 1. Process Outbox Pending Messages (Email notifications & dispatch)
-  async function processOutboxMessages(): Promise<number> {
-    let processed = 0;
-    try {
-      const pendingMessages = await OutboxMessageModel.find({
-        status: "pending",
-        nextAttemptAt: { $lte: new Date() },
-      })
-        .limit(50)
-        .exec();
-
-      for (const msg of pendingMessages) {
-        msg.status = "processing";
-        msg.attempts += 1;
-        await msg.save();
-
-        try {
-          if (msg.channel === "email") {
-            let targetEmail: string | undefined;
-
-            if (msg.recipient.clientId) {
-              const client = await ClientModel.findById(msg.recipient.clientId).lean();
-              targetEmail = client?.email || client?.portalAccess?.email;
-            } else if (msg.recipient.userId) {
-              const user = await UserModel.findById(msg.recipient.userId).lean();
-              targetEmail = user?.email;
-            }
-
-            if (targetEmail && container.notifier) {
-              await container.notifier.sendEmail({
-                to: targetEmail,
-                subject: msg.payload?.subject || "LoomPilot Notification",
-                html: `<p>${msg.payload?.subject || "LoomPilot Notification"}</p>`,
-                text: typeof msg.payload === "string" ? msg.payload : JSON.stringify(msg.payload || {}),
-              });
-            }
-          }
-
-          msg.status = "sent";
-          msg.error = undefined;
-          await msg.save();
-          processed++;
-        } catch (dispatchErr: any) {
-          logger.error({ err: dispatchErr, messageId: msg._id }, "Failed to dispatch outbox message");
-          msg.error = dispatchErr?.message || String(dispatchErr);
-          if (msg.attempts >= 3) {
-            msg.status = "failed";
-          } else {
-            msg.status = "pending";
-            msg.nextAttemptAt = new Date(Date.now() + 60000 * msg.attempts); // exponential backoff
-          }
-          await msg.save();
-        }
-      }
-    } catch (err) {
-      logger.error({ err }, "Error processing outbox messages");
-    }
-    return processed;
-  }
-
-  // 2. Execute scheduled reminder cycle for quotation & payment milestones
-  async function executeReminderCycle(): Promise<void> {
-    const tenantIds = await getActiveTenantIds();
-    for (const tenantId of tenantIds) {
-      try {
-        const quotesSent = await orderService.runQuoteReminders(tenantId);
-        const paymentsSent = await orderService.runPaymentReminders(tenantId);
-        logger.info(
-          { tenantId, quotesSent, paymentsSent },
-          "Scheduled reminders sweep completed"
-        );
-      } catch (err) {
-        logger.error({ err, tenantId }, "Error running reminder cycle for tenant");
-      }
-    }
-    await processOutboxMessages();
-  }
-
-  // 3. Register BullMQ Repeatable Cron Jobs
-  // Quotation reminders: daily at 9:00 AM (reminds clients on previous day per user answer)
-  // Payment milestone reminders: daily at 10:00 AM (reminds clients on previous day)
-  // Outbox worker: every 5 minutes
+  // Register BullMQ repeatable recurring jobs
   try {
-    await container.jobQueue.addRepeatableJob(
-      "scheduled-tasks",
-      "quotation-reminders",
-      {},
+    const queue = container.jobQueue;
+
+    // 1. Quotation Expiration Reminders (Sent 1 day prior) - Doc §12, §15
+    await queue.addRepeatableJob(
+      "order-reminders",
+      "quotation-expiration-reminders",
+      { tenantId: defaultTenantId },
+      "0 8 * * *",
+      "quotation-expiration-reminders"
+    );
+
+    // 2. Payment Due Reminders (Upcoming & Overdue Milestones) - Doc §3.7, §11
+    await queue.addRepeatableJob(
+      "order-reminders",
+      "payment-due-reminders",
+      { tenantId: defaultTenantId },
       "0 9 * * *",
-      "quote-reminders-daily-9am"
+      "payment-due-reminders"
     );
 
-    await container.jobQueue.addRepeatableJob(
-      "scheduled-tasks",
-      "payment-reminders",
-      {},
-      "0 10 * * *",
-      "payment-reminders-daily-10am"
+    // 3. Quotation Expiry Status Transition Checker
+    await queue.addRepeatableJob(
+      "order-reminders",
+      "quotation-expiry-checker",
+      { tenantId: defaultTenantId },
+      "0 0 * * *",
+      "quotation-expiry-checker"
     );
 
-    await container.jobQueue.addRepeatableJob(
-      "scheduled-tasks",
-      "outbox-dispatch",
-      {},
-      "*/5 * * * *",
-      "outbox-dispatch-every-5m"
-    );
-
-    logger.info("BullMQ repeatable cron jobs successfully scheduled");
-  } catch (queueErr) {
-    logger.warn({ err: queueErr }, "Notice: could not register repeatable BullMQ jobs (Redis may be in stand-alone mode)");
+    logger.info("BullMQ recurring reminder jobs successfully scheduled");
+  } catch (err) {
+    logger.warn({ err }, "Could not register repeatable jobs to Redis queue");
   }
 
-  // 4. BullMQ Worker to process scheduled tasks
-  const bullmqWorker = new Worker(
-    "scheduled-tasks",
-    async (job: Job) => {
-      logger.info({ jobName: job.name, jobId: job.id }, "BullMQ Worker executing scheduled job");
-      if (job.name === "quotation-reminders") {
-        const tenantIds = await getActiveTenantIds();
-        for (const tId of tenantIds) {
-          await orderService.runQuoteReminders(tId);
-        }
-      } else if (job.name === "payment-reminders") {
-        const tenantIds = await getActiveTenantIds();
-        for (const tId of tenantIds) {
-          await orderService.runPaymentReminders(tId);
-        }
-      } else if (job.name === "outbox-dispatch") {
-        await processOutboxMessages();
-      }
-    },
-    {
-      connection: container.redisClient,
-      concurrency: 2,
+  // BullMQ Worker to process scheduled reminder jobs
+  let bullWorker: Worker | null = null;
+  const isMock = process.env.USE_REDIS_MOCK === "true";
+
+  if (!isMock) {
+    try {
+      bullWorker = new Worker(
+        "order-reminders",
+        async (job) => {
+          logger.info({ jobName: job.name, jobId: job.id }, "Processing BullMQ reminder job");
+          const tenantId = job.data?.tenantId || defaultTenantId;
+
+          if (job.name === "quotation-expiration-reminders") {
+            const count = await orderService.runQuoteReminders(tenantId);
+            logger.info({ tenantId, count }, "Dispatched quotation expiration reminders");
+          } else if (job.name === "payment-due-reminders") {
+            const count = await orderService.checkOverduePayments(tenantId);
+            logger.info({ tenantId, count }, "Dispatched payment due reminders");
+          } else if (job.name === "quotation-expiry-checker") {
+            const count = await orderService.checkAndExpireQuotations(tenantId);
+            logger.info({ tenantId, count }, "Checked and expired quotations");
+          }
+        },
+        { connection: getRedisClient() as any }
+      );
+
+      bullWorker.on("failed", (job, err) => {
+        logger.error({ jobId: job?.id, jobName: job?.name, err }, "Worker job failed");
+      });
+    } catch (err) {
+      logger.warn({ err }, "Could not start BullMQ Worker instance");
     }
-  );
+  }
 
-  bullmqWorker.on("completed", (job) => {
-    logger.info({ jobId: job.id, jobName: job.name }, "Scheduled task completed successfully");
-  });
-
-  bullmqWorker.on("failed", (job, err) => {
-    logger.error({ jobId: job?.id, jobName: job?.name, err }, "Scheduled task failed");
-  });
-
-  // Run initial immediate sweep on worker launch so pending reminders and outbox messages process promptly
-  executeReminderCycle().catch((err) => {
-    logger.error({ err }, "Initial reminder sweep encountered an error");
-  });
+  // Fallback dev interval runner (ensures reminder checks execute reliably under mock Redis)
+  let devInterval: NodeJS.Timeout | null = null;
+  if (isMock || env.NODE_ENV === "development") {
+    logger.info("Initializing fallback scheduler interval for development/mock mode");
+    devInterval = setInterval(async () => {
+      try {
+        await orderService.runQuoteReminders(defaultTenantId);
+        await orderService.checkOverduePayments(defaultTenantId);
+        await orderService.checkAndExpireQuotations(defaultTenantId);
+      } catch (err) {
+        logger.warn({ err }, "Error in periodic dev reminder sweep");
+      }
+    }, 60000 * 30); // Run every 30 minutes in dev
+  }
 
   // Graceful shutdown
   let isShuttingDown = false;
@@ -198,8 +118,12 @@ async function startWorker() {
     isShuttingDown = true;
     logger.info({ signal }, "Worker shutting down...");
 
+    if (devInterval) clearInterval(devInterval);
+    if (bullWorker) {
+      await bullWorker.close();
+    }
+
     try {
-      await bullmqWorker.close();
       await container.jobQueue.close();
       await disconnectRedis();
       await disconnectMongo();
