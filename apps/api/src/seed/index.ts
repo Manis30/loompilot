@@ -1,3 +1,0 @@
-// Database seed scripts
-export {};
-
